@@ -1,0 +1,88 @@
+#include "pat_simulation/mujoco_sim.hpp"
+#include <iostream>
+#include <memory>
+#include <stdexcept>
+#include <string>
+
+namespace pat_simulation {
+
+MuJoCoSim::MuJoCoSim(const std::string& model_path, bool visualise) {
+
+    // Read in model 
+    char err[1024] = {};
+    model_ = mj_loadXML(model_path.c_str(), nullptr, err, sizeof(err));
+    if (!model_) throw std::runtime_error("MuJoCoSim: " + std::string(err));
+    
+    // Init Mujoco data handle 
+    data_ = mj_makeData(model_);
+
+    mj_resetData(model_, data_);
+    mj_forward(model_, data_);
+    jid_cx_   = jointId("chaser_x");   jid_cy_   = jointId("chaser_y");
+    jid_cyaw_ = jointId("chaser_yaw"); jid_tx_   = jointId("target_x");
+    jid_ty_   = jointId("target_y");   jid_tyaw_ = jointId("target_yaw");
+
+    // Initialise the visualiser
+    if (visualise) {
+        vis_ = std::make_unique<mujoco_vis::MuJoCoVisualiser>(*model_, *data_);
+        if (vis_->init(5, -20, 900, 1200, "PAT Simulation") == FAIL) {
+            std::cerr << "[ERROR]: Visualiser failed to initialise" << std::endl; 
+        } else {
+            std::cout << "[INFO]: Visualiser initialised" << std::endl; 
+        }
+    }
+}
+
+MuJoCoSim::~MuJoCoSim() {
+    // Clean up 
+    if (data_)  { mj_deleteData(data_);   data_  = nullptr; }
+    if (model_) { mj_deleteModel(model_); model_ = nullptr; }
+}
+
+void MuJoCoSim::reset() { 
+    mj_resetData(model_, data_); 
+    mj_forward(model_, data_); 
+}
+
+void MuJoCoSim::step(const std::array<double, 4>& ctrl) {
+    // Update the control input 
+    for (int i = 0; i < model_->nu && i < 4; ++i) 
+        data_->ctrl[i] = ctrl[i];
+
+    // Use mujoco step 
+    mj_step(model_, data_);
+
+    // Update visualiser (throttled — see kRenderEveryNSteps)
+    if (vis_ && ++render_counter_ >= kRenderEveryNSteps) {
+        render_counter_ = 0;
+        if (vis_->updateWindow() == FAIL)
+            std::cerr << "[WARNING] Visualiser window closed or failed to update." << std::endl;
+    }
+}
+
+double MuJoCoSim::time() const noexcept { return data_->time; }
+double MuJoCoSim::dt()   const noexcept { return model_->opt.timestep; }
+
+int MuJoCoSim::jointId(const char* name) const {
+    int id = mj_name2id(model_, mjOBJ_JOINT, name);
+    if (id < 0) throw std::runtime_error(std::string("joint '") + name + "' not found");
+    return id;
+}
+double MuJoCoSim::jointPos(int id) const noexcept { 
+    return data_->qpos[model_->jnt_qposadr[id]]; 
+}
+
+double MuJoCoSim::jointVel(int id) const noexcept { 
+    return data_->qvel[model_->jnt_dofadr[id]]; 
+}
+
+PlanarState MuJoCoSim::getChaserState() const {
+    return { jointPos(jid_cx_),  jointPos(jid_cy_),  jointPos(jid_cyaw_),
+             jointVel(jid_cx_),  jointVel(jid_cy_),  jointVel(jid_cyaw_) };
+}
+PlanarState MuJoCoSim::getTargetState() const {
+    return { jointPos(jid_tx_),  jointPos(jid_ty_),  jointPos(jid_tyaw_),
+             jointVel(jid_tx_),  jointVel(jid_ty_),  jointVel(jid_tyaw_) };
+}
+
+} // namespace pat_simulation

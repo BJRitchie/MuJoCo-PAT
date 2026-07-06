@@ -1,0 +1,5 @@
+pat_simulation:
+  ros__parameters:
+    sim_rate_hz:   500.0
+    pub_rate_hz:   100.0
+    imu_noise_std: 0.005

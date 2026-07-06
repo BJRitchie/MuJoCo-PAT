@@ -1,0 +1,9 @@
+{
+    "defaults": {
+        "cmake-args": [
+            "-DCMAKE_BUILD_TYPE=RelWithDebInfo",
+            "-DCMAKE_CXX_STANDARD=17",
+            "-DBUILD_TESTING=ON"
+        ]
+    }
+}

@@ -1,0 +1,31 @@
+name: CI
+on:
+  push:    { branches: [main, develop] }
+  pull_request: { branches: [main] }
+
+jobs:
+  build-test:
+    runs-on: ubuntu-22.04
+    container: { image: osrf/ros:humble-desktop }
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install MuJoCo
+        run: |
+          wget -q https://github.com/google-deepmind/mujoco/releases/download/3.1.6/mujoco-3.1.6-linux-x86_64.tar.gz -O /tmp/mujoco.tar.gz
+          tar -xzf /tmp/mujoco.tar.gz -C /opt
+          echo "CMAKE_PREFIX_PATH=/opt/mujoco-3.1.6:$CMAKE_PREFIX_PATH" >> "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=/opt/mujoco-3.1.6/lib:$LD_LIBRARY_PATH" >> "$GITHUB_ENV"
+      - name: Install deps
+        run: |
+          apt-get update && apt-get install -y libeigen3-dev ros-humble-ament-cmake-gtest
+          source /opt/ros/humble/setup.bash
+          rosdep install --from-paths src --ignore-src -y
+      - name: Build
+        run: |
+          source /opt/ros/humble/setup.bash
+          colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
+      - name: Test
+        run: |
+          source /opt/ros/humble/setup.bash && source install/setup.bash
+          colcon test --packages-select pat_gnc
+          colcon test-result --verbose
