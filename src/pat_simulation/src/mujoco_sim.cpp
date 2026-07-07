@@ -44,9 +44,9 @@ void MuJoCoSim::reset() {
     mj_forward(model_, data_); 
 }
 
-void MuJoCoSim::step(const std::array<double, 4>& ctrl) {
-    // Update the control input 
-    for (int i = 0; i < model_->nu && i < 4; ++i) 
+void MuJoCoSim::step(const std::vector<double>& ctrl) {
+    // Update the control input
+    for (int i = 0; i < model_->nu && static_cast<size_t>(i) < ctrl.size(); ++i)
         data_->ctrl[i] = ctrl[i];
 
     // Use mujoco step 
@@ -83,6 +83,23 @@ PlanarState MuJoCoSim::getChaserState() const {
 PlanarState MuJoCoSim::getTargetState() const {
     return { jointPos(jid_tx_),  jointPos(jid_ty_),  jointPos(jid_tyaw_),
              jointVel(jid_tx_),  jointVel(jid_ty_),  jointVel(jid_tyaw_) };
+}
+
+NamedJointState MuJoCoSim::getJointStates(const std::vector<std::string>& joint_names) const {
+    NamedJointState s;
+    s.name = joint_names;
+    for (const auto& n : joint_names) {
+        const int id = jointId(n.c_str());
+        s.pos.push_back(jointPos(id));
+        s.vel.push_back(jointVel(id));
+    }
+    return s;
+}
+
+int MuJoCoSim::actuatorId(const std::string& name) const {
+    const int id = mj_name2id(model_, mjOBJ_ACTUATOR, name.c_str());
+    if (id < 0) throw std::runtime_error("actuator '" + name + "' not found");
+    return id;
 }
 
 } // namespace pat_simulation

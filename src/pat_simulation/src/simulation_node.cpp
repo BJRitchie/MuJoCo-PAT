@@ -7,6 +7,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <nav_msgs/msg/odometry.hpp>
 #include <sensor_msgs/msg/imu.hpp>
+#include <sensor_msgs/msg/joint_state.hpp>
 #include <geometry_msgs/msg/transform_stamped.hpp>
 #include <tf2_ros/transform_broadcaster.h>
 #include <tf2/LinearMath/Quaternion.h>
@@ -31,20 +32,35 @@ SimulationNode::SimulationNode() : Node("pat_simulation") {
     if (model_path.empty())
         throw std::runtime_error("'model_path' parameter must be set via launch file");
 
-    // Occupy sim class pointer 
+    // Occupy sim class pointer
     sim_ = std::make_unique<pat_simulation::MuJoCoSim>(model_path);
     RCLCPP_INFO(get_logger(), "MuJoCo loaded. dt=%.4f s", sim_->dt());
+    ctrl_.assign(sim_->model()->nu, 0.0);
 
-    // Publishers 
+    // Arm joints/actuators are entirely opt-in via config — empty by default.
+    // Adding a joint (or a whole second arm) means extending these two lists
+    // and the MJCF; no source changes here are needed.
+    arm_joint_names_ = declare_parameter<std::vector<std::string>>(
+        "arm_joint_names", std::vector<std::string>{});
+    const auto arm_actuator_names = declare_parameter<std::vector<std::string>>(
+        "arm_actuator_names", std::vector<std::string>{});
+    for (const auto& n : arm_actuator_names)
+        arm_actuator_ids_.push_back(sim_->actuatorId(n));
+
+    // Publishers
     ch_odom_ = create_publisher<nav_msgs::msg::Odometry>("/chaser/odom", 10);
     tg_odom_ = create_publisher<nav_msgs::msg::Odometry>("/target/odom", 10);
     ch_imu_  = create_publisher<sensor_msgs::msg::Imu>("/chaser/imu", 10);
+    arm_state_pub_ = create_publisher<sensor_msgs::msg::JointState>("/chaser/arm/joint_states", 10);
     tf_br_   = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
 
     // Subscriber
     thr_sub_ = create_subscription<pat_msgs::msg::ThrusterCommand>(
         "/chaser/thruster_command", 10,
         std::bind(&SimulationNode::thrusterSubscriberCallback, this, std::placeholders::_1));
+    arm_torque_sub_ = create_subscription<sensor_msgs::msg::JointState>(
+        "/chaser/arm/torque_command", 10,
+        std::bind(&SimulationNode::armTorqueSubscriberCallback, this, std::placeholders::_1));
 
     sim_tmr_ = create_wall_timer(
         std::chrono::duration<double>(1.0 / sim_hz),
@@ -68,8 +84,9 @@ void SimulationNode::publish() {
     publishOdom(*ch_odom_, "map", "chaser", ch, now);
     publishOdom(*tg_odom_, "map", "target", tg, now);
     publishImu(ch, now);
+    publishArmState(now);
 
-    // Broadcast the transforms 
+    // Broadcast the transforms
     broadcastTF("map", "chaser", ch, now);
     broadcastTF("map", "target", tg, now);
 }
@@ -146,19 +163,48 @@ void SimulationNode::broadcastTF(const std::string& parent, const std::string& c
     tf.transform.rotation.y = q.y(); 
     tf.transform.rotation.z = q.z();
 
-    // Broadcast 
+    // Broadcast
     tf_br_->sendTransform(tf);
+}
+
+void SimulationNode::publishArmState(const rclcpp::Time& t) {
+    if (arm_joint_names_.empty()) return;
+    const auto s = sim_->getJointStates(arm_joint_names_);
+    sensor_msgs::msg::JointState m;
+    m.header.stamp = t;
+    m.name     = s.name;
+    m.position = s.pos;
+    m.velocity = s.vel;
+    arm_state_pub_->publish(m);
 }
 
 // === Callbacks ==================================================================
 void SimulationNode::thrusterSubscriberCallback(
     const pat_msgs::msg::ThrusterCommand::SharedPtr msg) {
-    // Block 
+    // Block
     std::lock_guard<std::mutex> lk(mu_);
 
-    // Update control forces
-    for (size_t i = 0; i < ctrl_.size(); ++i) 
+    // Update control forces — bound is a literal 4, matching
+    // ThrusterCommand.force[4], NOT ctrl_.size() (which now covers all
+    // actuators including the arm; msg->force only ever has 4 elements).
+    for (size_t i = 0; i < 4 && i < ctrl_.size(); ++i)
         ctrl_[i] = msg->force[i];
+}
+
+void SimulationNode::armTorqueSubscriberCallback(
+    const sensor_msgs::msg::JointState::SharedPtr msg) {
+    std::lock_guard<std::mutex> lk(mu_);
+    // Match by name against our configured arm joints — a message may
+    // legitimately cover only a subset (e.g. one of several independent arm
+    // controllers), so unmatched names/entries are simply ignored.
+    for (size_t k = 0; k < msg->name.size() && k < msg->effort.size(); ++k) {
+        for (size_t i = 0; i < arm_joint_names_.size(); ++i) {
+            if (msg->name[k] == arm_joint_names_[i]) {
+                ctrl_[arm_actuator_ids_[i]] = msg->effort[k];
+                break;
+            }
+        }
+    }
 }
 
 void SimulationNode::simTimerCallback() {

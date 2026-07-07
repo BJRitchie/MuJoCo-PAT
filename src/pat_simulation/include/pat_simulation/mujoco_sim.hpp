@@ -2,6 +2,7 @@
 #include <array>
 #include <memory>
 #include <string>
+#include <vector>
 #include <mujoco/mujoco.h>
 
 #include "pat_simulation/mujoco_vis.hpp"
@@ -14,6 +15,12 @@ struct PlanarState {
     double xdot{0}, ydot{0}, thetadot{0};
 };
 
+struct NamedJointState {
+    std::vector<std::string> name;
+    std::vector<double> pos;
+    std::vector<double> vel;
+};
+
 /// Thin RAII wrapper around mjModel + mjData. Not thread-safe.
 class MuJoCoSim {
 public:
@@ -23,13 +30,23 @@ public:
     MuJoCoSim& operator=(const MuJoCoSim&) = delete;
 
     void reset();
-    void step(const std::array<double, 4>& ctrl);
+    void step(const std::vector<double>& ctrl);
 
     double time() const noexcept;
     double dt()   const noexcept;
 
     PlanarState getChaserState() const;
     PlanarState getTargetState() const;
+
+    /// Generic accessor for any additional actuated joints declared in the
+    /// MJCF beyond the fixed chaser/target ones (e.g. a manipulator arm).
+    /// Purely data-driven — callers pass whichever joint names they care
+    /// about; add joints via the MJCF + config, no source changes needed.
+    NamedJointState getJointStates(const std::vector<std::string>& joint_names) const;
+
+    /// Resolve a MuJoCo actuator's index (for indexing into the ctrl vector
+    /// passed to step()). Throws if not found, matching jointId().
+    int actuatorId(const std::string& name) const;
 
     mjModel* model() noexcept { return model_; }
     mjData*  data()  noexcept { return data_; }

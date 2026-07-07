@@ -15,7 +15,7 @@ Physics: MuJoCo 3. Control: PID (MVP) → LQR → MPC. Navigation: direct (MVP) 
 | `pat_msgs` | ✅ MVP | ThrusterCommand, ControlError |
 | `pat_simulation` | ✅ MVP | MuJoCo simulation node |
 | `pat_gnc` | ✅ MVP | IController + INavigator, PID, DirectNav, EKF lib |
-| `pat_robotics` | ✅ Scaffold | IManipulator interface only — no node |
+| `pat_robotics` | ✅ MVP | IJointController + JointPID + ArmController, arm_control_node. IManipulator (FK/IK/Jacobian) still a stub |
 | `pat_vision` | ❌ Phase 3 | Not created |
 
 ## Sim-to-real: the constraint that governs everything
@@ -73,6 +73,17 @@ identical in both cases.
 | `/target/odom` | `pat_simulation` | motion capture driver | `pat_gnc` |
 | `/chaser/thruster_command` | `pat_gnc` | `pat_gnc` | `pat_simulation` / thruster driver |
 | `/chaser/gnc/control_error` | `pat_gnc` | `pat_gnc` | logging / diagnostics |
+| `/chaser/arm/joint_states` | `pat_simulation` | arm encoder driver | `pat_robotics` |
+| `/chaser/arm/joint_setpoint` | mission/teleop node (not built yet) | mission/teleop node | `pat_robotics` |
+| `/chaser/arm/torque_command` | `pat_robotics` | `pat_robotics` | `pat_simulation` / arm motor driver |
+
+The three arm topics all use `sensor_msgs/msg/JointState`, matched **by
+name** (not array position) — `joint_states` populates `name`+`position`+
+`velocity`; `joint_setpoint` populates `name`+`position`; `torque_command`
+populates `name`+`effort`. This (plus `pat_simulation`'s `arm_joint_names`/
+`arm_actuator_names` params and `pat_robotics`'s `joint_names` param) is what
+lets joints — or a whole second arm — be added via MJCF + YAML config only,
+with no source changes: see "Adding an arm joint" below.
 
 Do not rename a topic without updating both `pat_simulation` and the matching
 hardware driver, and recording the change in this file.
@@ -99,6 +110,24 @@ Same pattern: inherit `INavigator`, add `else if` in factory, update YAML.
 2. Pass as launch argument: `ros2 launch full_stack.launch.py scenario:=docking`
 3. No node code changes required
 
+### Adding an arm joint (or a whole second arm)
+
+Everything arm-related is name-driven (MuJoCo joint/actuator names, matched
+by name in `sensor_msgs/msg/JointState` messages) — no source changes:
+
+1. Add the `<body>`/`<joint>`/`<motor>` to `air_bearing_table.xml` (see the
+   existing `arm_joint{1,2,3}` / `arm_j{1,2,3}` chain for the pattern)
+2. Append the joint/actuator names to `pat_simulation`'s `arm_joint_names`/
+   `arm_actuator_names` params in `config/simulation.yaml`
+3. Append the joint name + PID gains to `pat_robotics`'s `joint_names`/
+   `pid.*` params in `config/pid.yaml` (or launch a second `arm_control_node`
+   instance with its own `joint_names` subset for an independent second arm —
+   multiple instances can safely share the same topics since messages are
+   matched by name, and each instance only ever touches its own joints)
+
+`IJointController`/`JointPID` follow the identical extension pattern as
+`IController`/`PIDController` above for any future per-joint control law.
+
 ## Package architecture pattern
 
 Every C++ package follows this exactly — do not deviate:
@@ -114,8 +143,13 @@ Algorithm logic in the lib. ROS I/O in the node.
 - Scene: `src/pat_simulation/models/environment/air_bearing_table.xml`
 - Single self-contained file — never split via `<include>`
 - `<actuator>` must be a direct child of `<mujoco>`, not inside `<worldbody>`
-- Joint naming: `{vehicle}_{axis}` e.g. `chaser_x`, `target_yaw`
+- Joint naming: `{vehicle}_{axis}` e.g. `chaser_x`, `target_yaw`; arm joints
+  are `arm_joint{N}` (1-indexed), paired with a same-numbered `arm_j{N}`
+  `<motor>` actuator
 - Actuator index must match `ThrusterCommand.force[4]`: [fwd=0, aft=1, port=2, stbd=3]
+- Arm joints always use `<motor>` (raw torque) actuators, never
+  `<position>`/`<general>` with an implicit PD gain — `pat_robotics` owns the
+  control loop, and a `<position>` actuator's internal servo would fight it
 - Gravity disabled: `gravity="0 0 0"` in `<option>` — do not re-enable
 - Physics dt = 2 ms (500 Hz). Control = 10 Hz. Publishing = 100 Hz.
 

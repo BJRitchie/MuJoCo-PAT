@@ -42,6 +42,32 @@
       <site name="thr_port_site" pos=" 0     0.10 0" size="0.003"/>
       <site name="thr_stbd_site" pos=" 0    -0.10 0" size="0.003"/>
       <site name="chaser_imu"    pos="0 0 0"         size="0.005"/>
+
+      <!-- 3-DOF manipulator arm, rigidly mounted on chaser top face -->
+      <body name="arm_link1" pos="0 0 0.03">
+        <joint name="arm_joint1" type="hinge" axis="0 0 1"
+               range="-3.14159 3.14159" limited="true" damping="0.02" frictionloss="0.01"/>
+        <inertial pos="0.05 0 0" mass="0.3" diaginertia="0.0004 0.0004 0.0002"/>
+        <geom name="arm_link1_geom" type="capsule" fromto="0 0 0 0.10 0 0"
+              size="0.012" rgba="0.7 0.7 0.2 1" contype="0" conaffinity="0"/>
+
+        <body name="arm_link2" pos="0.10 0 0">
+          <joint name="arm_joint2" type="hinge" axis="0 1 0"
+                 range="-1.5708 1.5708" limited="true" damping="0.02" frictionloss="0.01"/>
+          <inertial pos="0.08 0 0" mass="0.25" diaginertia="0.0006 0.0006 0.0001"/>
+          <geom name="arm_link2_geom" type="capsule" fromto="0 0 0 0.16 0 0"
+                size="0.010" rgba="0.7 0.4 0.2 1" contype="0" conaffinity="0"/>
+
+          <body name="arm_link3" pos="0.16 0 0">
+            <joint name="arm_joint3" type="hinge" axis="0 1 0"
+                   range="-2.61799 2.61799" limited="true" damping="0.01" frictionloss="0.005"/>
+            <inertial pos="0.06 0 0" mass="0.15" diaginertia="0.0002 0.0002 0.00005"/>
+            <geom name="arm_link3_geom" type="capsule" fromto="0 0 0 0.12 0 0"
+                  size="0.008" rgba="0.7 0.2 0.2 1" contype="0" conaffinity="0"/>
+            <site name="arm_ee_site" pos="0.12 0 0" size="0.006"/>
+          </body>
+        </body>
+      </body>
     </body>
 
     <!-- Target: 24 cm square, 20 kg, stationary -->
@@ -68,5 +94,10 @@
     <general name="thr_aft"  site="thr_aft_site"  gear="-1 0 0 0 0 0" ctrlrange="0 5" forcelimited="true" forcerange="0 5"/>
     <general name="thr_port" site="thr_port_site" gear="0 1 0 0 0 0"  ctrlrange="0 5" forcelimited="true" forcerange="0 5"/>
     <general name="thr_stbd" site="thr_stbd_site" gear="0 -1 0 0 0 0" ctrlrange="0 5" forcelimited="true" forcerange="0 5"/>
+
+    <!-- Arm joint torque actuators — index order must match ArmTorqueCommand.effort[3] -->
+    <motor name="arm_j1" joint="arm_joint1" gear="1" ctrlrange="-2 2" ctrllimited="true"/>
+    <motor name="arm_j2" joint="arm_joint2" gear="1" ctrlrange="-2 2" ctrllimited="true"/>
+    <motor name="arm_j3" joint="arm_joint3" gear="1" ctrlrange="-1 1" ctrllimited="true"/>
   </actuator>
 </mujoco>

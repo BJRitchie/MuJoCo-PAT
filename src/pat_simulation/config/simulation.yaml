@@ -3,3 +3,7 @@ pat_simulation:
     sim_rate_hz:   500.0
     pub_rate_hz:   100.0
     imu_noise_std: 0.005
+    # Arm joints/actuators are opt-in — add entries here (and to the MJCF)
+    # to add joints or a whole second arm; no source changes needed.
+    arm_joint_names:    ["arm_joint1", "arm_joint2", "arm_joint3"]
+    arm_actuator_names: ["arm_j1",     "arm_j2",     "arm_j3"]

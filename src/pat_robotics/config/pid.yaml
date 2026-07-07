@@ -1,0 +1,9 @@
+pat_robotics:
+  ros__parameters:
+    joint_names: ["arm_joint1", "arm_joint2", "arm_joint3"]
+    control_hz: 50.0
+    pid:
+      kp:    [0.1, 0.1, 0.05]
+      ki:    [0.0, 0.0, 0.0]
+      kd:    [0.01, 0.01, 0.005]
+      u_max: [2.0, 2.0, 1.0]

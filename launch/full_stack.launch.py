@@ -1,4 +1,4 @@
-"""Launch simulation + GNC together."""
+"""Launch simulation + GNC + arm control together."""
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
@@ -14,5 +14,9 @@ def generate_launch_description() -> LaunchDescription:
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
                 PathJoinSubstitution([ThisLaunchFileDir(), "gnc.launch.py"])),
+            launch_arguments={"use_sim_time": LaunchConfiguration("use_sim_time")}.items()),
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(
+                PathJoinSubstitution([ThisLaunchFileDir(), "arm_control.launch.py"])),
             launch_arguments={"use_sim_time": LaunchConfiguration("use_sim_time")}.items()),
     ])
