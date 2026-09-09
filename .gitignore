@@ -16,3 +16,7 @@ __pycache__/
 *.bag
 *.db3
 outputs/
+
+# clangd: generated compile DB is a build artifact; .clangd config is checked in
+/compile_commands.json
+.cache/

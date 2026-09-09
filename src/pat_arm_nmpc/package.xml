@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>pat_arm_nmpc</name>
+  <version>0.0.0</version>
+  <description>Constrained task-space NMPC arm controller (port of VORTEX fswAlgorithms/jointControl).</description>
+  <maintainer email="ben.ritchie2374@gmail.com">Ben Ritchie</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <!-- Provides xacro/piper_planar_arm.xacro; expanded to MJCF at build time. -->
+  <build_depend>pat_platform_description</build_depend>
+  <build_depend>xacro</build_depend>
+
+  <depend>eigen</depend>
+  <depend>rclcpp</depend>
+  <depend>sensor_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>nav_msgs</depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

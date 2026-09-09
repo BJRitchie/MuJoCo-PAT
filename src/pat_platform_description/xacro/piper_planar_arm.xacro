@@ -1,0 +1,97 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <!--
+    piper_planar_arm — one planar (X-Y) Piper 3R arm as MuJoCo <body> tree.
+
+    Shared by pat_arm_nmpc's controller model and pat_simulation's plant so the
+    arm dynamics cannot drift apart. Transcribed from the LEFT arm of
+    servicer_dual_piper_planar_primitives.xml (Basilisk-validated); the RIGHT
+    arm is the world-XZ-plane reflection M = diag(1,-1,1), applied here by
+    scaling the mirror-sensitive components by `r`:
+      - pos / inertial-pos  .y   *= r        (polar vector: (x,y,z)->(x,-y,z))
+      - body/inertial quat  .x,.z *= r       ((w,x,y,z)->(w,-x,y,-z))
+      - joint axis          .x,.z *= r       (axial vector: (x,y,z)->(-x,y,-z))
+      - diaginertia / mass  unchanged
+    joint1/4/6 are welded (removed) so joints 2/3/5 form the planar 3R chain;
+    with the mount quat below their world rotation axis is exactly ±Z for any
+    configuration. link1/4/6 bodies are kept (real mass/inertia).
+
+    params:
+      side     : "L" or "R"
+      mount_xyz: "x y z" of link1's root in the parent (bus) frame — the L
+                 value; the macro mirrors y for the R arm. The mount QUAT is
+                 fixed (planarity-critical: it is what puts joints 2/3/5 on
+                 world Z), so it is not exposed.
+      contype  : MuJoCo contype/conaffinity for every arm <geom> (default 1;
+                 pass 0 for a non-colliding visual-only arm)
+  -->
+  <xacro:macro name="piper_planar_arm" params="side mount_xyz:='0.573 0.3 0' contype:=1">
+    <xacro:property name="r" value="${1 if side == 'L' else -1}"/>
+    <xacro:property name="m" value="${mount_xyz.split()}"/>
+
+    <body name="link1_${side}" pos="${m[0]} ${float(m[1])*r} ${m[2]}"
+          quat="0.5 ${-0.5*r} 0.5 ${-0.5*r}">
+      <inertial pos="0.000121505 ${-0.000104632*r} -0.00438597"
+                quat="0.707107 ${-0.707107*r} 0 0" mass="0.71"
+                diaginertia="0.00048916 0.00043982 0.00040472"/>
+      <geom type="cylinder" size="0.045 0.045" rgba="0.79 0.82 0.93 1"
+            contype="${contype}" conaffinity="${contype}"/>
+
+      <body name="link2_${side}" quat="0.0480084 ${0.0480134*r} -0.705476 ${0.705474*r}">
+        <inertial pos="0.198666 ${0.0109269*r} 0.00142122"
+                  quat="0.5 ${-0.5*r} 0.5 ${-0.5*r}" mass="1.17"
+                  diaginertia="0.0678538 0.0677449 0.00116918"/>
+        <joint name="joint2_${side}" pos="0 0 0" axis="0 0 ${-1*r}" range="0 3.14" damping="0"/>
+        <geom type="capsule" size="0.030" fromto="0 0 0  0.285 0 0" rgba="0.79 0.82 0.93 1"
+              contype="${contype}" conaffinity="${contype}"/>
+
+        <body name="link3_${side}" pos="0.28503 0 0" quat="0.623996 0 0 ${0.781427*r}">
+          <inertial pos="-0.0202738 ${0.133915*r} -0.000458683"
+                    quat="0.5 ${-0.5*r} -0.5 ${-0.5*r}" mass="0.5"
+                    diaginertia="0.0138032 0.0136171 0.002"/>
+          <joint name="joint3_${side}" pos="0 0 0" axis="0 0 ${-1*r}" range="-2.967 0" damping="0"/>
+          <!-- geom quat is Rx(-90) so the size-capsule (default local Z) lies
+               along local +Y, matching the pos offset and the link direction.
+               The source MJCF had Rz(-90) here (a no-op on a Z-capsule) — a
+               URDF-mesh-origin conversion artefact that left it vertical.
+               Visual only: every body carries an explicit <inertial>. -->
+          <geom type="capsule" size="0.030 0.1255" pos="-0.011 ${0.1255*r} 0"
+                quat="0.707107 ${-0.707107*r} 0 0" rgba="0.79 0.82 0.93 1"
+                contype="${contype}" conaffinity="${contype}"/>
+
+          <body name="link4_${side}" pos="-0.021984 ${0.25075*r} 0" quat="0.707105 ${-0.707108*r} 0 0">
+            <inertial pos="-9.66636e-05 ${-0.000876064*r} -0.00496881"
+                      quat="0.707107 0 0 ${-0.707107*r}" mass="0.38"
+                      diaginertia="0.00018965 0.00018501 0.00015484"/>
+            <geom type="cylinder" size="0.035 0.030" rgba="0.79 0.82 0.93 1"
+                  contype="${contype}" conaffinity="${contype}"/>
+
+            <body name="link5_${side}" quat="0.707105 ${0.707108*r} 0 0">
+              <inertial pos="-4.10554e-05 ${0.0566487*r} -0.00372058"
+                        quat="0.707107 ${-0.707107*r} 0 0" mass="0.383"
+                        diaginertia="0.00166169 0.00164321 0.0001851"/>
+              <joint name="joint5_${side}" pos="0 0 0" axis="0 0 ${-1*r}" range="-1.22 1.22" damping="0"/>
+              <!-- Rx(-90): size-capsule along local +Y, same fix as link3. -->
+              <geom type="capsule" size="0.025 0.0455" pos="0 ${0.0455*r} 0"
+                    quat="0.707107 ${-0.707107*r} 0 0" rgba="0.79 0.82 0.93 1"
+                    contype="${contype}" conaffinity="${contype}"/>
+
+              <body name="link6_${side}" pos="8.8259e-05 ${0.091*r} 0" quat="0.707105 ${-0.707108*r} 0 0">
+                <inertial pos="-0.000182344 ${-7.9409e-05*r} 0.0316207"
+                          quat="1 ${2.56629e-05*r} -2.07266e-05 ${5.31904e-10*r}" mass="0.457"
+                          diaginertia="0.000937949 0.000723079 0.000395487"/>
+                <geom type="cylinder" size="0.042 0.040" rgba="0.90 0.92 0.93 1"
+                      contype="${contype}" conaffinity="${contype}"/>
+                <geom type="box" size="0.008 0.018 0.040" pos=" 0.022 0 0.075" rgba="0.79 0.82 0.93 1"
+                      contype="${contype}" conaffinity="${contype}"/>
+                <geom type="box" size="0.008 0.018 0.040" pos="-0.022 0 0.075" rgba="0.79 0.82 0.93 1"
+                      contype="${contype}" conaffinity="${contype}"/>
+                <site name="ee_site_${side}" pos="0 0 0" size="0.04" rgba="1 1 0 0.8"/>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+    </body>
+  </xacro:macro>
+</robot>

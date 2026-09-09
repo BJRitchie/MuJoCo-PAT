@@ -1,0 +1,43 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <!--
+    pat_platform_bus — the real PAT servicer bus (from platform.xml /
+    DASM_16DoF_Basilisk) plus the two shared planar Piper 3R arms.
+
+    Emits, into the caller's <body>:
+      - <inertial> : 49.22 kg, real PAT inertia tensor
+      - bus + top-panel box geoms, RGB body-axis markers
+      - two piper_planar_arm instances mounted just outside the +X face
+
+    The caller supplies the <body> and its joint(s): a <freejoint> for the
+    NMPC's free-floating controller model, or chaser_x/y/yaw + thruster sites
+    for the air-bearing-table plant.
+
+    params:
+      bus_contype : contype/conaffinity for the bus box geoms
+                    (0 = visual only; 2 = collide, matching the old chaser)
+      arm_contype : contype/conaffinity for the arm geoms (0 recommended)
+      mount_xyz   : "x y z" of the L arm root in bus frame (R mirrored)
+  -->
+  <xacro:include filename="$(find pat_platform_description)/xacro/piper_planar_arm.xacro"/>
+
+  <xacro:macro name="pat_platform_bus"
+               params="bus_contype:=0 arm_contype:=0 mount_xyz:='0.32 0.15 0.0'">
+    <inertial pos="0 0 0" mass="49.22"
+              fullinertia="1.5399 2.7177 2.0322 0.1251 0.00144 -0.0019"/>
+
+    <geom name="bus_box" type="box" pos="0 0 0" size="0.30 0.25 0.1525"
+          rgba="0.25 0.32 0.48 1" contype="${bus_contype}" conaffinity="${bus_contype}"/>
+    <geom name="bus_top_panel" type="box" pos="0 0 0.1545" size="0.255 0.205 0.002"
+          rgba="0.10 0.15 0.24 1" contype="0" conaffinity="0" mass="0"/>
+    <geom name="bus_axis_x" type="capsule" fromto="0 0 0 0.18 0 0" size="0.006"
+          rgba="1 0 0 1" contype="0" conaffinity="0" mass="0"/>
+    <geom name="bus_axis_y" type="capsule" fromto="0 0 0 0 0.18 0" size="0.006"
+          rgba="0 1 0 1" contype="0" conaffinity="0" mass="0"/>
+    <geom name="bus_axis_z" type="capsule" fromto="0 0 0 0 0 0.18" size="0.006"
+          rgba="0 0 1 1" contype="0" conaffinity="0" mass="0"/>
+
+    <xacro:piper_planar_arm side="L" mount_xyz="${mount_xyz}" contype="${arm_contype}"/>
+    <xacro:piper_planar_arm side="R" mount_xyz="${mount_xyz}" contype="${arm_contype}"/>
+  </xacro:macro>
+</robot>

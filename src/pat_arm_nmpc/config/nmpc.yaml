@@ -1,0 +1,73 @@
+# Constrained task-space NMPC arm controller — tuning parameters.
+#
+# Two node instances (pat_arm_nmpc_left / pat_arm_nmpc_right) share the /**
+# block; the per-node blocks set ee_site_name, joint_names, owned_joints and
+# per-joint limits. Swap this whole file per scenario with the `params_file`
+# launch arg. `mjcf_path` is filled by the launch file (FindPackageShare).
+#
+# limits.* are parallel arrays: entry i belongs to that node's joint_names[i]
+#   (this arm's 3 joints — NOT the model's 6).
+# weights.* are 3-vectors [x, y, θz] for the planar task-space law.
+# model_joint_names is ALL model joints in MuJoCo body-tree order — used only
+#   to place measured joint values into the right q/v slots.
+
+/**:
+  ros__parameters:
+    mjcf_path: ""
+    control_hz: 50.0
+    model_joint_names: [joint2_L, joint3_L, joint5_L, joint2_R, joint3_R, joint5_R]
+
+    nmpc:
+      Ts: 0.05                    # [s] horizon-step interval (not the sim dt)
+      N: 20                       # horizon steps
+      full_nonlinear: false       # true ⇒ multiple-shooting SQP path (not ported)
+      sqp_iters: 1
+      Hg_damping: 0.001           # DLS damping for H_g inversion
+      tau_max: 100.0              # [N*m] global post-hoc torque clamp
+      rollout_v_clamp_mult: 2.0
+      terminal_velocity_constraint: false
+      terminal_cost_multiplier: 1.0
+
+    weights:
+      Q_pos:        [10.0,   10.0,   1.0   ]   # EE (x, y, θz) position error
+      Q_vel:        [ 0.0,    0.0,   0.0   ]   # EE (x, y, θz) velocity error
+      R:            [ 1.0e-3, 1.0e-3, 1.0e-3]  # task-space effort regularization
+      Q_ori:        [10.0,   10.0,   10.0  ]   # unused in the planar law
+      Q_angvel:     [ 0.0,    0.0,    0.0  ]   # unused
+      R_ori:        [ 1.0e-3, 1.0e-3, 1.0e-3]  # unused
+      du_max_trans: [50.0,   50.0,   50.0  ]   # SQP trust region (full-nonlinear only)
+      du_max_rot:   [ 5.0,    5.0,    5.0  ]   # SQP trust region (full-nonlinear only)
+
+    qp:
+      max_iter: 50
+      tol: 1.0e-6
+      reg_prim: 1.0e-6
+      warm_start: 2                    # 0 cold, 1 primal, 2 primal+dual
+      joint_slack_linear: 1.0e2
+      joint_slack_quadratic: 1.0e3
+      torque_slack_linear: 1.0e2
+      torque_slack_quadratic: 1.0e3
+
+pat_arm_nmpc_left:
+  ros__parameters:
+    arm_side: "left"
+    ee_site_name: "ee_site_L"
+    joint_names:  [joint2_L, joint3_L, joint5_L]
+    owned_joints: [joint2_L, joint3_L, joint5_L]
+    limits:
+      q_min:   [ 0.0,   -2.967, -1.22]   # [rad]  (servicer model joint ranges)
+      q_max:   [ 3.14,   0.0,    1.22]   # [rad]
+      qd_max:  [ 2.0,    2.0,    1.5 ]   # [rad/s], symmetric
+      tau_max: [10.0,   10.0,    5.0 ]   # [N*m], symmetric — matches MJCF motor ctrlrange
+
+pat_arm_nmpc_right:
+  ros__parameters:
+    arm_side: "right"
+    ee_site_name: "ee_site_R"
+    joint_names:  [joint2_R, joint3_R, joint5_R]
+    owned_joints: [joint2_R, joint3_R, joint5_R]
+    limits:
+      q_min:   [ 0.0,   -2.967, -1.22]
+      q_max:   [ 3.14,   0.0,    1.22]
+      qd_max:  [ 2.0,    2.0,    1.5 ]
+      tau_max: [10.0,   10.0,    5.0 ]

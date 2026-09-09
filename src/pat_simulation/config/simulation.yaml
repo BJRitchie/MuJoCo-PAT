@@ -5,5 +5,7 @@ pat_simulation:
     imu_noise_std: 0.005
     # Arm joints/actuators are opt-in — add entries here (and to the MJCF)
     # to add joints or a whole second arm; no source changes needed.
-    arm_joint_names:    ["arm_joint1", "arm_joint2", "arm_joint3"]
-    arm_actuator_names: ["arm_j1",     "arm_j2",     "arm_j3"]
+    # Dual planar Piper 3R arms (air_bearing_table.xacro). Lists are paired by
+    # position: arm_joint_names[i] <-> arm_actuator_names[i].
+    arm_joint_names:    ["joint2_L", "joint3_L", "joint5_L", "joint2_R", "joint3_R", "joint5_R"]
+    arm_actuator_names: ["motor2_L", "motor3_L", "motor5_L", "motor2_R", "motor3_R", "motor5_R"]

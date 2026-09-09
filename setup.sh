@@ -6,6 +6,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 MUJOCO_DIR="${MUJOCO_DIR:-$HOME/.mujoco}"
 
+# The precompiled release extracts to a versioned subdir (mujoco-3.7.0/, ...).
+# If MUJOCO_DIR points at the parent, descend into the newest one it contains.
+if [ ! -e "$MUJOCO_DIR/include/mujoco/mujoco.h" ]; then
+    _mj_cand="$(ls -d "$MUJOCO_DIR"/mujoco-* 2>/dev/null | sort -V | tail -1)"
+    [ -n "$_mj_cand" ] && MUJOCO_DIR="$_mj_cand"
+    unset _mj_cand
+fi
+
 if [ ! -d "$MUJOCO_DIR" ]; then
     echo "WARNING: MUJOCO_DIR=$MUJOCO_DIR does not exist."
     echo "  Install MuJoCo 3.x from https://github.com/google-deepmind/mujoco/releases"
