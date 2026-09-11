@@ -1,0 +1,12 @@
+# Build the image from a clean tree — the container builds its own workspace.
+build/
+install/
+log/
+.git/
+.github/
+.vscode/
+.cache/
+.devcontainer/
+compile_commands.json
+*.md
+!README.md

@@ -64,6 +64,7 @@ private:
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;
     rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr ee_setpoint_sub_;
     rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr torque_pub_;
+    rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr ee_pose_pub_;  // measured EE pose (world)
     rclcpp::TimerBase::SharedPtr ctrl_tmr_;
     std::mutex mu_;
 };

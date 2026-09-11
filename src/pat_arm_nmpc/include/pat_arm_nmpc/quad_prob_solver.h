@@ -4,14 +4,13 @@
 #include <stdexcept>
 #include <vector>
 #include <Eigen/Dense>
-#include <iostream>
 
 extern "C" {
 #include "acados_c/ocp_qp_interface.h"
 #include "acados/ocp_qp/ocp_qp_common.h"
 }
 
-namespace pat_arm_nmpc {
+namespace quad_prob_solver {
 
 struct QuadProbSolverParams {
     int nx_task = 0;   //!< task-space error state dim (7 or 13)
@@ -248,8 +247,6 @@ public:
     // actually applies each tick).
     const Eigen::VectorXd& lastTauTask() const { return last_tau_task; }
 
-protected:
-
 private:
     QuadProbSolverParams params_;
     ocp_qp_solver_plan_t plan;
@@ -276,4 +273,4 @@ private:
     Eigen::VectorXd last_tau_task;
 };
 
-}  // namespace pat_arm_nmpc
+}  // namespace quad_prob_solver

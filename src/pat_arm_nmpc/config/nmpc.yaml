@@ -14,24 +14,42 @@
 /**:
   ros__parameters:
     mjcf_path: ""
-    control_hz: 50.0
+    control_hz: 200.0
     model_joint_names: [joint2_L, joint3_L, joint5_L, joint2_R, joint3_R, joint5_R]
 
     nmpc:
-      Ts: 0.05                    # [s] horizon-step interval (not the sim dt)
-      N: 20                       # horizon steps
+      Ts: 0.01                    # [s] horizon-step interval (not the sim dt)
+      N:  20                       # horizon steps. NOTE: VORTEX's own reference scenario
+                                    # for this model uses N=40, but that's tuned for the
+                                    # multi-shooting SQP path (re-linearizes every node) —
+                                    # this port only linearizes once at k=0, so doubling N
+                                    # just extrapolates further on a staler model. Tested
+                                    # N=40 here: max joint-limit slack ~4 vs ~0.4, qpsolve
+                                    # ~19ms vs ~6ms (eats the whole 50 Hz control period).
+                                    # Keep at 20 unless the SQP path gets ported.
       full_nonlinear: false       # true ⇒ multiple-shooting SQP path (not ported)
       sqp_iters: 1
       Hg_damping: 0.001           # DLS damping for H_g inversion
-      tau_max: 100.0              # [N*m] global post-hoc torque clamp
+      tau_max: 1.0              # [N*m] global post-hoc torque clamp
       rollout_v_clamp_mult: 2.0
-      terminal_velocity_constraint: false
-      terminal_cost_multiplier: 1.0
+      terminal_velocity_constraint: true
+      terminal_cost_multiplier: 100.0
 
     weights:
       Q_pos:        [10.0,   10.0,   1.0   ]   # EE (x, y, θz) position error
-      Q_vel:        [ 0.0,    0.0,   0.0   ]   # EE (x, y, θz) velocity error
-      R:            [ 1.0e-3, 1.0e-3, 1.0e-3]  # task-space effort regularization
+      Q_vel:        [ 1.0,    1.0,   3.0   ]   # EE (x, y, θz) velocity error. x/y stay
+                                                # undamped (already well-behaved); θz is
+                                                # damped because the wrist's rotational
+                                                # inertia is much lower than its
+                                                # translational one, so with Qdotwz=0 the
+                                                # yaw channel is far more lightly damped
+                                                # than x/y at the same Qwz/Rwz — it visibly
+                                                # oscillates (edot_th swinging +-2.5 rad/s
+                                                # every tick even once e_th had converged)
+                                                # while x/y track cleanly. Confirmed 2.0
+                                                # tames it (edot_th mostly <0.7, several
+                                                # near 0) without hurting x/y or slack.
+      R:            [ 1.0e-2, 1.0e-2, 1.0e-2]  # task-space effort regularization
       Q_ori:        [10.0,   10.0,   10.0  ]   # unused in the planar law
       Q_angvel:     [ 0.0,    0.0,    0.0  ]   # unused
       R_ori:        [ 1.0e-3, 1.0e-3, 1.0e-3]  # unused
@@ -43,8 +61,8 @@
       tol: 1.0e-6
       reg_prim: 1.0e-6
       warm_start: 2                    # 0 cold, 1 primal, 2 primal+dual
-      joint_slack_linear: 1.0e2
-      joint_slack_quadratic: 1.0e3
+      joint_slack_linear: 1.0e3
+      joint_slack_quadratic: 1.0e4
       torque_slack_linear: 1.0e2
       torque_slack_quadratic: 1.0e3
 
@@ -58,7 +76,7 @@ pat_arm_nmpc_left:
       q_min:   [ 0.0,   -2.967, -1.22]   # [rad]  (servicer model joint ranges)
       q_max:   [ 3.14,   0.0,    1.22]   # [rad]
       qd_max:  [ 2.0,    2.0,    1.5 ]   # [rad/s], symmetric
-      tau_max: [10.0,   10.0,    5.0 ]   # [N*m], symmetric — matches MJCF motor ctrlrange
+      tau_max: [ 0.5,   0.5,    0.5 ]   # [N*m], symmetric — matches MJCF motor ctrlrange
 
 pat_arm_nmpc_right:
   ros__parameters:
@@ -70,4 +88,4 @@ pat_arm_nmpc_right:
       q_min:   [ 0.0,   -2.967, -1.22]
       q_max:   [ 3.14,   0.0,    1.22]
       qd_max:  [ 2.0,    2.0,    1.5 ]
-      tau_max: [10.0,   10.0,    5.0 ]
+      tau_max: [ 0.5,    0.5,    0.5 ]

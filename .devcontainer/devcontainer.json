@@ -1,0 +1,32 @@
+{
+  "name": "MuJoCo-PAT (dev)",
+  // Same definition as `docker compose run --rm dev bash` — one source of truth.
+  "dockerComposeFile": "../docker-compose.yml",
+  "service": "dev",
+  "workspaceFolder": "/ws",
+
+  // First open only: build the workspace + merge the clangd compile DB.
+  "postCreateCommand": ".devcontainer/post-create.sh",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "llvm-vs-code-extensions.vscode-clangd",
+        "ms-python.python",
+        "redhat.vscode-xml",
+        "ms-iot.vscode-ros"
+      ],
+      "settings": {
+        "C_Cpp.intelliSenseEngine": "disabled",
+        "clangd.arguments": [
+          "--query-driver=/usr/bin/g++,/usr/bin/gcc,/usr/bin/c++,/usr/bin/cc",
+          "--background-index-priority=low",
+          "-j=2",
+          "--header-insertion=never",
+          "--pch-storage=disk"
+        ],
+        "terminal.integrated.defaultProfile.linux": "bash"
+      }
+    }
+  }
+}

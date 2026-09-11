@@ -71,6 +71,8 @@ ArmNMPCNode::ArmNMPCNode() : Node("pat_arm_nmpc") {
         std::bind(&ArmNMPCNode::onEeSetpoint, this, std::placeholders::_1));
     torque_pub_ = create_publisher<sensor_msgs::msg::JointState>(
         "/chaser/arm/torque_command", 10);
+    ee_pose_pub_ = create_publisher<geometry_msgs::msg::PoseStamped>(
+        "/chaser/arm/" + arm_side_ + "/ee_pose", 10);
     ctrl_tmr_ = create_wall_timer(std::chrono::duration<double>(1.0 / ctrl_hz),
                                   std::bind(&ArmNMPCNode::controlLoop, this));
 
@@ -236,11 +238,28 @@ void ArmNMPCNode::controlLoop() {
         v(6 + i) = v_joints_[static_cast<size_t>(i)];
     }
 
+    // Measured EE pose (world frame): published for downstream consumers
+    // (target/mission nodes seed their waypoints off this) and, on the first
+    // tick, used to seed a hold-pose setpoint.
+    const auto meas = controller_->currentEePose(q, v);
+    {
+        geometry_msgs::msg::PoseStamped ps;
+        ps.header.stamp = get_clock()->now();
+        ps.header.frame_id = "map";
+        ps.pose.position.x = meas.pos.x();
+        ps.pose.position.y = meas.pos.y();
+        ps.pose.position.z = meas.pos.z();
+        ps.pose.orientation.w = meas.quat[0];
+        ps.pose.orientation.x = meas.quat[1];
+        ps.pose.orientation.y = meas.quat[2];
+        ps.pose.orientation.z = meas.quat[3];
+        ee_pose_pub_->publish(ps);
+    }
+
     if (!has_setpoint_) {
-        const auto p = controller_->currentEePose(q, v);
-        ee_x_ = p.pos.x();
-        ee_y_ = p.pos.y();
-        ee_quat_ = {p.quat[0], p.quat[1], p.quat[2], p.quat[3]};
+        ee_x_ = meas.pos.x();
+        ee_y_ = meas.pos.y();
+        ee_quat_ = {meas.quat[0], meas.quat[1], meas.quat[2], meas.quat[3]};
         has_setpoint_ = true;
         RCLCPP_INFO(get_logger(),
             "pat_arm_nmpc[%s]: no ee_setpoint yet — holding start pose "

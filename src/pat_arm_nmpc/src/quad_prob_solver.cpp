@@ -1,7 +1,8 @@
 #include "pat_arm_nmpc/quad_prob_solver.h"
 
+#include <iostream>
 
-namespace pat_arm_nmpc {
+namespace quad_prob_solver {
 
 // === Construction =============================================================
 QuadProbSolver::QuadProbSolver( const QuadProbSolverParams& params )
@@ -354,7 +355,7 @@ bool QuadProbSolver::solveMultiStage(
     const std::vector<Eigen::VectorXd>& lg_k,
     const std::vector<Eigen::VectorXd>& ug_k,
     double x0_current[],
-    double Q_N_data[]
+    double Q_N_data[] 
 ) {
     const int N  = params_.N;
     const int nbx_k = static_cast<int>(params_.idxbx_k.size());
@@ -483,4 +484,4 @@ void QuadProbSolver::getSlack(int stage, double* sl_out, double* su_out) const {
     d_ocp_qp_sol_get_su(stage, qp_out, su_out);
 }
 
-} // namespace pat_arm_nmpc
+} // namespace quad_prob_solver

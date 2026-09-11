@@ -15,7 +15,7 @@
 #include <mujoco/mujoco.h>
 
 #include "pat_arm_nmpc/arm_task_space_controller.h"
-// #include "pat_arm_nmpc/quad_prob_solver.h"
+#include "pat_arm_nmpc/quad_prob_solver.h"
 
 namespace pat_arm_nmpc {
 
@@ -46,12 +46,9 @@ struct NMPCParams {
     std::vector<JointLimit> joint_lims;
 
     // --- Name of owned joints ----------------------------------------------
-    // Joint names owned by this controller, whitespace-seperated: 
-    //  "<j0_name> <j1_name> ... <jN_name>" 
-    // 
-    // If this field is left empty, controller assumes ownership 
-    // of all joints 
-    std::vector<std::string> owned_joints; 
+    // Joint names this controller owns (whose Δq/qdot rows become
+    // box-constrained state). Empty ⇒ owns all arm joints.
+    std::vector<std::string> owned_joints;
 
     double Hg_damping  = 0.001;   //!< DLS damping for H_g inversion (see ArmTaskSpaceController::pinvDLS)
 
@@ -225,10 +222,11 @@ private:
     std::vector<std::pair<double, double>> qlimsByIndex;
     std::vector<double>                    vlimsByIndex;
     std::vector<double>                    torqueLimsByIndex;
-    std::vector<int>                       ownedJointInds; 
-    
-    // TODO(port) quad prob solver over
-    // std::unique_ptr<QuadProbSolver> qp_;
+    std::vector<int>                       ownedJointInds;
+    int                                    n_owned = 0;
+
+    // Box/torque-constrained QP solver (acados_c + HPIPM backend).
+    std::unique_ptr<quad_prob_solver::QuadProbSolver> qp_;
 
     // Nominal control trajectory for the full-nonlinear (fullNonlinear=true)
     // path -- N entries of size d (task dim), warm-started/shifted tick to

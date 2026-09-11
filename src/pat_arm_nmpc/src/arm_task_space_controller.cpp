@@ -329,7 +329,13 @@ Eigen::Vector3d ArmTaskSpaceController::sat(const Eigen::Vector3d& x)
 Eigen::MatrixXd ArmTaskSpaceController::pinvDLS(
     const Eigen::MatrixXd& A, double damping, const std::string& name)
 {
-    Eigen::JacobiSVD<Eigen::MatrixXd> svd(A, Eigen::ComputeFullU | Eigen::ComputeFullV);
+    // Thin, not Full: for a non-square A (m x n) the thin factors are
+    // U: m x k, V: n x k, sigma: k  with k = min(m,n), so
+    // V * diag(sigma_inv) * U^T is a well-formed n x m pseudo-inverse.
+    // Full U/V make that product dimension-mismatch — it aborts under live
+    // Eigen asserts and silently computes a wrong result under NDEBUG
+    // (which is how it slipped through the Basilisk build).
+    Eigen::JacobiSVD<Eigen::MatrixXd> svd(A, Eigen::ComputeThinU | Eigen::ComputeThinV);
 
     double max_sv = svd.singularValues()(0);
     double min_sv = svd.singularValues()(svd.singularValues().size() - 1);

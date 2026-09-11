@@ -1,0 +1,31 @@
+services:
+  dev:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: dev
+      args:
+        MUJOCO_VERSION: "3.7.0"
+        ACADOS_REF: "v0.4.2"
+    image: mujoco-pat:dev
+    container_name: mujoco_pat_dev
+    # Run as your host user so bind-mounted files keep your ownership.
+    # UID/GID come from .env (edit it if `id -u` isn't 1000).
+    user: "${UID:-1000}:${GID:-1000}"
+    working_dir: /ws
+    environment:
+      - DISPLAY=${DISPLAY}                 # MuJoCo GLFW viewer / rviz
+      - MAKEFLAGS=-j${BUILD_JOBS:-2}       # keep colcon compiles off the OOM line
+    volumes:
+      # Whole repo bind-mounted; colcon builds into ./build + ./install on the
+      # host (gitignored), same as VORTEX builds into /workspace. acados + MuJoCo
+      # are baked into the image at /opt — no writable-deps volume needed.
+      - ./:/ws
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+    # ROS 2 DDS shared-memory discovery needs all three, or `ros2 node list`
+    # comes up empty and `ros2 topic hz` segfaults across shells.
+    network_mode: host
+    ipc: host
+    pid: host
+    tty: true
+    stdin_open: true

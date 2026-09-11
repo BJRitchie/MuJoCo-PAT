@@ -20,3 +20,7 @@ outputs/
 # clangd: generated compile DB is a build artifact; .clangd config is checked in
 /compile_commands.json
 .cache/
+
+# docker: base compose + .env are committed; local machine tweaks (GPU, extra
+# mounts, ports) go in an override that is not.
+docker-compose.override.yml

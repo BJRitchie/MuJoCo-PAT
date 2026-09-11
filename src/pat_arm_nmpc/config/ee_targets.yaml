@@ -1,0 +1,33 @@
+# ee_target_publisher — a fixed loop of known-reachable EE setpoints per arm.
+#
+# mode: relative  → waypoints are planar offsets (dx, dy, dyaw) added to the
+#                   arm's measured start pose (from /chaser/arm/<side>/ee_pose).
+#                   Reachable by construction; model-agnostic.
+# mode: absolute  → waypoints are world-frame poses (x, y, yaw), published as-is.
+#
+# <side>.waypoints is a flat list of [x, y, yaw] triples. Omit it to use the
+# built-in default relative diamond (only valid in relative mode).
+
+ee_target_publisher:
+  ros__parameters:
+    sides:         [left, right]
+    mode:          relative      # relative | absolute
+    dwell_sec:     6.0           # hold each waypoint this long
+    republish_hz:  2.0           # re-send the current target this often (DDS drop guard)
+    loop:          true          # false → stop on the last waypoint
+    frame_id:      map
+
+    # Default relative diamond about the start pose, returning home.
+    # (dx [m], dy [m], dyaw [rad]) triples.
+    left:
+      waypoints: [ 0.08,  0.00,  0.00,
+                   0.00,  0.10,  0.15,
+                  -0.08,  0.00,  0.00,
+                   0.00, -0.10, -0.15,
+                   0.00,  0.00,  0.00 ]
+    right:
+      waypoints: [ 0.08,  0.00,  0.00,
+                   0.00, -0.10, -0.15,
+                  -0.08,  0.00,  0.00,
+                   0.00,  0.10,  0.15,
+                   0.00,  0.00,  0.00 ]

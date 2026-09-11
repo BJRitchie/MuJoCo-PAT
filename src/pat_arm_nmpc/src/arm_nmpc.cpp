@@ -1,5 +1,6 @@
 #include "pat_arm_nmpc/arm_nmpc.h"
 
+#include <cmath>
 #include <numeric>
 #include <stdexcept>
 
@@ -31,7 +32,7 @@ ArmNMPC::ArmNMPC(
         throw std::runtime_error(
             "ArmNMPC: NMPCParams.joint_lims must be set");
     } else {
-        // TODO: parse joint lims etc 
+        // Parse joint lims etc 
         for (const auto& lims : params_.joint_lims) {
             qlims[lims.name] = std::make_pair(lims.q_min, lims.q_max); 
             vlims[lims.name] = lims.qd_max; 
@@ -40,9 +41,21 @@ ArmNMPC::ArmNMPC(
 
         // Re-index by arm-local joint index (0..n_joints_-1) for cheap per-tick
         // lookups instead of re-hashing joint names every control tick.
-        qlimsByIndex.assign(n_joints_, std::make_pair(0.0, 0.0));
-        vlimsByIndex.assign(n_joints_, 0.0);
-        torqueLimsByIndex.assign(n_joints_, 0.0);
+        //
+        // Joints NOT listed in joint_lims (the other arm's joints, when one
+        // controller owns a subset of a multi-arm model) are never box-
+        // constrained: buildJointBoxBounds only touches ownedJointInds, so the
+        // q/v defaults set here for the non-owned joints are dead. They DO
+        // appear in the all-model-joint torque general constraint, though, so
+        // that default matters: give them the same nominal magnitude as the
+        // global torque clamp. NOT 0 (a +-0 bound strains against their
+        // Coriolis bias every tick) and NOT 1e9 (HPIPM's IPM factorization
+        // fails with qp_status 2 once box magnitudes span ~1e0..1e9 — seen in
+        // the VORTEX sim; keep every bound within an order of magnitude).
+        const double tau_default = params_.tau_max > 0.0 ? params_.tau_max : 100.0;
+        qlimsByIndex.assign(n_joints_, std::make_pair(-M_PI, M_PI));
+        vlimsByIndex.assign(n_joints_, 10.0);
+        torqueLimsByIndex.assign(n_joints_, tau_default);
         for (const auto& [jname, bounds] : qlims) {
             int idx = jointIndexFromName(jname);
             qlimsByIndex[idx]      = bounds;
@@ -62,18 +75,58 @@ ArmNMPC::ArmNMPC(
                 ownedJointInds.push_back(jointIndexFromName(jname));
         }
 
-        const int nOwned = static_cast<int>(ownedJointInds.size());
-        if (nOwned == 0) {
+        n_owned = static_cast<int>(ownedJointInds.size());
+        if (n_owned == 0) {
             throw std::runtime_error(
                 "ArmNMPC: owned_joints resolved to zero joints — "
                 "this controller would have no box-constrained state at all.");
         }
     }
 
-    // --- Build the QuadProbSolver --------------------------------- // 
-    // TODO
-    //     qp_ = std::make_unique<QuadProbSolver>(qp_params);
+    // --- Build the QuadProbSolver --------------------------------- //
+    // This port is permanently the planar (x, y, theta_z) control law:
+    //   task dim d = 3  (nu),  task-space block 2d+1 = 7  (nx_task),
+    //   augmented state nx = nx_task + 2*n_joints (the Delta-q / qdot rows).
+    // Matches VORTEX's non-pose branch (use_pose_dims == false).
+    const int d        = 3;
+    const int nx_task  = 2 * d + 1;   // 7
+    const int n_j      = n_joints_;
 
+    quad_prob_solver::QuadProbSolverParams qp_params;
+    qp_params.nx_task      = nx_task;
+    qp_params.nu           = d;
+    qp_params.nx           = nx_task + 2 * n_j;
+    qp_params.N            = params_.N;
+    qp_params.qp_max_iter  = params_.qp_max_iter;
+    qp_params.qp_tol       = params_.qp_tol;
+    qp_params.qp_reg_prim  = params_.qp_reg_prim;
+    qp_params.qp_warm_start = params_.qp_warm_start;
+    qp_params.slack_penalty_linear    = params_.joint_limit_slack_linear;
+    qp_params.slack_penalty_quadratic = params_.joint_limit_slack_quadratic;
+
+    qp_params.ng = n_j;
+    qp_params.general_slack_penalty_linear    = params_.torque_slack_linear;
+    qp_params.general_slack_penalty_quadratic = params_.torque_slack_quadratic;
+
+    qp_params.idxbx_k.resize(2 * n_owned);
+    for (int i = 0; i < n_owned; ++i) {
+        qp_params.idxbx_k[i]           = nx_task + ownedJointInds[i];         // Δq row for owned joint i
+        qp_params.idxbx_k[n_owned + i] = nx_task + n_j + ownedJointInds[i];   // qdot row for owned joint i
+    }
+
+    // Hard terminal constraint edot_N = 0 (task-space velocity error), for
+    // recursive feasibility -- see NMPCParams::terminal_velocity_constraint's
+    // doc comment. edot occupies rows [d, 2d) of the augmented state's
+    // task-space block (buildAugmentedModel's layout: [e(d); edot(d); bias
+    // channel(1); Δq(n_j); qdot(n_j)]).
+    if (params_.terminal_velocity_constraint) {
+        qp_params.idxbx_terminal.resize(d);
+        for (int i = 0; i < d; ++i) {
+            qp_params.idxbx_terminal[i] = d + i;
+        }
+    }
+
+    qp_ = std::make_unique<quad_prob_solver::QuadProbSolver>(qp_params);
 }
 
 ArmNMPC::~ArmNMPC() = default;
@@ -246,10 +299,6 @@ Eigen::VectorXd ArmNMPC::solveQPWithFallback(
     Eigen::MatrixXd& D, Eigen::VectorXd& lg, Eigen::VectorXd& ug,
     Eigen::VectorXd& x_aug, int nOwned, Eigen::MatrixXd& Q_N)
 {
-    // lbx_j/ubx_j/D/lg/ug/nOwned feed the acados QP solve, which is not yet
-    // ported — only the Riccati fallback below runs for now.
-    (void)lbx_j; (void)ubx_j; (void)D; (void)lg; (void)ug; (void)nOwned;
-
     const int nx = static_cast<int>(A.rows());
     const int nu = static_cast<int>(B.cols());
 
@@ -263,16 +312,14 @@ Eigen::VectorXd ArmNMPC::solveQPWithFallback(
         // closed-form Riccati recursion.
         Eigen::VectorXd zero_b = Eigen::VectorXd::Zero(nx);
 
-        // TODO: port over qp 
-        // bool ok = qp_->solve(
-        //     A.data(), B.data(), zero_b.data(),
-        //     Q.data(), R.data(),
-        //     lbx_j.data(), ubx_j.data(),
-        //     D.data(), lg.data(), ug.data(),
-        //     x_aug.data(),
-        //     Q_N.data());
-        bool ok = false; 
-
+        bool ok = qp_->solve(
+            A.data(), B.data(), zero_b.data(),
+            Q.data(), R.data(),
+            lbx_j.data(), ubx_j.data(),
+            D.data(), lg.data(), ug.data(),
+            x_aug.data(),
+            Q_N.data());
+        
         if (!ok) {
             // The Δq/qdot joint-limit rows AND the torque general
             // constraint are both SOFT now (see NMPCParams::
@@ -305,8 +352,8 @@ Eigen::VectorXd ArmNMPC::solveQPWithFallback(
             tau_task = -K * x_aug;
 
         }
-        // else {
-            // qp_->getU(0, tau_task.data());
+        else {
+            qp_->getU(0, tau_task.data());
 
             // Diagnostic: how hard are the soft constraints straining? A
             // large slack means the solve succeeded but is leaning heavily
@@ -316,25 +363,25 @@ Eigen::VectorXd ArmNMPC::solveQPWithFallback(
             // general/torque rows -- see the constructor's idxs_mid
             // layout), so size the buffer via nsAt() rather than assuming
             // 2*nOwned, and split accordingly.
-            // Eigen::VectorXd sl(qp_->nsAt(1)), su(qp_->nsAt(1));
-            // qp_->getSlack(1, sl.data(), su.data());
-            // double maxJointSlack = std::max(sl.head(2 * nOwned).maxCoeff(),
-            //                                  su.head(2 * nOwned).maxCoeff());
-            // double maxTorqueSlack = std::max(sl.tail(n_joints_).maxCoeff(),
-            //                                   su.tail(n_joints_).maxCoeff());
-            // if (maxJointSlack > 1e-3) {
-            //     bskLogger.bskLog(BSK_WARNING,
-            //         "ArmConstrainedNMPController[%s]: joint-limit slack = %.4f "
-            //         "(soft constraint straining -- arm near/outside a limit).",
-            //         params_.ee_site_name.c_str(), maxJointSlack);
-            // }
-            // if (maxTorqueSlack > 1e-3) {
-            //     bskLogger.bskLog(BSK_WARNING,
-            //         "ArmConstrainedNMPController[%s]: torque slack = %.4f "
-            //         "(soft constraint straining -- commanded torque near/over limit).",
-            //         params_.ee_site_name.c_str(), maxTorqueSlack);
-            // }
-        // }
+            Eigen::VectorXd sl(qp_->nsAt(1)), su(qp_->nsAt(1));
+            qp_->getSlack(1, sl.data(), su.data());
+            double maxJointSlack = std::max(sl.head(2 * nOwned).maxCoeff(),
+                                             su.head(2 * nOwned).maxCoeff());
+            double maxTorqueSlack = std::max(sl.tail(n_joints_).maxCoeff(),
+                                              su.tail(n_joints_).maxCoeff());
+            if (maxJointSlack > 1e-3) {
+                std::cerr << "[WARNING] ArmNMPC["<< params_.ee_site_name.c_str() << "]: "
+                        << "joint-limit slack = " << maxJointSlack 
+                        << " (soft constraint straining -- arm near/outside a limit)." 
+                        << std::endl; 
+            }
+            if (maxTorqueSlack > 1e-3) {
+                std::cerr << "[WARNING] ArmNMPC["<< params_.ee_site_name.c_str() << "]: "
+                        << "torque slack = " << maxTorqueSlack 
+                        << " (soft constraint straining -- commanded torque near/over limit)." 
+                        << std::endl; 
+            }
+        }
     }
     checkNaN(tau_task.hasNaN(), "tau_task");
     return tau_task;

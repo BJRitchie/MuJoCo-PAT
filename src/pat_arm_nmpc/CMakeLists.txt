@@ -12,23 +12,24 @@ find_package(pat_platform_description REQUIRED)   # shared piper_planar_arm.xacr
 # Find module (copied from pat_simulation). MuJoCo is used here only as a
 # rigid-body dynamics library (mass matrix, Jacobians, bias forces), never
 # as the simulator.
+# Neither the MuJoCo release nor the from-source acados install ships a
+# usable *Config.cmake, so use our own Find modules (see cmake/). Both are
+# numerical libraries here — MuJoCo for rigid-body dynamics, acados/HPIPM for
+# the box/torque-constrained QP. Still zero ROS in this lib.
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 find_package(mujoco REQUIRED)
+find_package(acados REQUIRED)
 
-# ─── Algorithm library — Eigen + MuJoCo, zero ROS ──────────────────────────
-# Port target for the VORTEX fswAlgorithms/jointControl sources. The .cpp
-# files are still empty stubs; this builds so clangd gets a compile database
-# with the right include paths for the headers.
+# ─── Algorithm library — Eigen + MuJoCo + acados, zero ROS ─────────────────
 add_library(pat_arm_nmpc_lib STATIC
     src/arm_task_space_controller.cpp
+    src/quad_prob_solver.cpp
     src/arm_nmpc.cpp)
-    # src/quad_prob_solver.cpp  — re-add once acados/HPIPM is wired into CMake;
-    # quad_prob_solver.h currently pulls in acados_c headers that aren't
-    # installed. ArmNMPC runs the Riccati fallback, no QuadProbSolver symbols.
 target_include_directories(pat_arm_nmpc_lib PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>)
-target_link_libraries(pat_arm_nmpc_lib PUBLIC Eigen3::Eigen mujoco::mujoco)
+target_link_libraries(pat_arm_nmpc_lib PUBLIC
+    Eigen3::Eigen mujoco::mujoco acados::acados)
 target_compile_options(pat_arm_nmpc_lib PRIVATE -Wall -Wextra -Wpedantic)
 
 # ─── ROS 2 node wrapper ───────────────────────────────────────────────────
@@ -40,6 +41,14 @@ add_executable(arm_nmpc_node src/arm_nmpc_node.cpp)
 target_link_libraries(arm_nmpc_node pat_arm_nmpc_lib)
 ament_target_dependencies(arm_nmpc_node rclcpp sensor_msgs geometry_msgs nav_msgs)
 install(TARGETS arm_nmpc_node RUNTIME DESTINATION lib/${PROJECT_NAME})
+
+# Fixed-waypoint task-space setpoint source (stand-in mission node). ROS-only,
+# no algorithm lib — just cycles PoseStamped targets onto ee_setpoint.
+add_executable(ee_target_publisher_node src/ee_target_publisher_node.cpp)
+target_include_directories(ee_target_publisher_node PRIVATE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
+ament_target_dependencies(ee_target_publisher_node rclcpp geometry_msgs)
+install(TARGETS ee_target_publisher_node RUNTIME DESTINATION lib/${PROJECT_NAME})
 
 # ─── MuJoCo model: expand the xacro to a self-contained MJCF at build time ──
 # ArmTaskSpaceController mj_loadXML's the installed .xml; the .xacro sources

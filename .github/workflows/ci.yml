@@ -1,31 +1,61 @@
 name: CI
+
 on:
-  push:    { branches: [main, develop] }
+  push: { branches: [main, develop] }
   pull_request: { branches: [main] }
 
 jobs:
-  build-test:
+  # Full workspace (incl. pat_simulation) built + tested in the `dev` image.
+  # The dev image ships toolchain + deps only; the build runs here against the
+  # checked-out source (same as `docker compose run dev` locally).
+  dev-build-test:
     runs-on: ubuntu-22.04
-    container: { image: osrf/ros:humble-desktop }
     steps:
       - uses: actions/checkout@v4
-      - name: Install MuJoCo
+      - uses: docker/setup-buildx-action@v3
+      - name: Build dev image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          target: dev
+          load: true
+          tags: mujoco-pat:dev
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: colcon build + test
         run: |
-          wget -q https://github.com/google-deepmind/mujoco/releases/download/3.1.6/mujoco-3.1.6-linux-x86_64.tar.gz -O /tmp/mujoco.tar.gz
-          tar -xzf /tmp/mujoco.tar.gz -C /opt
-          echo "CMAKE_PREFIX_PATH=/opt/mujoco-3.1.6:$CMAKE_PREFIX_PATH" >> "$GITHUB_ENV"
-          echo "LD_LIBRARY_PATH=/opt/mujoco-3.1.6/lib:$LD_LIBRARY_PATH" >> "$GITHUB_ENV"
-      - name: Install deps
-        run: |
-          apt-get update && apt-get install -y libeigen3-dev ros-humble-ament-cmake-gtest
-          source /opt/ros/humble/setup.bash
-          rosdep install --from-paths src --ignore-src -y
-      - name: Build
-        run: |
-          source /opt/ros/humble/setup.bash
-          colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
-      - name: Test
-        run: |
-          source /opt/ros/humble/setup.bash && source install/setup.bash
-          colcon test --packages-select pat_gnc
-          colcon test-result --verbose
+          docker run --rm -u 0 -v "$PWD":/ws -w /ws mujoco-pat:dev bash -lc '
+            source /opt/ros/humble/setup.bash &&
+            MAKEFLAGS=-j2 colcon build --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_TESTING=ON &&
+            source install/setup.bash &&
+            colcon test --packages-select pat_gnc pat_robotics pat_simulation pat_arm_nmpc &&
+            colcon test-result --verbose'
+
+  # The Jetson image: algorithm packages only, no simulator. amd64 always;
+  # arm64 (QEMU, slow) only on pushes to main.
+  runtime-build:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - name: Build runtime image (amd64)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          target: runtime
+          platforms: linux/amd64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Build runtime image (arm64 compile smoke)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          target: runtime
+          platforms: linux/arm64
+          build-args: BLASFEO_TARGET=ARMV8A_ARM_CORTEX_A57
+          cache-from: type=gha
