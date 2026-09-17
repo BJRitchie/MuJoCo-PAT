@@ -56,6 +56,24 @@ private:
     std::vector<double> q_joints_, v_joints_;     // sized to model_joint_names_
     std::vector<double> ee_quat_{1.0, 0.0, 0.0, 0.0};   // desired EE quat [w,x,y,z]
     double ee_x_{0.0}, ee_y_{0.0};                      // desired EE position [m]
+    // /chaser/odom reports chaser_x/y — the raw slide-joint values relative
+    // to the chaser body's own MJCF anchor (air_bearing_table.xacro:
+    // <body name="chaser" pos="-0.5 0 0.1525">), NOT the chaser's true
+    // world-frame position. This controller's OWN internal dynamics model
+    // (pat_platform_planar.xacro) has a <freejoint> body at pos="0 0 0", so
+    // feeding odom's raw value straight into q(0)/q(1) makes the
+    // controller's whole internal notion of "world frame" silently shifted
+    // by this anchor — invisible as long as everything stays internal
+    // (tracking only cares about relative error, target vs current EE, both
+    // computed in the same shifted frame), but wrong for anything that
+    // compares this stack's ee_pose/ee_setpoint against the REAL MuJoCo
+    // world frame (confirmed via pat_simulation's ee_setpoint marker:
+    // published ee_pose was off from the true site position by exactly
+    // (0.5, 0, -0.1525), matching the anchor). base_anchor_xy corrects it at
+    // the odom read (onOdom), before it ever reaches q(0)/q(1) — defaults to
+    // 0,0 (backward compatible with a model whose chaser has no such
+    // anchor).
+    double base_anchor_x_{0.0}, base_anchor_y_{0.0};
     double base_x_{0.0}, base_y_{0.0}, base_yaw_{0.0};
     double base_vx_{0.0}, base_vy_{0.0}, base_omega_{0.0};
     bool has_state_{false}, has_odom_{false}, has_setpoint_{false};

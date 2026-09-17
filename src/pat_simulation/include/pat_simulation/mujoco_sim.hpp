@@ -32,6 +32,18 @@ public:
     void reset();
     void step(const std::vector<double>& ctrl);
 
+    /// Overwrite specific joints' qpos in place (e.g. a randomized initial arm
+    /// configuration for offline dataset generation), then re-run mj_forward()
+    /// so every derived quantity (site/body world poses, sensor outputs) is
+    /// consistent with the new state before the first control step or
+    /// publish. Velocities are left at mj_resetData's zero. Intended to be
+    /// called ONCE, immediately after construction — not a general-purpose
+    /// reset facility (see reset(), which restores qpos0, not an arbitrary
+    /// pose). Throws if joint_names.size() != positions.size(), or if any
+    /// name isn't found (via jointId()).
+    void setJointPositions(const std::vector<std::string>& joint_names,
+                            const std::vector<double>& positions);
+
     double time() const noexcept;
     double dt()   const noexcept;
 
@@ -47,6 +59,19 @@ public:
     /// Resolve a MuJoCo actuator's index (for indexing into the ctrl vector
     /// passed to step()). Throws if not found, matching jointId().
     int actuatorId(const std::string& name) const;
+
+    /// Resolve a mocap body's index (into mocap_pos/mocap_quat, for
+    /// setMocapPose() below) by name. Returns -1 if no such body exists, or
+    /// it exists but isn't a mocap body — deliberately lenient, unlike
+    /// jointId()/actuatorId(): a caller driving an optional cosmetic marker
+    /// should degrade gracefully on a model that doesn't have it, not crash.
+    int mocapId(const std::string& name) const;
+
+    /// Move a mocap body (a purely kinematic, non-colliding visual marker —
+    /// no joint, no mass, no dynamics) to the given world-frame pose.
+    /// `mocap_id` must be >= 0, from a prior mocapId() call.
+    void setMocapPose(int mocap_id, double x, double y, double z,
+                       double qw, double qx, double qy, double qz);
 
     mjModel* model() noexcept { return model_; }
     mjData*  data()  noexcept { return data_; }

@@ -37,6 +37,14 @@ ArmNMPCNode::ArmNMPCNode() : Node("pat_arm_nmpc") {
 
     const double ctrl_hz = declare_parameter<double>("control_hz", 50.0);
 
+    // See the header's own comment on base_anchor_x_/base_anchor_y_: corrects
+    // /chaser/odom's chaser-body-anchor-relative x/y into true world-frame
+    // coordinates, matching this MJCF's <body name="chaser" pos="...">.
+    // Default 0,0 (no correction) for a model whose chaser has no such
+    // anchor offset.
+    base_anchor_x_ = declare_parameter<double>("base_anchor_x", 0.0);
+    base_anchor_y_ = declare_parameter<double>("base_anchor_y", 0.0);
+
     params_ = loadParams();
     controller_ = std::make_unique<pat_arm_nmpc::ArmNMPC>(mjcf_path, params_);
 
@@ -195,8 +203,10 @@ void ArmNMPCNode::onJointState(sensor_msgs::msg::JointState::SharedPtr msg) {
 
 void ArmNMPCNode::onOdom(nav_msgs::msg::Odometry::SharedPtr msg) {
     std::lock_guard<std::mutex> lk(mu_);
-    base_x_     = msg->pose.pose.position.x;
-    base_y_     = msg->pose.pose.position.y;
+    // + base_anchor_{x,y}: see the header's comment on why odom's raw value
+    // isn't the true world position on its own.
+    base_x_     = base_anchor_x_ + msg->pose.pose.position.x;
+    base_y_     = base_anchor_y_ + msg->pose.pose.position.y;
     base_yaw_   = quatToYaw(msg->pose.pose.orientation);
     // simulation_node publishes world-frame linear velocity in the twist (it
     // copies the chaser slide-joint qvel directly), matching MuJoCo's

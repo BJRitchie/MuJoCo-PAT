@@ -32,7 +32,15 @@
       <joint name="chaser_y"   type="slide" axis="0 1 0" damping="0.05"/>
       <joint name="chaser_yaw" type="hinge" axis="0 0 1" damping="0.02"/>
 
-      <xacro:pat_platform_bus bus_contype="2" arm_contype="0"/>
+      <!-- arm_contype=2 joins the bus/target's own collision group (bit 2) so
+           the arms actually collide with the bus and each other, not MuJoCo's
+           implicit default (bit 1, which only the table/walls use) — a bit-1
+           arm would not collide with a bit-2 bus. The NMPC's OWN internal
+           dynamics model (pat_platform_planar.xacro) intentionally keeps
+           arm_contype=0: it's Jacobian/mass-matrix bookkeeping via mj_forward,
+           not real contact simulation, and spurious contact forces there
+           would fight the QP's own box/torque constraints. -->
+      <xacro:pat_platform_bus bus_contype="2" arm_contype="2"/>
 
       <geom name="dock_port" type="cylinder" size="0.015 0.005" pos="0.305 0 -0.10"
             euler="0 1.5708 0" rgba="1.0 0.85 0.0 1" contype="0" conaffinity="0" mass="0"/>
@@ -63,6 +71,21 @@
       <geom name="tag_a" type="box" size="0.02 0.02 0.001" pos=" 0.08  0.08 0.101" rgba="0 0 0 1" contype="0" conaffinity="0" mass="0"/>
       <geom name="tag_b" type="box" size="0.02 0.02 0.001" pos="-0.08  0.08 0.101" rgba="1 1 1 1" contype="0" conaffinity="0" mass="0"/>
       <site name="target_centre" pos="0 0 0" size="0.005"/>
+    </body>
+
+    <!-- Cosmetic markers showing each arm's live task-space setpoint
+         (pat_simulation subscribes to /chaser/arm/<side>/ee_setpoint and
+         moves these). mocap bodies: kinematically driven via
+         data->mocap_pos/mocap_quat (MuJoCoSim::setMocapPose), no
+         joint/mass/dynamics, contype=0 so they never collide - purely
+         visual. Must be direct children of <worldbody> (a MuJoCo
+         requirement for mocap="true"). Parked below the table until the
+         first setpoint arrives. -->
+    <body name="ee_setpoint_marker_L" mocap="true" pos="0 0 -1">
+      <geom type="sphere" size="0.025" rgba="1 0 1 0.6" contype="0" conaffinity="0" mass="0"/>
+    </body>
+    <body name="ee_setpoint_marker_R" mocap="true" pos="0 0 -1">
+      <geom type="sphere" size="0.025" rgba="0 1 1 0.6" contype="0" conaffinity="0" mass="0"/>
     </body>
   </worldbody>
 

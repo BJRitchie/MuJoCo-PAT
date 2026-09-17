@@ -500,24 +500,265 @@ void ArmNMPC::printTimingInfo(
     }
 }
 
-// === Full-nonlinear (multiple-shooting SQP) path — NOT PORTED ==================
-// Reached only when NMPCParams::fullNonlinear is true; the linearized path
-// above is the supported one. Port solveNonlinearMPC/evalTaskSpace from VORTEX
-// armConstrainedNMPController.cpp when the SQP path is needed.
+// === Full-nonlinear (multiple-shooting SQP) path ================================
+// Reached only when NMPCParams::fullNonlinear is true. Ported from VORTEX's
+// ArmConstrainedNMPController::evalTaskSpacePositionOnly2D/solveNonlinearMPC —
+// same planar (x, y, theta_z) task-space law as controlLaw's linearized branch
+// above, just re-evaluated at every rollout node instead of once at k=0.
+
+// Per-node task-space error/bias -- identical math to controlLaw's own
+// node-0 computation (see the comment there), just packaged into a
+// NodeTaskSpace so solveNonlinearMPC can call it once per rollout node.
 ArmNMPC::NodeTaskSpace ArmNMPC::evalTaskSpace(
-    const Eigen::VectorXd&, const Eigen::VectorXd&,
-    const Eigen::Vector3d&, const Eigen::Vector4d&,
-    const Eigen::MatrixXd&, const Eigen::Matrix<double, 6, 1>&) const
+    const Eigen::VectorXd& /*q_node*/, const Eigen::VectorXd& v_node,
+    const Eigen::Vector3d& ee_pos, const Eigen::Vector4d& ee_quat,
+    const Eigen::MatrixXd& J_g6, const Eigen::Matrix<double, 6, 1>& jdot_qdot6) const
 {
-    throw std::logic_error("ArmNMPC::evalTaskSpace: fullNonlinear path not ported");
+    NodeTaskSpace ts;
+    Eigen::Vector2d p_d(desiredPos[0], desiredPos[1]);   // desiredPos[2] (Z) unused
+    Eigen::Vector2d v_d(desiredVel[0], desiredVel[1]);
+    Eigen::Vector2d a_d(desiredAcc[0], desiredAcc[1]);
+    mjtNum quat_d[4] = {desiredQuat[0], desiredQuat[1], desiredQuat[2], desiredQuat[3]};
+    double w_d  = desiredAngVel[2];
+    double aw_d = desiredAngAcc[2];
+
+    ts.J_task.resize(3, n_joints_);
+    ts.J_task.row(0) = J_g6.row(0);   // x
+    ts.J_task.row(1) = J_g6.row(1);   // y
+    ts.J_task.row(2) = J_g6.row(5);   // angular-Z
+    Eigen::Vector3d v_ee = ts.J_task * v_node.tail(n_joints_);
+
+    // World-frame angle-axis (log-map) orientation error, Z-component only —
+    // see controlLaw's identical derivation.
+    mjtNum quat_ee_arr[4] = {ee_quat[0], ee_quat[1], ee_quat[2], ee_quat[3]};
+    mjtNum e_orient_local[3];
+    mju_subQuat(e_orient_local, quat_d, quat_ee_arr);
+    mjtNum e_orient_world[3];
+    mju_rotVecQuat(e_orient_world, e_orient_local, quat_ee_arr);
+    double e_theta = e_orient_world[2];
+
+    ts.e.resize(3);
+    ts.e << p_d - ee_pos.head<2>(), e_theta;
+    ts.edot.resize(3);
+    ts.edot << v_d - v_ee.head<2>(), w_d - v_ee(2);
+    ts.bias.resize(3);
+    ts.bias << a_d - jdot_qdot6.head<2>(), aw_d - jdot_qdot6(5);
+    ts.v_d_task.resize(3);
+    ts.v_d_task << v_d, w_d;
+    return ts;
 }
 
+// Multiple-shooting SQP: rolls the nonlinear plant forward N steps under the
+// current nominal control u_bar_, re-linearizes (A_k, B_k) at every node from
+// that rollout, solves the resulting multi-stage QP for a correction, damps
+// it through a du_max trust region, and shifts u_bar_ for next tick's warm
+// start. Falls back to the node-0 single-stage QP (same as the linearized
+// path) if the multi-stage solve fails. Run params_.sqp_iters times per tick
+// (real-time-iteration style at the default of 1).
 Eigen::VectorXd ArmNMPC::solveNonlinearMPC(
-    const Eigen::VectorXd&, const Eigen::VectorXd&, int,
-    const TaskSpaceEval&, Eigen::MatrixXd&, Eigen::MatrixXd&,
-    const Eigen::VectorXd&, Eigen::MatrixXd&)
+    const Eigen::VectorXd& q, const Eigen::VectorXd& v,
+    int d, const TaskSpaceEval& evalTaskSpace,
+    Eigen::MatrixXd& Q, Eigen::MatrixXd& R,
+    const Eigen::VectorXd& du_max,
+    Eigen::MatrixXd& Q_N)
 {
-    throw std::logic_error("ArmNMPC::solveNonlinearMPC: fullNonlinear path not ported");
+    const int N   = params_.N;
+    const int n_j = n_joints_;
+    const double Ts = params_.Ts;
+    const int nOwned = static_cast<int>(ownedJointInds.size());
+    const int nt  = 2 * d + 1;
+    const int nx  = nt + 2 * n_j;
+
+    // Warm start / re-init on first tick or a dimension change.
+    if (static_cast<int>(u_bar_.size()) != N ||
+        (N > 0 && static_cast<int>(u_bar_[0].size()) != d)) {
+        u_bar_.assign(N, Eigen::VectorXd::Zero(d));
+    }
+
+    Eigen::VectorXd q0 = q.tail(n_j);   // fixed measurement this tick, for box bounds
+    Eigen::VectorXd lbx_j, ubx_j;
+    buildJointBoxBounds(q0, lbx_j, ubx_j);
+
+    Eigen::MatrixXd J_task0;
+    Eigen::VectorXd Cv_joints0;
+    Eigen::VectorXd tau_task_result = Eigen::VectorXd::Zero(d);
+    bool lastIterOk = false;
+
+    for (int iter = 0; iter < params_.sqp_iters; ++iter) {
+        std::vector<Eigen::MatrixXd> A_k(N), B_k(N), D_k(N);
+        std::vector<Eigen::VectorXd> b_k(N), lg_k(N), ug_k(N);
+        std::vector<Eigen::VectorXd> x_aug_nodes(N + 1);
+
+        Eigen::VectorXd q_k = q, v_k = v;
+        for (int k = 0; k <= N; ++k) {
+            // Node 0 uses the same (q, v) as the live measured state -- a
+            // scratch-buffer mj_forward at those exact inputs reproduces the
+            // live computation exactly, so no special-casing is needed here.
+            NodeDynamics nd;
+            {
+                ScopedTimer t(t_rollout_dynamics_us_, n_rollout_dynamics_);
+                nd = dynamicsAt(q_k, v_k, ee_site_id_);
+            }
+            NodeTaskSpace ts = evalTaskSpace(q_k, v_k, nd.ee_pos, nd.ee_quat, nd.J_g6, nd.jdot_qdot6);
+
+            Eigen::VectorXd x_aug_k = Eigen::VectorXd::Zero(nx);
+            x_aug_k.segment(0, d) = ts.e;
+            x_aug_k.segment(d, d) = ts.edot;
+            x_aug_k(2 * d) = 1.0;
+            x_aug_k.segment(nt, n_j)       = q_k.tail(n_j) - q0;   // Δq_k
+            x_aug_k.segment(nt + n_j, n_j) = v_k.tail(n_j);        // qdot_k
+            x_aug_nodes[k] = x_aug_k;
+
+            if (k == 0) {
+                J_task0    = ts.J_task;
+                Cv_joints0 = nd.Cv_joints;
+            }
+
+            if (k < N) {
+                Eigen::MatrixXd H_g_inv = pinvDLS(
+                    nd.H_g, params_.Hg_damping,
+                    params_.ee_site_name + " H_g (nonlinear rollout node " + std::to_string(k) + ")");
+                Eigen::MatrixXd Lambda_inv = computeLambdaInv(ts.J_task, H_g_inv);
+
+                Eigen::MatrixXd A_node, B_node;
+                buildAugmentedModel(ts.J_task, Lambda_inv, ts.bias, ts.v_d_task, A_node, B_node);
+                A_k[k] = A_node;
+                B_k[k] = B_node;
+
+                buildTorqueGeneralConstraint(ts.J_task, nd.Cv_joints, D_k[k], lg_k[k], ug_k[k]);
+
+                // Propagate to node k+1 under the CURRENT nominal control.
+                // Clamped to torqueLimsByIndex before integrating -- the QP's
+                // torque bound is soft (slack-permitted), and a stale u_bar_
+                // entry from a prior tick's slack-violating solve can
+                // otherwise inject an unphysically large open-loop torque
+                // here, which the real system would never actually apply
+                // (finalizeJointTorques clamps every torque it hands out).
+                // An unclamped rollout can run away into a kinematic
+                // singularity within the horizon (confirmed via VORTEX
+                // testing: J_task collapsing to near-zero singular values a
+                // few nodes in, eventually producing a NaN Lambda_inv) --
+                // keeping the rollout's plant model consistent with the real
+                // actuator saturation avoids that.
+                Eigen::VectorXd tau_joints_k = ts.J_task.transpose() * u_bar_[k];
+                for (int i = 0; i < n_j; ++i) {
+                    tau_joints_k[i] = std::max(-torqueLimsByIndex[i],
+                                                std::min(torqueLimsByIndex[i], tau_joints_k[i]));
+                }
+                Eigen::VectorXd q_next, v_next;
+                {
+                    ScopedTimer t(t_rollout_integrate_us_, n_rollout_integrate_);
+                    integrateStep(q_k, v_k, tau_joints_k, Ts, q_next, v_next);
+                }
+
+                // Rollout velocity trust region: hard-clamp the PREDICTED
+                // joint velocity to rollout_v_clamp_mult * vlimsByIndex
+                // before it feeds the next node. This is what actually
+                // prevents the open-loop rollout from running away (the
+                // torque clamp above bounds the INPUT, but zero/small torque
+                // plus already-nonzero velocity can still diverge via
+                // Coriolis coupling alone). Applying this to the clamped
+                // v_next before it's used to build the NEXT node's x_aug is
+                // what makes the b_k defect (below) transparently reflect
+                // the true (now-bounded) trajectory -- no separate change to
+                // the defect formula is needed.
+                for (int i = 0; i < n_j; ++i) {
+                    double lim = params_.rollout_v_clamp_mult * vlimsByIndex[i];
+                    v_next[6 + i] = std::max(-lim, std::min(lim, v_next[6 + i]));
+                }
+
+                // Rollout position clamp: hard-clamp predicted joint position
+                // to qlimsByIndex too -- the velocity clamp alone still lets
+                // q_k walk to a physically extreme/degenerate configuration
+                // over the horizon (nothing else bounds q_k during the
+                // OPEN-LOOP rollout; qlimsByIndex is only a SOFT QP box
+                // constraint on the SOLUTION, stages 1..N, not a hard bound
+                // on the rollout's own predicted trajectory), producing a
+                // genuine kinematic (Jacobian rank-loss) singularity
+                // independent of velocity. Same transparency to the b_k
+                // defect math as the velocity clamp above.
+                for (int i = 0; i < n_j; ++i) {
+                    q_next[7 + i] = std::max(qlimsByIndex[i].first,
+                                              std::min(qlimsByIndex[i].second, q_next[7 + i]));
+                }
+
+                q_k = q_next;
+                v_k = v_next;
+            }
+        }
+
+        // Direct-multiple-shooting linearization defect at every node:
+        // b_k = x_{k+1}_bar - A_k*x_k_bar - B_k*u_bar_[k].
+        for (int k = 0; k < N; ++k) {
+            b_k[k] = x_aug_nodes[k + 1] - A_k[k] * x_aug_nodes[k] - B_k[k] * u_bar_[k];
+        }
+
+        bool ok;
+        {
+            ScopedTimer t(t_qpsolve_us_, n_qpsolve_);
+            ok = qp_->solveMultiStage(
+                A_k, B_k, b_k, Q.data(), R.data(),
+                lbx_j.data(), ubx_j.data(),
+                D_k, lg_k, ug_k, x_aug_nodes[0].data(),
+                Q_N.data());
+        }
+        lastIterOk = ok;
+        if (ok) {
+            // Control trust region: damp each freshly solved uk relative to
+            // u_bar_[k]'s value AT THE START of this iteration -- the point
+            // the rollout was just linearized around. At sqp_iters=1 (the
+            // default), u_bar_[k] entering iteration 0 already IS last
+            // tick's trusted/shifted value, so this one clamp site covers
+            // both tick-to-tick and (when sqp_iters>1) iteration-to-iteration
+            // damping -- no separate site needed.
+            for (int k = 0; k < N; ++k) {
+                Eigen::VectorXd uk(d);
+                qp_->getU(k, uk.data());
+                u_bar_[k] = u_bar_[k] + (uk - u_bar_[k]).cwiseMax(-du_max).cwiseMin(du_max);
+            }
+            tau_task_result = u_bar_[0];
+        } else {
+            std::cerr << "[WARNING] ArmNMPC[" << params_.ee_site_name << "]: "
+                      << "multi-stage QP solve failed/did not converge — "
+                      << "falling back to node-0 single-stage QP" << std::endl;
+            tau_task_result = solveQPWithFallback(
+                A_k[0], B_k[0], Q, R, lbx_j, ubx_j, D_k[0], lg_k[0], ug_k[0], x_aug_nodes[0], nOwned, Q_N);
+            u_bar_[0] = tau_task_result;
+            // Rest of u_bar_ is NOT trustworthy as a warm start here -- see
+            // the shift-vs-reset logic below, which resets the whole
+            // trajectory to zero instead of shifting it when this happens.
+        }
+    }
+
+    // Shift for next tick's warm start (once per tick, after all SQP
+    // iterations -- NOT once per inner iteration, which should keep
+    // re-linearizing around the just-solved trajectory). Only valid when the
+    // LAST iteration's solveMultiStage() actually succeeded -- when it
+    // didn't, only u_bar_[0] holds a real (fallback) value and
+    // u_bar_[1..N-1] are whatever they were before this tick (stale,
+    // possibly from an earlier failed tick too). Shifting in that case would
+    // discard the one value we DO trust (u_bar_[0]) and promote
+    // untrustworthy stale entries into use as next tick's rollout input --
+    // reset the whole trajectory to zero instead, which is a safe (if
+    // conservative) fallback: an all-zero nominal control makes the next
+    // tick's open-loop rollout simply coast rather than risk compounding
+    // whatever caused this tick's solve to fail.
+    if (lastIterOk) {
+        for (int k = 0; k < N - 1; ++k) u_bar_[k] = u_bar_[k + 1];
+        // u_bar_[N-1] keeps its last value (repeat-last-hold).
+    } else {
+        // Deliberately bypasses the du_max control trust region above --
+        // this reset already exists specifically to escape a possibly-
+        // already-diverged trajectory, so damping the jump FROM that
+        // untrustworthy state TO zero would only partially reset it,
+        // undermining the reason this branch exists. The trust region still
+        // applies normally starting next tick, rate-limiting how far the
+        // very first post-reset solve can move away from zero.
+        u_bar_.assign(N, Eigen::VectorXd::Zero(d));
+    }
+
+    checkNaN(tau_task_result.hasNaN(), "tau_task (nonlinear)");
+    return finalizeJointTorques(J_task0, tau_task_result, Cv_joints0);
 }
 
 } // namespace pat_arm_nmpc

@@ -1,6 +1,6 @@
 {
   "name": "MuJoCo-PAT (dev)",
-  // Same definition as `docker compose run --rm dev bash` — one source of truth.
+  // Same `dev` service as `docker compose up -d dev` — one source of truth.
   "dockerComposeFile": "../docker-compose.yml",
   "service": "dev",
   "workspaceFolder": "/ws",

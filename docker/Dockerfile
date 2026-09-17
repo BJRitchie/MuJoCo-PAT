@@ -106,6 +106,7 @@ ARG BUILD_JOBS=1
 #    name and $HOME.
 FROM ws-base AS dev
 ARG ROS_DISTRO
+ARG MUJOCO_VERSION
 ARG DEBIAN_FRONTEND=noninteractive
 ARG USER_UID=1000
 ARG USER_GID=1000
@@ -114,6 +115,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         gdb clangd sudo \
     && apt-get install -y --no-install-recommends ros-${ROS_DISTRO}-desktop \
     && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends python3-pip \
+    && rm -rf /var/lib/apt/lists/*
+# tools/pinn_datagen/ (offline PINN training-data generator) needs the raw
+# Python mujoco bindings + numpy/pandas/h5py/pyyaml — dev-only: `runtime`
+# explicitly skips pat_simulation and has no data-generation use case, so
+# there's no reason to carry this into the Jetson deploy image. mujoco is
+# pinned to the same release as the C++ library already baked into
+# /opt/mujoco (a separate install — pip's wheel bundles its own libmujoco.so)
+# so MJCF-parsing behavior can't silently drift between the two.
+RUN pip install --no-cache-dir "mujoco==${MUJOCO_VERSION}" numpy pandas h5py pyyaml
 RUN groupadd --gid ${USER_GID} dev \
  && useradd  --uid ${USER_UID} --gid ${USER_GID} -m -s /bin/bash dev \
  && echo 'dev ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/dev && chmod 0440 /etc/sudoers.d/dev \

@@ -39,9 +39,22 @@ MuJoCoSim::~MuJoCoSim() {
     if (model_) { mj_deleteModel(model_); model_ = nullptr; }
 }
 
-void MuJoCoSim::reset() { 
-    mj_resetData(model_, data_); 
-    mj_forward(model_, data_); 
+void MuJoCoSim::reset() {
+    mj_resetData(model_, data_);
+    mj_forward(model_, data_);
+}
+
+void MuJoCoSim::setJointPositions(const std::vector<std::string>& joint_names,
+                                   const std::vector<double>& positions) {
+    if (joint_names.size() != positions.size())
+        throw std::runtime_error(
+            "MuJoCoSim::setJointPositions: joint_names/positions size mismatch ("
+            + std::to_string(joint_names.size()) + " vs " + std::to_string(positions.size()) + ")");
+    for (size_t i = 0; i < joint_names.size(); ++i) {
+        const int id = jointId(joint_names[i].c_str());
+        data_->qpos[model_->jnt_qposadr[id]] = positions[i];
+    }
+    mj_forward(model_, data_);
 }
 
 void MuJoCoSim::step(const std::vector<double>& ctrl) {
@@ -100,6 +113,23 @@ int MuJoCoSim::actuatorId(const std::string& name) const {
     const int id = mj_name2id(model_, mjOBJ_ACTUATOR, name.c_str());
     if (id < 0) throw std::runtime_error("actuator '" + name + "' not found");
     return id;
+}
+
+int MuJoCoSim::mocapId(const std::string& name) const {
+    const int body_id = mj_name2id(model_, mjOBJ_BODY, name.c_str());
+    if (body_id < 0) return -1;
+    return model_->body_mocapid[body_id];
+}
+
+void MuJoCoSim::setMocapPose(int mocap_id, double x, double y, double z,
+                              double qw, double qx, double qy, double qz) {
+    data_->mocap_pos[3 * mocap_id + 0] = x;
+    data_->mocap_pos[3 * mocap_id + 1] = y;
+    data_->mocap_pos[3 * mocap_id + 2] = z;
+    data_->mocap_quat[4 * mocap_id + 0] = qw;
+    data_->mocap_quat[4 * mocap_id + 1] = qx;
+    data_->mocap_quat[4 * mocap_id + 2] = qy;
+    data_->mocap_quat[4 * mocap_id + 3] = qz;
 }
 
 } // namespace pat_simulation

@@ -16,7 +16,13 @@
     params:
       bus_contype : contype/conaffinity for the bus box geoms
                     (0 = visual only; 2 = collide, matching the old chaser)
-      arm_contype : contype/conaffinity for the arm geoms (0 recommended)
+      arm_contype : contype/conaffinity for the arm geoms. Caller-dependent:
+                    air_bearing_table.xacro (the real plant) uses 2, joining
+                    the bus/target's own collision group, so arms genuinely
+                    collide with the bus and each other. pat_platform_planar.xacro
+                    (the NMPC's internal Jacobian/mass-matrix model, not real
+                    contact simulation) keeps 0 — spurious contact forces
+                    there would fight the QP's own box/torque constraints.
       mount_xyz   : "x y z" of the L arm root in bus frame (R mirrored)
   -->
   <xacro:include filename="$(find pat_platform_description)/xacro/piper_planar_arm.xacro"/>

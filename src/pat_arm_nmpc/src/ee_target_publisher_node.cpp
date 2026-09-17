@@ -86,13 +86,17 @@ EeTargetPublisher::loadWaypoints(const std::string& side) {
             throw std::runtime_error(
                 "ee_target_publisher: mode=absolute needs '" + side +
                 ".waypoints' (flat [x, y, yaw] triples)");
-        // Default demo: a small diamond about the start pose, ending home.
-        wps = {{0.08, 0.00, 0.00}, {0.00, 0.10, 0.15},
-               {-0.08, 0.00, 0.00}, {0.00, -0.10, -0.15},
-               {0.00, 0.00, 0.00}};
+        // Default demo: reach-out pattern biased in +x (away from the bus,
+        // in the arm's own extension direction) -- the start pose is folded
+        // in close to the bus, so a diamond symmetric about it would just
+        // fold back in just as far on its other half. Never within 0.10 of
+        // home. Keep in sync with config/ee_targets.yaml's default.
+        wps = {{0.20, 0.00, 0.00}, {0.15, 0.12, 0.15},
+               {0.25, 0.00, 0.00}, {0.15, -0.12, -0.15},
+               {0.10, 0.00, 0.00}};
         RCLCPP_INFO(get_logger(),
             "ee_target_publisher[%s]: no '%s.waypoints' — using the default "
-            "relative diamond (5 pts, <=0.10 m / 0.15 rad from start)",
+            "reach-out pattern (5 pts, 0.10-0.25 m from start)",
             side.c_str(), side.c_str());
     } else {
         if (flat.size() % 3 != 0)

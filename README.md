@@ -31,7 +31,8 @@ baked into those and won't work in the container). Then:
 ```bash
 git clone <this repo> && cd MuJoCo-PAT
 xhost +local:docker                    # let the container open the MuJoCo viewer
-docker compose run --rm dev bash       # builds the image on first run
+docker compose up -d dev               # builds the image on first run, starts it in the background
+docker compose exec dev bash           # attach a shell
 ```
 
 Inside you land in `/ws` as your own user, ROS + the overlay auto-sourced. The
@@ -41,8 +42,16 @@ on the host (gitignored). Build and run:
 ```bash
 colcon build                                    # first time (~10-15 min serial)
 ros2 launch launch/full_stack_nmpc.launch.py     # sim + dual-arm NMPC (undriven chaser)
-# other terminal into the same container:  docker compose exec dev bash
+# another terminal into the SAME container:  docker compose exec dev bash
 ```
+
+Use `up -d` + `exec`, not `docker compose run --rm dev bash` — `run --rm`
+destroys the container the moment that one shell exits, taking down anything
+else running inside it (the launch above included) and any other shell you'd
+attached with `exec`. `up -d` starts one persistent, named container
+(`mujoco_pat_dev`) that every `exec` reliably attaches to, so you can open as
+many terminals into it as you like. `docker compose down` stops it when you're
+done; leaving it running is also fine.
 
 Rebuild one package: `colcon build --packages-select pat_arm_nmpc` (`MAKEFLAGS=-j2`
 is preset so it won't OOM). Config / launch / xacro edits need no rebuild
@@ -107,6 +116,13 @@ Each arm also publishes its measured EE pose on `/chaser/arm/<side>/ee_pose`
 (world frame) — useful for eyeballing tracking (`ros2 topic echo`) or seeding
 external planners.
 
+`pat_simulation` also mirrors each arm's live `ee_setpoint` onto a cosmetic
+marker in the MuJoCo viewer (a magenta sphere for left, cyan for right) — a
+purely visual, non-colliding `mocap` body, so you can watch how far the
+controller actually is from where it's been told to go. Needs a real X11
+display (`xhost +local:docker`); no effect on physics, collisions, or
+recorded data either way.
+
 #### Fixed waypoint loop
 
 To exercise both arms without publishing setpoints by hand, run
@@ -122,8 +138,11 @@ ros2 launch pat_arm_nmpc ee_targets.launch.py
 ```
 
 Edit `src/pat_arm_nmpc/config/ee_targets.yaml` (or pass
-`params_file:=...`) for a different set — `mode: absolute` takes world-frame
-`[x, y, yaw]` triples directly.
+`ee_targets_params_file:=...` — NOT `params_file`, which belongs to
+`arm_nmpc.launch.py`'s `nmpc.yaml` and would silently take over if the two
+collided in `full_stack_nmpc.launch.py`'s shared launch-argument namespace)
+for a different set — `mode: absolute` takes world-frame `[x, y, yaw]`
+triples directly.
 
 If nothing moves: check `ros2 node list` shows `/pat_arm_nmpc_left` and
 `/pat_arm_nmpc_right`, and `ros2 topic echo /chaser/arm/torque_command` is

@@ -17,7 +17,7 @@ Physics: MuJoCo 3. Control: PID (MVP) → LQR → MPC. Navigation: direct (MVP) 
 | `pat_simulation` | ✅ | MuJoCo simulation node (the hardware stand-in) |
 | `pat_gnc` | ✅ | IController + INavigator; PID, DirectNav, EKF. **PID gains / `planar_dynamics.hpp` still tuned for a 15 kg chaser — the bus is now 49 kg; retune pending.** |
 | `pat_robotics` | ✅ | IJointController + JointPID + ArmController, arm_control_node. IManipulator (FK/IK/Jacobian) still a stub |
-| `pat_arm_nmpc` | 🟡 | Dual-arm task-space NMPC (port of VORTEX `fswAlgorithms/jointControl`). Planar (x,y,θz) linearized path builds + runs against the acados/HPIPM QP; full-nonlinear SQP path not ported. `ee_target_publisher` is a stand-in mission node (fixed reachable-waypoint loop); a real planner is still future work. |
+| `pat_arm_nmpc` | 🟡 | Dual-arm task-space NMPC (port of VORTEX `fswAlgorithms/jointControl`). Planar (x,y,θz) linearized path (the default, `nmpc.yaml`'s `full_nonlinear: false`) is tuned and runs against the acados/HPIPM QP. The full-nonlinear multi-shooting SQP path (`full_nonlinear: true`) is ported and runs without crashing, but is **untuned** — the linear path's current weights/`N`/`control_hz` don't suit it (see `nmpc.yaml`'s `full_nonlinear` comment). `ee_target_publisher` is a stand-in mission node (fixed reachable-waypoint loop); a real planner is still future work. |
 | `pat_vision` | ❌ Phase 3 | Not created |
 
 ## Sim-to-real: the constraint that governs everything
@@ -57,10 +57,20 @@ auto-sources ROS + overlay for every shell.
 ```bash
 xhost +local:docker
 # one-time if you've built on the host: rm -rf build install log
-docker compose run --rm dev bash     # first run builds the image
+docker compose up -d dev             # builds the image on first run, starts it in the background
+docker compose exec dev bash         # attach a shell — use this for EVERY terminal, first included
 colcon build                         # ~10-15 min first time, serial
-docker compose exec dev bash         # second shell into it
 ```
+
+Use `up -d` + `exec`, not `docker compose run --rm dev bash` — `run --rm` tears the
+container down the moment that one shell exits, killing anything else running
+inside it (a background `ros2 launch`, a second `exec`'d shell) and forcing a
+full re-attach next time. `up -d` starts the one persistent, named container
+(`mujoco_pat_dev`) that every subsequent `docker compose exec dev bash` (or
+`docker exec mujoco_pat_dev bash`) reliably attaches to — open as many shells
+into it as you want. `docker compose down` stops it when you're done (or just
+leave it running; `docker compose up -d dev` on an already-running container is
+a no-op).
 
 `.devcontainer/devcontainer.json` just references the compose `dev` service
 (+ VS Code extensions + a first-build `postCreateCommand`). CI
