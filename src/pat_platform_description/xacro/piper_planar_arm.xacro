@@ -8,34 +8,78 @@
     servicer_dual_piper_planar_primitives.xml (Basilisk-validated); the RIGHT
     arm is the world-XZ-plane reflection M = diag(1,-1,1), applied here by
     scaling the mirror-sensitive components by `r`:
-      - pos / inertial-pos  .y   *= r        (polar vector: (x,y,z)->(x,-y,z))
-      - body/inertial quat  .x,.z *= r       ((w,x,y,z)->(w,-x,y,-z))
+      - link2-link6 pos / inertial-pos  .y   *= r   ((x,y,z)->(x,-y,z))
+      - link2-link6 body/inertial quat  .x,.z *= r  ((w,x,y,z)->(w,-x,y,-z))
       - joint axis          .x,.z *= r       (axial vector: (x,y,z)->(-x,y,-z))
       - diaginertia / mass  unchanged
+    The MOUNT (chaser->link1) uses a DIFFERENT mirror rule than the rest of
+    the chain - confirmed directly against src/pat_arm_nmpc/models/
+    platform.xml's own arm1/arm2 (same "chaser" frame, no rotation ambiguity):
+    only mount_xyz's Y and the mount quat's Y component flip sign for R;
+    W/X/Z stay the same for both arms. This is a distinct transform (chaser
+    is the ENTRY POINT into one already-mirrored arm's chain) from the
+    link2-onward pattern above (which stays entirely within one arm's own
+    local frame, no further reflection needed).
     joint1/4/6 are welded (removed) so joints 2/3/5 form the planar 3R chain;
     with the mount quat below their world rotation axis is exactly ±Z for any
-    configuration. link1/4/6 bodies are kept (real mass/inertia).
+    configuration (re-verified numerically after the mount was corrected:
+    joint2/3/5's rotation axis lands on chaser Z to 1e-6). link1/4/6 bodies
+    are kept (real mass/inertia).
 
     params:
-      side     : "L" or "R"
-      mount_xyz: "x y z" of link1's root in the parent (bus) frame — the L
-                 value; the macro mirrors y for the R arm. The mount QUAT is
-                 fixed (planarity-critical: it is what puts joints 2/3/5 on
-                 world Z), so it is not exposed.
-      contype  : MuJoCo contype/conaffinity for every arm <geom> (default 1;
-                 pass 0 for a non-colliding visual-only arm)
+      side       : "L" or "R"
+      mount_xyz  : "x y z" of link1's root in the parent (bus) frame — the L
+                   (arm1) value, matching platform.xml's own arm1_base_link
+                   ->arm1_link1 chain exactly (verified: reproduces
+                   platform.xml's own chaser->link6 position to ~5mm, i.e.
+                   ~1% of arm reach — residual is minor transcription
+                   rounding in the link2-6 quats below, not a structural
+                   mismatch), THEN rotated 180deg about chaser's own Z -
+                   platform.xml's own +X does not point the same way as
+                   this model's chaser +X (confirmed empirically: without
+                   this extra turn the whole bus+arms assembly renders
+                   facing backwards). The macro mirrors Y for the R arm
+                   (arm2).
+      mount quat : NOT a macro param (planarity-critical, like mount_xyz's
+                   rotation counterpart) - hardcoded below as
+                   `0.707107 ${0.707107*r} 0 0`: platform.xml's own
+                   arm1/arm2 mount quats, composed with the same 180deg
+                   Z-turn as mount_xyz above (still exactly planarity-
+                   preserving: joint2/3/5's rotation axis re-verified
+                   landing on chaser Z to 1e-6 after this composition).
+      contype    : MuJoCo contype/conaffinity for every arm <geom> (default 1;
+                   pass 0 for a non-colliding visual-only arm)
+      visual_mesh: 1 to add a cosmetic (mass=0, non-colliding) mesh geom
+                   alongside each body's existing primitive, sourced from the
+                   digital-twin CAD (see piper_planar_arm_meshes below for
+                   the matching <mesh> asset registration this requires).
+                   Default 0 — the primitive geoms stay the sole collision/
+                   inertia authority either way. Every primitive geom here is
+                   tagged group="3" so pat_simulation's viewer can hide them
+                   independently of the mesh overlays (press 'C') - both
+                   occupy the same space, so showing both at once makes the
+                   mesh hard to see.
   -->
-  <xacro:macro name="piper_planar_arm" params="side mount_xyz:='0.573 0.3 0' contype:=1">
+  <xacro:macro name="piper_planar_arm" params="side mount_xyz:='0.250122 -0.265614 -0.089895' contype:=1 visual_mesh:=0">
     <xacro:property name="r" value="${1 if side == 'L' else -1}"/>
     <xacro:property name="m" value="${mount_xyz.split()}"/>
 
     <body name="link1_${side}" pos="${m[0]} ${float(m[1])*r} ${m[2]}"
-          quat="0.5 ${-0.5*r} 0.5 ${-0.5*r}">
+          quat="0.707107 ${0.707107*r} 0 0">
       <inertial pos="0.000121505 ${-0.000104632*r} -0.00438597"
                 quat="0.707107 ${-0.707107*r} 0 0" mass="0.71"
                 diaginertia="0.00048916 0.00043982 0.00040472"/>
       <geom type="cylinder" size="0.045 0.045" rgba="0.79 0.82 0.93 1"
-            contype="${contype}" conaffinity="${contype}"/>
+            contype="${contype}" conaffinity="${contype}" group="3"/>
+      <xacro:if value="${visual_mesh}">
+        <geom name="link1_visual_${side}" type="mesh" mesh="link1" rgba="0.79 0.82 0.93 1"
+              contype="0" conaffinity="0" mass="0"/>
+        <!-- base_link (the small mounting adapter between the bus and link1)
+             has no body of its own in this simplified model - joint1's
+             translation (0 0 0.123) is applied here directly. -->
+        <geom name="base_link_visual_${side}" type="mesh" mesh="base_link" pos="0 0 -0.123"
+              rgba="0.79 0.82 0.93 1" contype="0" conaffinity="0" mass="0"/>
+      </xacro:if>
 
       <body name="link2_${side}" quat="0.0480084 ${0.0480134*r} -0.705476 ${0.705474*r}">
         <inertial pos="0.198666 ${0.0109269*r} 0.00142122"
@@ -43,7 +87,11 @@
                   diaginertia="0.0678538 0.0677449 0.00116918"/>
         <joint name="joint2_${side}" pos="0 0 0" axis="0 0 ${-1*r}" range="0 3.14" damping="0"/>
         <geom type="capsule" size="0.030" fromto="0 0 0  0.285 0 0" rgba="0.79 0.82 0.93 1"
-              contype="${contype}" conaffinity="${contype}"/>
+              contype="${contype}" conaffinity="${contype}" group="3"/>
+        <xacro:if value="${visual_mesh}">
+          <geom name="link2_visual_${side}" type="mesh" mesh="link2" rgba="0.79 0.82 0.93 1"
+                contype="0" conaffinity="0" mass="0"/>
+        </xacro:if>
 
         <body name="link3_${side}" pos="0.28503 0 0" quat="0.623996 0 0 ${0.781427*r}">
           <inertial pos="-0.0202738 ${0.133915*r} -0.000458683"
@@ -57,14 +105,22 @@
                Visual only: every body carries an explicit <inertial>. -->
           <geom type="capsule" size="0.030 0.1255" pos="-0.011 ${0.1255*r} 0"
                 quat="0.707107 ${-0.707107*r} 0 0" rgba="0.79 0.82 0.93 1"
-                contype="${contype}" conaffinity="${contype}"/>
+                contype="${contype}" conaffinity="${contype}" group="3"/>
+          <xacro:if value="${visual_mesh}">
+            <geom name="link3_visual_${side}" type="mesh" mesh="link3" rgba="0.79 0.82 0.93 1"
+                  contype="0" conaffinity="0" mass="0"/>
+          </xacro:if>
 
           <body name="link4_${side}" pos="-0.021984 ${0.25075*r} 0" quat="0.707105 ${-0.707108*r} 0 0">
             <inertial pos="-9.66636e-05 ${-0.000876064*r} -0.00496881"
                       quat="0.707107 0 0 ${-0.707107*r}" mass="0.38"
                       diaginertia="0.00018965 0.00018501 0.00015484"/>
             <geom type="cylinder" size="0.035 0.030" rgba="0.79 0.82 0.93 1"
-                  contype="${contype}" conaffinity="${contype}"/>
+                  contype="${contype}" conaffinity="${contype}" group="3"/>
+            <xacro:if value="${visual_mesh}">
+              <geom name="link4_visual_${side}" type="mesh" mesh="link4" rgba="0.79 0.82 0.93 1"
+                    contype="0" conaffinity="0" mass="0"/>
+            </xacro:if>
 
             <body name="link5_${side}" quat="0.707105 ${0.707108*r} 0 0">
               <inertial pos="-4.10554e-05 ${0.0566487*r} -0.00372058"
@@ -74,18 +130,31 @@
               <!-- Rx(-90): size-capsule along local +Y, same fix as link3. -->
               <geom type="capsule" size="0.025 0.0455" pos="0 ${0.0455*r} 0"
                     quat="0.707107 ${-0.707107*r} 0 0" rgba="0.79 0.82 0.93 1"
-                    contype="${contype}" conaffinity="${contype}"/>
+                    contype="${contype}" conaffinity="${contype}" group="3"/>
+              <xacro:if value="${visual_mesh}">
+                <geom name="link5_visual_${side}" type="mesh" mesh="link5" rgba="0.79 0.82 0.93 1"
+                      contype="0" conaffinity="0" mass="0"/>
+              </xacro:if>
 
               <body name="link6_${side}" pos="8.8259e-05 ${0.091*r} 0" quat="0.707105 ${-0.707108*r} 0 0">
                 <inertial pos="-0.000182344 ${-7.9409e-05*r} 0.0316207"
                           quat="1 ${2.56629e-05*r} -2.07266e-05 ${5.31904e-10*r}" mass="0.457"
                           diaginertia="0.000937949 0.000723079 0.000395487"/>
                 <geom type="cylinder" size="0.042 0.040" rgba="0.90 0.92 0.93 1"
-                      contype="${contype}" conaffinity="${contype}"/>
+                      contype="${contype}" conaffinity="${contype}" group="3"/>
                 <geom type="box" size="0.008 0.018 0.040" pos=" 0.022 0 0.075" rgba="0.79 0.82 0.93 1"
-                      contype="${contype}" conaffinity="${contype}"/>
+                      contype="${contype}" conaffinity="${contype}" group="3"/>
                 <geom type="box" size="0.008 0.018 0.040" pos="-0.022 0 0.075" rgba="0.79 0.82 0.93 1"
-                      contype="${contype}" conaffinity="${contype}"/>
+                      contype="${contype}" conaffinity="${contype}" group="3"/>
+                <xacro:if value="${visual_mesh}">
+                  <!-- link6_${side}'s inertial already merges the URDF's link6+
+                       gripper_base (joint6_to_gripper_base is a zero-offset
+                       fixed joint) - both meshes go here, identity offset. -->
+                  <geom name="link6_visual_${side}" type="mesh" mesh="link6" rgba="0.90 0.92 0.93 1"
+                        contype="0" conaffinity="0" mass="0"/>
+                  <geom name="gripper_base_visual_${side}" type="mesh" mesh="gripper_base"
+                        rgba="0.79 0.82 0.93 1" contype="0" conaffinity="0" mass="0"/>
+                </xacro:if>
                 <site name="ee_site_${side}" pos="0 0 0" size="0.04" rgba="1 1 0 0.8"/>
               </body>
             </body>
@@ -93,5 +162,30 @@
         </body>
       </body>
     </body>
+  </xacro:macro>
+
+  <!--
+    piper_planar_arm_meshes — registers the arm's cosmetic mesh assets as
+    bare <mesh> elements (NOT wrapped in <asset> here: piper_planar_arm is
+    invoked inside a <body> context, so its own emitted content can't
+    contain an <asset> tag without nesting it invalidly inside <body>).
+    Callers must invoke this once, directly inside their own top-level
+    <asset> block, alongside piper_planar_arm's own body-tree invocations.
+    Both L and R arms share these - no side param needed.
+
+    params:
+      mesh_dir: path (relative to the FINAL installed MJCF's own directory)
+                to the directory holding link1.STL..link6.STL,
+                gripper_base.STL, base_link.STL
+  -->
+  <xacro:macro name="piper_planar_arm_meshes" params="mesh_dir:='../manipulators'">
+    <mesh name="link1" file="${mesh_dir}/link1.STL"/>
+    <mesh name="link2" file="${mesh_dir}/link2.STL"/>
+    <mesh name="link3" file="${mesh_dir}/link3.STL"/>
+    <mesh name="link4" file="${mesh_dir}/link4.STL"/>
+    <mesh name="link5" file="${mesh_dir}/link5.STL"/>
+    <mesh name="link6" file="${mesh_dir}/link6.STL"/>
+    <mesh name="gripper_base" file="${mesh_dir}/gripper_base.STL"/>
+    <mesh name="base_link" file="${mesh_dir}/base_link.STL"/>
   </xacro:macro>
 </robot>

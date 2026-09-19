@@ -12,12 +12,12 @@ pat_simulation:
     # initial_arm_qpos: 6 angles (arm_joint_names order) applied once at
     # startup instead of the MJCF's default all-zero pose. NOT just a
     # tools/pinn_datagen/ convenience: with arm_contype=2 (air_bearing_table.xacro
-    # — arms now genuinely collide), the raw all-zero fold pose has 16 contacts
-    # at t=0 (confirmed via a raw-mujoco check), including the two
-    # end-effectors interpenetrating by ~2cm — every launch would start in a
-    # physically invalid state without this override. -15 deg on each arm's
-    # elbow (joint3), everything else unchanged, is the smallest per-degree
-    # perturbation that clears every contact (verified: -14 deg still leaves
-    # 2). tools/pinn_datagen/ overrides this per-trial with its own randomized
+    # — arms now genuinely collide), the raw all-zero fold pose is not
+    # collision-free at the real (digital-twin-derived) arm mount point —
+    # every launch would start in a physically invalid state without this
+    # override. 35 deg on joint2 + -15 deg on joint3 (elbow), joint5
+    # unchanged, on each arm — re-verified collision-free (with margin;
+    # joint2=32deg is the actual boundary) after the mount-point correction.
+    # tools/pinn_datagen/ overrides this per-trial with its own randomized
     # (and prefiltered-for-collision) configuration.
-    initial_arm_qpos: [0.0, -0.2617993878, 0.0, 0.0, -0.2617993878, 0.0]
+    initial_arm_qpos: [0.6108652382, -0.2617993878, 0.0, 0.6108652382, -0.2617993878, 0.0]

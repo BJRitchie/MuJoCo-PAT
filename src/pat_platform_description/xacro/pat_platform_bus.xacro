@@ -7,34 +7,63 @@
     Emits, into the caller's <body>:
       - <inertial> : 49.22 kg, real PAT inertia tensor
       - bus + top-panel box geoms, RGB body-axis markers
-      - two piper_planar_arm instances mounted just outside the +X face
+      - two piper_planar_arm instances mounted near the -X face (mirrored
+        across Y)
 
     The caller supplies the <body> and its joint(s): a <freejoint> for the
     NMPC's free-floating controller model, or chaser_x/y/yaw + thruster sites
     for the air-bearing-table plant.
 
     params:
-      bus_contype : contype/conaffinity for the bus box geoms
-                    (0 = visual only; 2 = collide, matching the old chaser)
-      arm_contype : contype/conaffinity for the arm geoms. Caller-dependent:
-                    air_bearing_table.xacro (the real plant) uses 2, joining
-                    the bus/target's own collision group, so arms genuinely
-                    collide with the bus and each other. pat_platform_planar.xacro
-                    (the NMPC's internal Jacobian/mass-matrix model, not real
-                    contact simulation) keeps 0 — spurious contact forces
-                    there would fight the QP's own box/torque constraints.
-      mount_xyz   : "x y z" of the L arm root in bus frame (R mirrored)
+      bus_contype    : contype/conaffinity for the bus box geoms
+                       (0 = visual only; 2 = collide, matching the old chaser)
+      arm_contype    : contype/conaffinity for the arm geoms. Caller-dependent:
+                       air_bearing_table.xacro (the real plant) uses 2, joining
+                       the bus/target's own collision group, so arms genuinely
+                       collide with the bus and each other. pat_platform_planar.xacro
+                       (the NMPC's internal Jacobian/mass-matrix model, not real
+                       contact simulation) keeps 0 — spurious contact forces
+                       there would fight the QP's own box/torque constraints.
+      mount_xyz      : "x y z" of the L arm root in bus frame (R mirrored) -
+                       see piper_planar_arm.xacro's own header for the full
+                       derivation (matches platform.xml's arm1_link1 exactly).
+      bus_visual_mesh: 1 to add a cosmetic (mass=0, non-colliding) mesh geom
+                       for the bus, sourced from the digital-twin CAD (see
+                       pat_platform_bus_meshes below for the matching <mesh>
+                       asset registration this requires). Default 0.
+      arm_visual_mesh: forwarded verbatim as both arm instances' own
+                       visual_mesh param (see piper_planar_arm.xacro).
   -->
   <xacro:include filename="$(find pat_platform_description)/xacro/piper_planar_arm.xacro"/>
 
   <xacro:macro name="pat_platform_bus"
-               params="bus_contype:=0 arm_contype:=0 mount_xyz:='0.32 0.15 0.0'">
+               params="bus_contype:=0 arm_contype:=0 mount_xyz:='0.250122 -0.265614 -0.089895'
+                       bus_visual_mesh:=0 arm_visual_mesh:=0">
+    <!-- Sourced from platform.xml (DASM_16DoF_Basilisk) - the digital
+         twin's URDF has an identical generic placeholder (mass=10.0, diag
+         inertia 0.1/0.1/0.1) for both this body AND the target, which ruled
+         it out as a real value; this repo's own 49.22kg/fullinertia predates
+         the digital-twin work and is independently corroborated by
+         platform.xml's own detailed, self-consistent model of this body. -->
     <inertial pos="0 0 0" mass="49.22"
               fullinertia="1.5399 2.7177 2.0322 0.1251 0.00144 -0.0019"/>
 
-    <geom name="bus_box" type="box" pos="0 0 0" size="0.30 0.25 0.1525"
-          rgba="0.25 0.32 0.48 1" contype="${bus_contype}" conaffinity="${bus_contype}"/>
-    <geom name="bus_top_panel" type="box" pos="0 0 0.1545" size="0.255 0.205 0.002"
+    <!-- Dimensions/orientation derived from the digital twin's own live TF
+         tree (not guessed): with the arm's real mount transform confirmed
+         via `ros2 run tf2_ros tf2_echo PAT_link link1` (exact, ground
+         truth) and the mount quat above (now sourced from platform.xml
+         directly, see piper_planar_arm.xacro), the rotation relating this
+         body's frame to the bus's real CAD frame (PAT_link) solves to
+         exactly IDENTITY (chaser and PAT_link share the same orientation,
+         only an origin offset) - confirming this body's origin IS meant to
+         sit at the bus's real geometric center (verified: the mesh's raw
+         bounding-box corners, transformed through this same rotation, land
+         at exactly this box's own half-extents; X also matches platform.xml's
+         own box half-extent exactly, 0.30 = 0.30). Full derivation in
+         project memory. -->
+    <geom name="bus_box" type="box" pos="0 0 0" size="0.30 0.3123 0.2445"
+          rgba="0.25 0.32 0.48 1" contype="${bus_contype}" conaffinity="${bus_contype}" group="3"/>
+    <geom name="bus_top_panel" type="box" pos="0 0 0.2465" size="0.255 0.205 0.002"
           rgba="0.10 0.15 0.24 1" contype="0" conaffinity="0" mass="0"/>
     <geom name="bus_axis_x" type="capsule" fromto="0 0 0 0.18 0 0" size="0.006"
           rgba="1 0 0 1" contype="0" conaffinity="0" mass="0"/>
@@ -42,8 +71,36 @@
           rgba="0 1 0 1" contype="0" conaffinity="0" mass="0"/>
     <geom name="bus_axis_z" type="capsule" fromto="0 0 0 0 0 0.18" size="0.006"
           rgba="0 0 1 1" contype="0" conaffinity="0" mass="0"/>
+    <xacro:if value="${bus_visual_mesh}">
+      <!-- Same derivation as bus_box above (this body's origin = the bus's
+           real geometric center) composed with the mesh's own documented
+           visual-origin correction (Rx +90deg), THEN the same 180deg
+           Z-turn as the arm mount (see piper_planar_arm.xacro's mount_xyz
+           comment for why). Verified: transforming the mesh's own raw
+           bounding-box corners through this exact transform lands them at
+           precisely bus_box's own half-extents. -->
+      <geom name="pat_bus_visual" type="mesh" mesh="pat_bus"
+            pos="0.30000 -0.32840 -0.24480" quat="0 0 0.707107 0.707107"
+            rgba="0.79 0.82 0.93 1" contype="0" conaffinity="0" mass="0"/>
+    </xacro:if>
 
-    <xacro:piper_planar_arm side="L" mount_xyz="${mount_xyz}" contype="${arm_contype}"/>
-    <xacro:piper_planar_arm side="R" mount_xyz="${mount_xyz}" contype="${arm_contype}"/>
+    <xacro:piper_planar_arm side="L" mount_xyz="${mount_xyz}" contype="${arm_contype}"
+                             visual_mesh="${arm_visual_mesh}"/>
+    <xacro:piper_planar_arm side="R" mount_xyz="${mount_xyz}" contype="${arm_contype}"
+                             visual_mesh="${arm_visual_mesh}"/>
+  </xacro:macro>
+
+  <!--
+    pat_platform_bus_meshes — registers the bus's cosmetic mesh asset as a
+    bare <mesh> element (see piper_planar_arm_meshes' own comment for why
+    this can't be emitted from inside pat_platform_bus itself). Callers
+    invoke this once, directly inside their own top-level <asset> block.
+
+    params:
+      mesh_dir: path (relative to the FINAL installed MJCF's own directory)
+                to the directory holding pat.STL
+  -->
+  <xacro:macro name="pat_platform_bus_meshes" params="mesh_dir:='../spacecraft/chaser'">
+    <mesh name="pat_bus" file="${mesh_dir}/pat.STL"/>
   </xacro:macro>
 </robot>

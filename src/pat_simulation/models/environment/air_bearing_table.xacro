@@ -4,14 +4,21 @@
   <option gravity="0 0 0" timestep="0.002" integrator="RK4">
     <flag gravity="disable"/>
   </option>
+  <xacro:include filename="$(find pat_platform_description)/xacro/pat_platform_bus.xacro"/>
+
   <asset>
     <texture name="table_tex" type="2d" builtin="flat" rgb1="0.22 0.22 0.25" width="128" height="128"/>
     <material name="table_mat" texture="table_tex" reflectance="0.04"/>
     <material name="wall_mat"  rgba="0.35 0.35 0.4 0.7"/>
     <material name="target_mat" rgba="0.9 0.4 0.2 1"/>
+    <!-- Cosmetic mesh assets from the digital-twin CAD export (visual only,
+         mass=0, non-colliding geoms reference these - see
+         piper_planar_arm.xacro / pat_platform_bus.xacro for why these can't
+         be registered from inside the body-emitting macros themselves). -->
+    <xacro:piper_planar_arm_meshes mesh_dir="../manipulators"/>
+    <xacro:pat_platform_bus_meshes mesh_dir="../spacecraft/chaser"/>
+    <mesh name="cso_target" file="../spacecraft/target/cso.STL"/>
   </asset>
-
-  <xacro:include filename="$(find pat_platform_description)/xacro/pat_platform_bus.xacro"/>
 
   <worldbody>
     <light name="top" pos="0 0 3" dir="0 0 -1" diffuse="0.8 0.8 0.8"/>
@@ -26,8 +33,11 @@
 
     <!-- Chaser: the real PAT servicer bus (49.22 kg) floating on the table,
          3-DOF planar (chaser_x/y/yaw), 4 cold-gas thrusters. Bus geometry +
-         dual planar Piper arms come from the shared pat_platform_bus macro. -->
-    <body name="chaser" pos="-0.5 0 0.1525">
+         dual planar Piper arms come from the shared pat_platform_bus macro.
+         Origin height (0.2445) is the real bus's own half-height, resting on
+         the table - derived from the digital-twin's live TF tree, see
+         pat_platform_bus.xacro's bus_box comment for the full derivation. -->
+    <body name="chaser" pos="-0.5 0 0.2445">
       <joint name="chaser_x"   type="slide" axis="1 0 0" damping="0.05"/>
       <joint name="chaser_y"   type="slide" axis="0 1 0" damping="0.05"/>
       <joint name="chaser_yaw" type="hinge" axis="0 0 1" damping="0.02"/>
@@ -40,7 +50,8 @@
            arm_contype=0: it's Jacobian/mass-matrix bookkeeping via mj_forward,
            not real contact simulation, and spurious contact forces there
            would fight the QP's own box/torque constraints. -->
-      <xacro:pat_platform_bus bus_contype="2" arm_contype="2"/>
+      <xacro:pat_platform_bus bus_contype="2" arm_contype="2"
+                               bus_visual_mesh="1" arm_visual_mesh="1"/>
 
       <geom name="dock_port" type="cylinder" size="0.015 0.005" pos="0.305 0 -0.10"
             euler="0 1.5708 0" rgba="1.0 0.85 0.0 1" contype="0" conaffinity="0" mass="0"/>
@@ -56,20 +67,31 @@
       <site name="chaser_imu"    pos="0 0 0"         size="0.006"/>
     </body>
 
-    <!-- Target: 24 cm square, 20 kg, stationary -->
+    <!-- Target (CSO mockup): 20kg, real inertia (predates the digital-twin
+         work; kept as-is, see pat_platform_bus.xacro's bus <inertial> for
+         why it isn't being replaced by the digital twin's placeholder
+         value). Box dimensions below are corrected to the digital twin's
+         real CSO_link mesh. -->
     <body name="target" pos="0.4 0 0.1">
       <joint name="target_x"   type="slide" axis="1 0 0" damping="0.01"/>
       <joint name="target_y"   type="slide" axis="0 1 0" damping="0.01"/>
       <joint name="target_yaw" type="hinge" axis="0 0 1" damping="0.005"/>
       <inertial pos="0 0 0" mass="20" diaginertia="0.08 0.08 0.12"/>
-      <geom name="target_body" type="box" size="0.12 0.12 0.1"
+      <geom name="target_body" type="box" pos="0 0 0.031" size="0.2025 0.1765 0.131"
             material="target_mat"
-            contype="2" conaffinity="2"/>
-      <geom name="grapple" type="cylinder" size="0.02 0.01" pos="0 0 0.11"
+            contype="2" conaffinity="2" group="3"/>
+      <!-- Placement is the mesh's own local-frame correction only - CSO_link
+           hangs off an independent floating joint in the source URDF with no
+           static relationship to anything else, so there's no transform to
+           derive. Starting guess, needs visual iteration. -->
+      <geom name="cso_target_visual" type="mesh" mesh="cso_target"
+            quat="0.70711 0.70711 0 0"
+            rgba="0.9 0.4 0.2 1" contype="0" conaffinity="0" mass="0"/>
+      <geom name="grapple" type="cylinder" size="0.02 0.01" pos="0 0 0.172"
             rgba="0.9 0.9 0.2 1" contype="0" conaffinity="0" mass="0"/>
       <!-- AR tag placeholders for Phase 3 vision -->
-      <geom name="tag_a" type="box" size="0.02 0.02 0.001" pos=" 0.08  0.08 0.101" rgba="0 0 0 1" contype="0" conaffinity="0" mass="0"/>
-      <geom name="tag_b" type="box" size="0.02 0.02 0.001" pos="-0.08  0.08 0.101" rgba="1 1 1 1" contype="0" conaffinity="0" mass="0"/>
+      <geom name="tag_a" type="box" size="0.02 0.02 0.001" pos=" 0.08  0.08 0.163" rgba="0 0 0 1" contype="0" conaffinity="0" mass="0"/>
+      <geom name="tag_b" type="box" size="0.02 0.02 0.001" pos="-0.08  0.08 0.163" rgba="1 1 1 1" contype="0" conaffinity="0" mass="0"/>
       <site name="target_centre" pos="0 0 0" size="0.005"/>
     </body>
 

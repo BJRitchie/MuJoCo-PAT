@@ -39,9 +39,23 @@ int MuJoCoVisualiser::init(
     glfwSetCursorPosCallback(window, &MuJoCoVisualiser::cursorPosCallbackTrampoline);
     glfwSetScrollCallback(window, &MuJoCoVisualiser::scrollCallbackTrampoline);
 
-    // Render context 
+    // Render context
     mjv_defaultCamera(&g_cam);
     mjv_defaultOption(&opt);
+    // Collision-primitive geoms (bus_box, target_body, the arm's capsules/
+    // cylinders/boxes) are tagged group=3 in the MJCF so they can be hidden
+    // independently of the cosmetic CAD meshes layered over them -- both
+    // occupy the same space, so showing both by default makes the mesh hard
+    // to see. Hidden by default; press 'C' to toggle them back on to check
+    // collision geometry.
+    opt.geomgroup[3] = 0;
+    // g_scn must be zero-initialized before mjv_makeScene: internally it
+    // frees any existing scene first, and an uninitialized mjvScene's
+    // pointers are garbage, not null -- crashes inside free() on whatever
+    // heap layout happens to leave non-zero garbage there (this had gone
+    // unnoticed until loading the CAD meshes changed the heap layout enough
+    // to expose it).
+    mjv_defaultScene(&g_scn);
     mjv_makeScene(g_m, &g_scn, 2000);
     mjr_defaultContext(&con);
     mjr_makeContext(g_m, &con, mjFONTSCALE_150);
@@ -80,6 +94,8 @@ void MuJoCoVisualiser::keyCallback(GLFWwindow* w, int key, int /*scancode*/, int
         glfwSetWindowShouldClose(w, GLFW_TRUE);
     if (key == GLFW_KEY_SPACE)
         g_paused = !g_paused;
+    if (key == GLFW_KEY_C)
+        opt.geomgroup[3] = !opt.geomgroup[3];
 }
 
 void MuJoCoVisualiser::mouseButtonCallback(GLFWwindow* /*w*/, int button, int act, int /*mods*/)
