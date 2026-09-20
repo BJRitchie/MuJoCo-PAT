@@ -17,7 +17,9 @@ pat_simulation:
     # every launch would start in a physically invalid state without this
     # override. 35 deg on joint2 + -15 deg on joint3 (elbow), joint5
     # unchanged, on each arm — re-verified collision-free (with margin;
-    # joint2=32deg is the actual boundary) after the mount-point correction.
+    # joint2=0deg is the actual boundary, i.e. the whole 0-35deg range is
+    # clear) after the arm mount was corrected to the digital twin's URDF
+    # position (~5cm lower than the prior platform.xml-derived mount).
     # tools/pinn_datagen/ overrides this per-trial with its own randomized
     # (and prefiltered-for-collision) configuration.
     initial_arm_qpos: [0.6108652382, -0.2617993878, 0.0, 0.6108652382, -0.2617993878, 0.0]

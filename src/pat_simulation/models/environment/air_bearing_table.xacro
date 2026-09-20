@@ -10,7 +10,6 @@
     <texture name="table_tex" type="2d" builtin="flat" rgb1="0.22 0.22 0.25" width="128" height="128"/>
     <material name="table_mat" texture="table_tex" reflectance="0.04"/>
     <material name="wall_mat"  rgba="0.35 0.35 0.4 0.7"/>
-    <material name="target_mat" rgba="0.9 0.4 0.2 1"/>
     <!-- Cosmetic mesh assets from the digital-twin CAD export (visual only,
          mass=0, non-colliding geoms reference these - see
          piper_planar_arm.xacro / pat_platform_bus.xacro for why these can't
@@ -53,8 +52,6 @@
       <xacro:pat_platform_bus bus_contype="2" arm_contype="2"
                                bus_visual_mesh="1" arm_visual_mesh="1"/>
 
-      <geom name="dock_port" type="cylinder" size="0.015 0.005" pos="0.305 0 -0.10"
-            euler="0 1.5708 0" rgba="1.0 0.85 0.0 1" contype="0" conaffinity="0" mass="0"/>
       <geom name="thr_fwd_v"  type="cylinder" size="0.012 0.016" pos=" 0.30  0    0" euler="0  1.5708 0" rgba="0.8 0.8 0.8 1" contype="0" conaffinity="0" mass="0"/>
       <geom name="thr_aft_v"  type="cylinder" size="0.012 0.016" pos="-0.30  0    0" euler="0 -1.5708 0" rgba="0.8 0.8 0.8 1" contype="0" conaffinity="0" mass="0"/>
       <geom name="thr_port_v" type="cylinder" size="0.012 0.016" pos=" 0    0.25  0" euler=" 1.5708 0 0" rgba="0.8 0.8 0.8 1" contype="0" conaffinity="0" mass="0"/>
@@ -71,27 +68,36 @@
          work; kept as-is, see pat_platform_bus.xacro's bus <inertial> for
          why it isn't being replaced by the digital twin's placeholder
          value). Box dimensions below are corrected to the digital twin's
-         real CSO_link mesh. -->
-    <body name="target" pos="0.4 0 0.1">
+         real CSO_link mesh. Origin height (0.131) is target_body's own
+         half-height (box is centered on this body's origin below) so its
+         bottom face rests exactly on the table, same convention as
+         chaser's own 0.2445 above. -->
+    <body name="target" pos="0.4 0 0.131">
       <joint name="target_x"   type="slide" axis="1 0 0" damping="0.01"/>
       <joint name="target_y"   type="slide" axis="0 1 0" damping="0.01"/>
       <joint name="target_yaw" type="hinge" axis="0 0 1" damping="0.005"/>
       <inertial pos="0 0 0" mass="20" diaginertia="0.08 0.08 0.12"/>
-      <geom name="target_body" type="box" pos="0 0 0.031" size="0.2025 0.1765 0.131"
-            material="target_mat"
+      <!-- rgba is the same bright-magenta collision-debug color as every
+           other group="3" primitive in this model (see piper_planar_arm.xacro's
+           visual_mesh param doc) - deliberately distinct from
+           cso_target_visual's own color below so the collision box is never
+           mistaken for the real CSO shape when toggled on. -->
+      <geom name="target_body" type="box" pos="0 0 0.0" size="0.2025 0.1765 0.131"
+            rgba="0.85 0.1 0.85 0.25"
             contype="2" conaffinity="2" group="3"/>
-      <!-- Placement is the mesh's own local-frame correction only - CSO_link
-           hangs off an independent floating joint in the source URDF with no
-           static relationship to anything else, so there's no transform to
-           derive. Starting guess, needs visual iteration. -->
+      <!-- quat is Rx90, the URDF's own documented CSO_link visual-origin
+           correction (CSO_link hangs off an independent floating joint in
+           the source URDF with no other static relationship to derive from,
+           and orientation beyond this was user-confirmed by eye). pos
+           aligns the mesh with target_body above: under Rx90 alone (no
+           translation) the raw STL's own origin lands exactly on one corner
+           of its bounding box, (x_min, y_max, z_min) - verified directly
+           against the STL vertex data - so pos is exactly that corner's
+           coordinate, placing it at target_body's matching corner (the box
+           is centered on this body's own origin). -->
       <geom name="cso_target_visual" type="mesh" mesh="cso_target"
-            quat="0.70711 0.70711 0 0"
+            quat="0.707107 0.707107 0 0" pos="-0.2025 0.1765 -0.131"
             rgba="0.9 0.4 0.2 1" contype="0" conaffinity="0" mass="0"/>
-      <geom name="grapple" type="cylinder" size="0.02 0.01" pos="0 0 0.172"
-            rgba="0.9 0.9 0.2 1" contype="0" conaffinity="0" mass="0"/>
-      <!-- AR tag placeholders for Phase 3 vision -->
-      <geom name="tag_a" type="box" size="0.02 0.02 0.001" pos=" 0.08  0.08 0.163" rgba="0 0 0 1" contype="0" conaffinity="0" mass="0"/>
-      <geom name="tag_b" type="box" size="0.02 0.02 0.001" pos="-0.08  0.08 0.163" rgba="1 1 1 1" contype="0" conaffinity="0" mass="0"/>
       <site name="target_centre" pos="0 0 0" size="0.005"/>
     </body>
 

@@ -6,7 +6,7 @@
 
     Emits, into the caller's <body>:
       - <inertial> : 49.22 kg, real PAT inertia tensor
-      - bus + top-panel box geoms, RGB body-axis markers
+      - bus box geom, RGB body-axis markers
       - two piper_planar_arm instances mounted near the -X face (mirrored
         across Y)
 
@@ -26,7 +26,8 @@
                        there would fight the QP's own box/torque constraints.
       mount_xyz      : "x y z" of the L arm root in bus frame (R mirrored) -
                        see piper_planar_arm.xacro's own header for the full
-                       derivation (matches platform.xml's arm1_link1 exactly).
+                       derivation (sourced from the digital twin's URDF, not
+                       platform.xml - the two disagree on real mount height).
       bus_visual_mesh: 1 to add a cosmetic (mass=0, non-colliding) mesh geom
                        for the bus, sourced from the digital-twin CAD (see
                        pat_platform_bus_meshes below for the matching <mesh>
@@ -37,7 +38,7 @@
   <xacro:include filename="$(find pat_platform_description)/xacro/piper_planar_arm.xacro"/>
 
   <xacro:macro name="pat_platform_bus"
-               params="bus_contype:=0 arm_contype:=0 mount_xyz:='0.250122 -0.265614 -0.089895'
+               params="bus_contype:=0 arm_contype:=0 mount_xyz:='0.250440 -0.291980 -0.141200'
                        bus_visual_mesh:=0 arm_visual_mesh:=0">
     <!-- Sourced from platform.xml (DASM_16DoF_Basilisk) - the digital
          twin's URDF has an identical generic placeholder (mass=10.0, diag
@@ -60,11 +61,11 @@
          bounding-box corners, transformed through this same rotation, land
          at exactly this box's own half-extents; X also matches platform.xml's
          own box half-extent exactly, 0.30 = 0.30). Full derivation in
-         project memory. -->
+         project memory. rgba is the same bright-magenta collision-debug
+         color as every other group="3" primitive - see piper_planar_arm.xacro's
+         visual_mesh param doc for why. -->
     <geom name="bus_box" type="box" pos="0 0 0" size="0.30 0.3123 0.2445"
-          rgba="0.25 0.32 0.48 1" contype="${bus_contype}" conaffinity="${bus_contype}" group="3"/>
-    <geom name="bus_top_panel" type="box" pos="0 0 0.2465" size="0.255 0.205 0.002"
-          rgba="0.10 0.15 0.24 1" contype="0" conaffinity="0" mass="0"/>
+          rgba="0.85 0.1 0.85 0.25" contype="${bus_contype}" conaffinity="${bus_contype}" group="3"/>
     <geom name="bus_axis_x" type="capsule" fromto="0 0 0 0.18 0 0" size="0.006"
           rgba="1 0 0 1" contype="0" conaffinity="0" mass="0"/>
     <geom name="bus_axis_y" type="capsule" fromto="0 0 0 0 0.18 0" size="0.006"

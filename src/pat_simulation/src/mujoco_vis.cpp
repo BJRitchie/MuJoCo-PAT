@@ -43,12 +43,13 @@ int MuJoCoVisualiser::init(
     mjv_defaultCamera(&g_cam);
     mjv_defaultOption(&opt);
     // Collision-primitive geoms (bus_box, target_body, the arm's capsules/
-    // cylinders/boxes) are tagged group=3 in the MJCF so they can be hidden
-    // independently of the cosmetic CAD meshes layered over them -- both
-    // occupy the same space, so showing both by default makes the mesh hard
-    // to see. Hidden by default; press 'C' to toggle them back on to check
-    // collision geometry.
+    // cylinders/boxes) and the ee_site markers are tagged group=3 in the
+    // MJCF so they can be hidden independently of the cosmetic CAD meshes
+    // layered over them -- both occupy the same space, so showing both by
+    // default makes the mesh hard to see. Hidden by default; press 'C' to
+    // toggle them back on to check collision geometry / EE site placement.
     opt.geomgroup[3] = 0;
+    opt.sitegroup[3] = 0;
     // g_scn must be zero-initialized before mjv_makeScene: internally it
     // frees any existing scene first, and an uninitialized mjvScene's
     // pointers are garbage, not null -- crashes inside free() on whatever
@@ -94,8 +95,10 @@ void MuJoCoVisualiser::keyCallback(GLFWwindow* w, int key, int /*scancode*/, int
         glfwSetWindowShouldClose(w, GLFW_TRUE);
     if (key == GLFW_KEY_SPACE)
         g_paused = !g_paused;
-    if (key == GLFW_KEY_C)
+    if (key == GLFW_KEY_C) {
         opt.geomgroup[3] = !opt.geomgroup[3];
+        opt.sitegroup[3] = !opt.sitegroup[3];
+    }
 }
 
 void MuJoCoVisualiser::mouseButtonCallback(GLFWwindow* /*w*/, int button, int act, int /*mods*/)
