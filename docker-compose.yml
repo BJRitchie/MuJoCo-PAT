@@ -16,12 +16,31 @@ services:
     environment:
       - DISPLAY=${DISPLAY}                 # MuJoCo GLFW viewer / rviz
       - MAKEFLAGS=-j${BUILD_JOBS:-2}       # keep colcon compiles off the OOM line
+      # GPU-accelerated GLX for the MuJoCo viewer (was falling back to Mesa
+      # llvmpipe software rendering, badly slow once real CAD meshes were
+      # added) - both vars are needed for nvidia-container-toolkit to inject
+      # the host driver's GL libraries, not just CUDA/compute.
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
     volumes:
       # Whole repo bind-mounted; colcon builds into ./build + ./install on the
       # host (gitignored), same as VORTEX builds into /workspace. acados + MuJoCo
       # are baked into the image at /opt — no writable-deps volume needed.
       - ./:/ws
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
+    # /dev/dri: the actual fix for MuJoCo viewer GLX performance on THIS host -
+    # its X server (DISPLAY, forwarded above) runs on the Intel iGPU, not the
+    # NVIDIA card below (a hybrid/Optimus laptop: NVIDIA is compute/offload-
+    # only here, not what serves GLX to X11 clients) - without this device,
+    # Mesa falls back to llvmpipe software rendering inside the container.
+    # group_add uses numeric GIDs (not names) so they match the HOST's
+    # video/render group ownership of /dev/dri/* regardless of what GIDs
+    # those group names resolve to inside the container image.
+    devices:
+      - /dev/dri:/dev/dri
+    group_add:
+      - "44"   # video (host GID - `getent group video`)
+      - "110"  # render (host GID - `getent group render`)
     # ROS 2 DDS shared-memory discovery needs all three, or `ros2 node list`
     # comes up empty and `ros2 topic hz` segfaults across shells.
     network_mode: host
@@ -29,3 +48,17 @@ services:
     pid: host
     tty: true
     stdin_open: true
+    # Standard Compose GPU-reservation syntax - the same nvidia-container-
+    # toolkit mechanism Jetson's own default "nvidia" docker runtime uses,
+    # so this should carry over to a Jetson-side compose service later
+    # (untested on real Jetson hardware - the driver stack it resolves to
+    # differs, but the request syntax doesn't need to change). Not what fixes
+    # the viewer on this particular host (see /dev/dri above) - kept for any
+    # future CUDA/compute use, harmless if unused.
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

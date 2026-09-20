@@ -12,9 +12,9 @@ ee_target_publisher:
   ros__parameters:
     sides:         [left, right]
     mode:          relative      # relative | absolute
-    dwell_sec:     6.0           # hold each waypoint this long
+    dwell_sec:     4.0           # hold each waypoint this long
     republish_hz:  2.0           # re-send the current target this often (DDS drop guard)
-    loop:          false         # false → stop on the last waypoint
+    loop:          true         # false → stop on the last waypoint
     frame_id:      map
 
     # Reach-out pattern: the start pose is folded in close to the bus, so
@@ -24,14 +24,19 @@ ee_target_publisher:
     # on its other half. Never returns closer than +0.10 to home.
     # (dx [m], dy [m], dyaw [rad]) triples.
     left:
-      waypoints: [ 0.20,  0.00,  0.00] #,
-                  #  0.15,  0.12,  0.15,
-                  #  0.25,  0.00,  0.00,
-                  #  0.15, -0.12, -0.15,
-                  #  0.10,  0.00,  0.00 ]
+      waypoints: [ 0.20,  0.00,  0.00,
+                   0.25,  0.00,  0.00,
+                   0.15, -0.12, -0.15,
+                   0.15,  0.12,  0.15,
+                   0.10,  0.00,  0.00 ]
     right:
-      waypoints: [ 0.20,  0.00,  0.00] #,
-                  #  0.15, -0.12, -0.15,
-                  #  0.25,  0.00,  0.00,
-                  #  0.15,  0.12,  0.15,
-                  #  0.10,  0.00,  0.00 ]
+      waypoints: [ 0.20,  0.00,  0.00,
+                   0.15, -0.12, -0.15,
+                   0.25,  0.00,  0.00,
+                   0.15,  0.12,  0.15,
+                   0.10,  0.00,  0.00 ]
+    # left:
+    #   waypoints: [ 0.20,  0.00,  0.00]
+
+    # right:
+    #   waypoints: [ 0.20,  0.00,  0.00]
