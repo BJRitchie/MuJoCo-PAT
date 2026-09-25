@@ -23,3 +23,14 @@ pat_simulation:
     # tools/pinn_datagen/ overrides this per-trial with its own randomized
     # (and prefiltered-for-collision) configuration.
     initial_arm_qpos: [0.6108652382, -0.2617993878, 0.0, 0.6108652382, -0.2617993878, 0.0]
+    # Air-bearing table drag, per planar DOF [x, y, yaw]. Modelled as joint
+    # damping (viscous, N*s/m or N*m*s/rad) plus frictionloss (dry/Coulomb,
+    # N or N*m) - the bodies never contact the table geom (separate collision
+    # group, gravity disabled), so this is the only drag they feel. Defaults
+    # match the values previously hardcoded in air_bearing_table.xacro.
+    # NOTE: pat_arm_nmpc's internal model has no such drag, so raising these
+    # shows up to the controller as unmodelled disturbance.
+    chaser_damping:      [0.05, 0.05, 0.02]
+    chaser_frictionloss: [0.0, 0.0, 0.0]
+    target_damping:      [0.01, 0.01, 0.005]
+    target_frictionloss: [0.0, 0.0, 0.0]

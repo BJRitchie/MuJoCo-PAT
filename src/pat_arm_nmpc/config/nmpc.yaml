@@ -15,117 +15,10 @@
 # ------------------- ITERATIVE LINEARIZATION NMPC ------------------- #
 # -------------------------------------------------------------------- #
 
-/**: # <--- wildcard: all nodes (that load this file) share these parameters 
-  ros__parameters:
-    mjcf_path: ""
-    control_hz: 200.0
-    model_joint_names: [joint2_L, joint3_L, joint5_L, joint2_R, joint3_R, joint5_R]
-    # /chaser/odom's chaser_x/y are the chaser's slide-joint values relative
-    # to air_bearing_table.xacro's own <body name="chaser" pos="-0.5 0 ...">
-    # anchor, NOT true world-frame position -- this controller's own internal
-    # model has zero anchor offset (pat_platform_planar.xacro's freejoint
-    # body is at pos="0 0 0"), so this corrects odom's x at the read (see
-    # arm_nmpc_node.h's onOdom comment). Confirmed via pat_simulation's
-    # ee_setpoint marker: published ee_pose was off from the true MuJoCo site
-    # position by exactly (0.5, 0, ...), matching this anchor. y needs no
-    # correction (anchor y is 0), kept here for symmetry/future-proofing.
-    base_anchor_x: -0.5
-    base_anchor_y:  0.0
-
-    nmpc:
-      Ts: 0.05                    # [s] horizon-step interval (not the sim dt)
-      N:  20                      # horizon steps. NOTE: VORTEX's own reference scenario
-                                  # for this model uses N=40, but that's tuned for the
-                                  # multi-shooting SQP path (re-linearizes every node) —
-                                  # this port only linearizes once at k=0, so doubling N
-                                  # just extrapolates further on a staler model. Tested
-                                  # N=40 here: max joint-limit slack ~4 vs ~0.4, qpsolve
-                                  # ~19ms vs ~6ms (eats the whole 50 Hz control period).
-                                  # Keep at 20 unless the SQP path gets ported.
-      
-      full_nonlinear: false       # true ⇒ multiple-shooting SQP path. Ported and
-                                  # runs (no crashes, correct fallback chain), but
-                                  # UNTUNED: at this file's linear-path tuning
-                                  # (N=20) the multi-stage QP occasionally fails
-                                  # to converge (falls back to the single-stage
-                                  # QP, which itself occasionally falls back to
-                                  # Riccati) and averages ~6-7ms/tick, over
-                                  # budget at control_hz=200 (fine at 50Hz's
-                                  # 20ms). Needs its own tuning pass before
-                                  # relying on it — VORTEX's own reference specs
-                                  # for this exact model (N=40,
-                                  # terminal_cost_multiplier=2000) were written
-                                  # for this path, not the linear one.
-      sqp_iters: 1
-      Hg_damping: 0.001           # DLS damping for H_g inversion
-      tau_max: 1.0              # [N*m] global post-hoc torque clamp
-      rollout_v_clamp_mult: 2.0
-      terminal_velocity_constraint: true
-      terminal_cost_multiplier: 100.0
-
-    weights:
-      Q_pos:        [10.0,   10.0,   1.0   ]   # EE (x, y, θz) position error
-      Q_vel:        [ 1.0,    1.0,   3.0   ]   # EE (x, y, θz) velocity error. x/y stay
-                                                # undamped (already well-behaved); θz is
-                                                # damped because the wrist's rotational
-                                                # inertia is much lower than its
-                                                # translational one, so with Qdotwz=0 the
-                                                # yaw channel is far more lightly damped
-                                                # than x/y at the same Qwz/Rwz — it visibly
-                                                # oscillates (edot_th swinging +-2.5 rad/s
-                                                # every tick even once e_th had converged)
-                                                # while x/y track cleanly. Confirmed 2.0
-                                                # tames it (edot_th mostly <0.7, several
-                                                # near 0) without hurting x/y or slack.
-      R:            [  1.0e-2, 1.0e-2, 1.0e-1]  # task-space effort regularization
-      Q_ori:        [ 10.0,   10.0,   10.0  ]   # unused in the planar law
-      Q_angvel:     [  0.0,    0.0,    0.0  ]   # unused
-      R_ori:        [  1.0e-3, 1.0e-3, 1.0e-3]  # unused
-      du_max_trans: [ 50.0,   50.0,   50.0  ]   # SQP trust region (full-nonlinear only)
-      du_max_rot:   [  5.0,    5.0,    5.0  ]   # SQP trust region (full-nonlinear only)
-
-    qp:
-      max_iter: 50
-      tol: 1.0e-6
-      reg_prim: 1.0e-6
-      warm_start: 2                    # 0 cold, 1 primal, 2 primal+dual
-      joint_slack_linear: 1.0e3
-      joint_slack_quadratic: 1.0e4
-      torque_slack_linear: 1.0e2
-      torque_slack_quadratic: 1.0e3
-
-pat_arm_nmpc_left:
-  ros__parameters:
-    arm_side: "left"
-    ee_site_name: "ee_site_L"
-    joint_names:  [joint2_L, joint3_L, joint5_L]
-    owned_joints: [joint2_L, joint3_L, joint5_L]
-    limits:
-      q_min:   [ 0.0,   -2.967, -1.22]   # [rad]  (servicer model joint ranges)
-      q_max:   [ 3.14,   0.0,    1.22]   # [rad]
-      qd_max:  [ 1.0,    1.0,    0.5 ]   # [rad/s], symmetric
-      tau_max: [ 0.5,   0.5,    0.5 ]   # [N*m], symmetric — matches MJCF motor ctrlrange
-
-pat_arm_nmpc_right:
-  ros__parameters:
-    arm_side: "right"
-    ee_site_name: "ee_site_R"
-    joint_names:  [joint2_R, joint3_R, joint5_R]
-    owned_joints: [joint2_R, joint3_R, joint5_R]
-    limits:
-      q_min:   [ 0.0,   -2.967, -1.22]
-      q_max:   [ 3.14,   0.0,    1.22]
-      qd_max:  [ 1.0,    1.0,    0.5 ]
-      tau_max: [ 0.5,    0.5,    0.5 ]
-
-# # ------------------------------------------------ #
-# # ------------------- SQP NMPC ------------------- #
-# # ------------------------------------------------ #
-
 # /**: # <--- wildcard: all nodes (that load this file) share these parameters 
 #   ros__parameters:
 #     mjcf_path: ""
-#     control_hz: 200.0
+#     control_hz: 100.0
 #     model_joint_names: [joint2_L, joint3_L, joint5_L, joint2_R, joint3_R, joint5_R]
 #     # /chaser/odom's chaser_x/y are the chaser's slide-joint values relative
 #     # to air_bearing_table.xacro's own <body name="chaser" pos="-0.5 0 ...">
@@ -140,26 +33,56 @@ pat_arm_nmpc_right:
 #     base_anchor_y:  0.0
 
 #     nmpc:
-#       Ts: 0.01                    
-#       N:  10                      
+#       Ts: 0.5                    # [s] horizon-step interval (not the sim dt)
+#       N:  50                      # horizon steps. NOTE: VORTEX's own reference scenario
+#                                   # for this model uses N=40, but that's tuned for the
+#                                   # multi-shooting SQP path (re-linearizes every node) —
+#                                   # this port only linearizes once at k=0, so doubling N
+#                                   # just extrapolates further on a staler model. Tested
+#                                   # N=40 here: max joint-limit slack ~4 vs ~0.4, qpsolve
+#                                   # ~19ms vs ~6ms (eats the whole 50 Hz control period).
+#                                   # Keep at 20 unless the SQP path gets ported.
       
-#       full_nonlinear: true       
+#       full_nonlinear: false       # true ⇒ multiple-shooting SQP path. Ported and
+#                                   # runs (no crashes, correct fallback chain), but
+#                                   # UNTUNED: at this file's linear-path tuning
+#                                   # (N=20) the multi-stage QP occasionally fails
+#                                   # to converge (falls back to the single-stage
+#                                   # QP, which itself occasionally falls back to
+#                                   # Riccati) and averages ~6-7ms/tick, over
+#                                   # budget at control_hz=200 (fine at 50Hz's
+#                                   # 20ms). Needs its own tuning pass before
+#                                   # relying on it — VORTEX's own reference specs
+#                                   # for this exact model (N=40,
+#                                   # terminal_cost_multiplier=2000) were written
+#                                   # for this path, not the linear one.
 #       sqp_iters: 1
 #       Hg_damping: 0.001           # DLS damping for H_g inversion
 #       tau_max: 1.0              # [N*m] global post-hoc torque clamp
 #       rollout_v_clamp_mult: 2.0
 #       terminal_velocity_constraint: true
-#       terminal_cost_multiplier: 200.0
+#       terminal_cost_multiplier: 100.0
 
 #     weights:
-#       Q_pos:        [10.0,   10.0,   1.0   ]   
-#       Q_vel:        [ 1.0,    1.0,   3.0   ]   
-#       R:            [ 1.0e-1, 1.0e-1, 1.0e-1]  # task-space effort regularization
-#       Q_ori:        [10.0,   10.0,   10.0  ]   # unused in the planar law
-#       Q_angvel:     [ 0.0,    0.0,    0.0  ]   # unused
-#       R_ori:        [ 1.0e-3, 1.0e-3, 1.0e-3]  # unused
-#       du_max_trans: [50.0,   50.0,   50.0  ]   # SQP trust region (full-nonlinear only)
-#       du_max_rot:   [ 5.0,    5.0,    5.0  ]   # SQP trust region (full-nonlinear only)
+#       Q_pos:        [10.0,   10.0,   1.0   ]   # EE (x, y, θz) position error
+#       Q_vel:        [ 1.0,    1.0,   3.0   ]   # EE (x, y, θz) velocity error. x/y stay
+#                                                 # undamped (already well-behaved); θz is
+#                                                 # damped because the wrist's rotational
+#                                                 # inertia is much lower than its
+#                                                 # translational one, so with Qdotwz=0 the
+#                                                 # yaw channel is far more lightly damped
+#                                                 # than x/y at the same Qwz/Rwz — it visibly
+#                                                 # oscillates (edot_th swinging +-2.5 rad/s
+#                                                 # every tick even once e_th had converged)
+#                                                 # while x/y track cleanly. Confirmed 2.0
+#                                                 # tames it (edot_th mostly <0.7, several
+#                                                 # near 0) without hurting x/y or slack.
+#       R:            [  1.0e-2, 1.0e-2, 1.0e-1]  # task-space effort regularization
+#       Q_ori:        [ 10.0,   10.0,   10.0  ]   # unused in the planar law
+#       Q_angvel:     [  0.0,    0.0,    0.0  ]   # unused
+#       R_ori:        [  1.0e-3, 1.0e-3, 1.0e-3]  # unused
+#       du_max_trans: [ 50.0,   50.0,   50.0  ]   # SQP trust region (full-nonlinear only)
+#       du_max_rot:   [  5.0,    5.0,    5.0  ]   # SQP trust region (full-nonlinear only)
 
 #     qp:
 #       max_iter: 50
@@ -180,7 +103,7 @@ pat_arm_nmpc_right:
 #     limits:
 #       q_min:   [ 0.0,   -2.967, -1.22]   # [rad]  (servicer model joint ranges)
 #       q_max:   [ 3.14,   0.0,    1.22]   # [rad]
-#       qd_max:  [ 2.0,    2.0,    1.5 ]   # [rad/s], symmetric
+#       qd_max:  [ 1.0,    1.0,    0.5 ]   # [rad/s], symmetric
 #       tau_max: [ 0.5,   0.5,    0.5 ]   # [N*m], symmetric — matches MJCF motor ctrlrange
 
 # pat_arm_nmpc_right:
@@ -192,5 +115,82 @@ pat_arm_nmpc_right:
 #     limits:
 #       q_min:   [ 0.0,   -2.967, -1.22]
 #       q_max:   [ 3.14,   0.0,    1.22]
-#       qd_max:  [ 2.0,    2.0,    1.5 ]
+#       qd_max:  [ 1.0,    1.0,    0.5 ]
 #       tau_max: [ 0.5,    0.5,    0.5 ]
+
+# ------------------------------------------------ #
+# ------------------- SQP NMPC ------------------- #
+# ------------------------------------------------ #
+
+/**: # <--- wildcard: all nodes (that load this file) share these parameters 
+  ros__parameters:
+    mjcf_path: ""
+    control_hz: 200.0
+    model_joint_names: [joint2_L, joint3_L, joint5_L, joint2_R, joint3_R, joint5_R]
+    # /chaser/odom's chaser_x/y are the chaser's slide-joint values relative
+    # to air_bearing_table.xacro's own <body name="chaser" pos="-0.5 0 ...">
+    # anchor, NOT true world-frame position -- this controller's own internal
+    # model has zero anchor offset (pat_platform_planar.xacro's freejoint
+    # body is at pos="0 0 0"), so this corrects odom's x at the read (see
+    # arm_nmpc_node.h's onOdom comment). Confirmed via pat_simulation's
+    # ee_setpoint marker: published ee_pose was off from the true MuJoCo site
+    # position by exactly (0.5, 0, ...), matching this anchor. y needs no
+    # correction (anchor y is 0), kept here for symmetry/future-proofing.
+    base_anchor_x: -0.5
+    base_anchor_y:  0.0
+
+    nmpc:
+      Ts: 0.025
+      N:  40
+      
+      full_nonlinear: true       
+      sqp_iters: 1
+      Hg_damping: 0.001           # DLS damping for H_g inversion
+      tau_max: 1.0              # [N*m] global post-hoc torque clamp
+      rollout_v_clamp_mult: 2.0
+      terminal_velocity_constraint: true
+      terminal_cost_multiplier: 100.0
+
+    weights:
+      Q_pos:        [10.0,   10.0,   1.0   ]   
+      Q_vel:        [ 1.0,    1.0,   3.0   ]   
+      R:            [ 1.0e-1, 1.0e-1, 1.0e-1]  # task-space effort regularization
+      Q_ori:        [10.0,   10.0,   10.0  ]   # unused in the planar law
+      Q_angvel:     [ 0.0,    0.0,    0.0  ]   # unused
+      R_ori:        [ 1.0e-3, 1.0e-3, 1.0e-3]  # unused
+      du_max_trans: [50.0,   50.0,   50.0  ]   # SQP trust region (full-nonlinear only)
+      du_max_rot:   [ 5.0,    5.0,    5.0  ]   # SQP trust region (full-nonlinear only)
+
+    qp:
+      max_iter: 100
+      tol: 1.0e-5
+      reg_prim: 1.0e-6
+      warm_start: 2                    # 0 cold, 1 primal, 2 primal+dual
+      joint_slack_linear: 1.0e3
+      joint_slack_quadratic: 1.0e4
+      torque_slack_linear: 1.0e2
+      torque_slack_quadratic: 1.0e3
+
+pat_arm_nmpc_left:
+  ros__parameters:
+    arm_side: "left"
+    ee_site_name: "ee_site_L"
+    joint_names:  [joint2_L, joint3_L, joint5_L]
+    owned_joints: [joint2_L, joint3_L, joint5_L]
+    limits:
+      q_min:   [ 0.0,   -2.967, -1.22]   # [rad]  (servicer model joint ranges)
+      q_max:   [ 3.14,   0.0,    1.22]   # [rad]
+      qd_max:  [ 2.0,    2.0,    1.5 ]   # [rad/s], symmetric
+      tau_max: [ 0.5,   0.5,    0.5 ]   # [N*m], symmetric — matches MJCF motor ctrlrange
+
+pat_arm_nmpc_right:
+  ros__parameters:
+    arm_side: "right"
+    ee_site_name: "ee_site_R"
+    joint_names:  [joint2_R, joint3_R, joint5_R]
+    owned_joints: [joint2_R, joint3_R, joint5_R]
+    limits:
+      q_min:   [ 0.0,   -2.967, -1.22]
+      q_max:   [ 3.14,   0.0,    1.22]
+      qd_max:  [ 2.0,    2.0,    1.5 ]
+      tau_max: [ 0.5,    0.5,    0.5 ]

@@ -44,6 +44,14 @@ public:
     void setJointPositions(const std::vector<std::string>& joint_names,
                             const std::vector<double>& positions);
 
+    /// Overwrite viscous damping and dry (Coulomb) friction on the named
+    /// 1-DOF joints, in place (the model's <joint damping/frictionloss> are
+    /// otherwise fixed at xacro build time). Intended to be called once after
+    /// construction. Throws on size mismatch, unknown joint, or negative value.
+    void setJointDrag(const std::vector<std::string>& joint_names,
+                      const std::vector<double>& damping,
+                      const std::vector<double>& frictionloss);
+
     double time() const noexcept;
     double dt()   const noexcept;
 

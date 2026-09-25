@@ -640,7 +640,12 @@ Eigen::VectorXd ArmNMPC::solveNonlinearMPC(
                 // few nodes in, eventually producing a NaN Lambda_inv) --
                 // keeping the rollout's plant model consistent with the real
                 // actuator saturation avoids that.
-                Eigen::VectorXd tau_joints_k = ts.J_task.transpose() * u_bar_[k];
+                // The torque handed to the plant model is the same one
+                // finalizeJointTorques() applies for real: J^T u + Cv_joints
+                // (feedforward included), clamped as a whole -- so the
+                // rollout predicts the plant that actually runs, and matches
+                // the QP's own model (H_g qddot = J^T u).
+                Eigen::VectorXd tau_joints_k = ts.J_task.transpose() * u_bar_[k] + nd.Cv_joints;
                 for (int i = 0; i < n_j; ++i) {
                     tau_joints_k[i] = std::max(-torqueLimsByIndex[i],
                                                 std::min(torqueLimsByIndex[i], tau_joints_k[i]));
@@ -702,6 +707,15 @@ Eigen::VectorXd ArmNMPC::solveNonlinearMPC(
                 D_k, lg_k, ug_k, x_aug_nodes[0].data(),
                 Q_N.data());
         }
+        // A solver that reports success but returns non-finite controls is a
+        // failed solve: letting it into u_bar_ poisons every later rollout.
+        if (ok) {
+            Eigen::VectorXd uk(d);
+            for (int k = 0; k < N && ok; ++k) {
+                qp_->getU(k, uk.data());
+                ok = uk.allFinite();
+            }
+        }
         lastIterOk = ok;
         if (ok) {
             // Control trust region: damp each freshly solved uk relative to
@@ -727,6 +741,9 @@ Eigen::VectorXd ArmNMPC::solveNonlinearMPC(
             // Rest of u_bar_ is NOT trustworthy as a warm start here -- see
             // the shift-vs-reset logic below, which resets the whole
             // trajectory to zero instead of shifting it when this happens.
+            // Remaining SQP iterations are skipped: they would relinearize
+            // around that untrusted trajectory.
+            break;
         }
     }
 

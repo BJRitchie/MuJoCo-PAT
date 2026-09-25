@@ -19,6 +19,7 @@ Physics: MuJoCo 3. Control: PID (MVP) → LQR → MPC. Navigation: direct (MVP) 
 | `pat_robotics` | ✅ | IJointController + JointPID + ArmController, arm_control_node. IManipulator (FK/IK/Jacobian) still a stub |
 | `pat_arm_nmpc` | 🟡 | Dual-arm task-space NMPC (port of VORTEX `fswAlgorithms/jointControl`). Planar (x,y,θz) linearized path (the default, `nmpc.yaml`'s `full_nonlinear: false`) is tuned and runs against the acados/HPIPM QP. The full-nonlinear multi-shooting SQP path (`full_nonlinear: true`) is ported and runs without crashing, but is **untuned** — the linear path's current weights/`N`/`control_hz` don't suit it (see `nmpc.yaml`'s `full_nonlinear` comment). `ee_target_publisher` is a stand-in mission node (fixed reachable-waypoint loop); a real planner is still future work. |
 | `pat_vision` | ❌ Phase 3 | Not created |
+| `pat_telemetry` | ✅ | Merges `joint_states`/`torque_command` by name and publishes each arm's EE distance from setpoint (`/chaser/telemetry/*`) for live plotting (PlotJuggler, dev image only — see `docker/Dockerfile`'s `dev` stage). Builds for `runtime` too; touches only existing sim/hardware-boundary topics, so it works unchanged against real hardware. |
 
 ## Sim-to-real: the constraint that governs everything
 

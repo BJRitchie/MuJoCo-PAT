@@ -151,7 +151,9 @@ protected:
      *  blocks since J_b^-1 H_bb H_bm correction is linear per-row. */
     Eigen::MatrixXd gjm6(int site_id, mjData* data = nullptr) const;
 
-    /*! Joint generalised inertia H_g and Coriolis / centrifugal Cv_joints. */
+    /*! Joint generalised inertia H_g and generalised Coriolis / centrifugal
+     *  bias Cv_joints = c_m - H_bm^T H_bb^-1 c_b (base eliminated, so that
+     *  H_g qddot + Cv_joints = tau holds for the unactuated floating base). */
     void getDynamics(Eigen::MatrixXd& H_g, Eigen::VectorXd& Cv_joints,
                       mjData* data = nullptr) const;
 
@@ -185,11 +187,13 @@ protected:
      *  set on the joint rows only -- base rows get zero direct actuation,
      *  same as the real system), then semi-implicit-Euler-integrates
      *  (mj_integratePos() for q, which correctly handles the free joint's
-     *  quaternion component). tau_joints_generalized is the RAW commanded
-     *  joint torque (n_joints_, e.g. J_task^T*tau_task) -- do NOT add a
-     *  Cv_joints feedforward term first, since mj_forward computes the true
-     *  bias/Coriolis/gravity forces for the full coupled system itself.
-     *  Never touches mj_->data. */
+     *  quaternion component). tau_joints_generalized is the torque the real
+     *  plant would actually receive (n_joints_) -- i.e. INCLUDING the Cv_joints
+     *  feedforward, J_task^T*tau_task + Cv_joints, as finalizeJointTorques()
+     *  applies it. mj_forward supplies the true bias/Coriolis/gravity forces
+     *  itself, and the feedforward cancels them (it is not double-counted);
+     *  omitting it predicts a plant with no Coriolis compensation, which is
+     *  not what runs. Never touches mj_->data. */
     void integrateStep(const Eigen::VectorXd& q, const Eigen::VectorXd& v,
                         const Eigen::VectorXd& tau_joints_generalized, double Ts,
                         Eigen::VectorXd& q_next, Eigen::VectorXd& v_next) const;

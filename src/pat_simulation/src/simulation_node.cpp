@@ -85,6 +85,26 @@ SimulationNode::SimulationNode() : Node("pat_simulation") {
         RCLCPP_INFO(get_logger(), "Applied initial_target_qpos override");
     }
 
+    // Table drag on the planar platforms. The air-bearing table is modelled as
+    // per-DOF joint damping (viscous) + frictionloss (dry) - the bodies don't
+    // contact the table geom (different collision group, and gravity is off),
+    // so the surface geom's own friction never applies. Order: x, y, yaw.
+    // Defaults reproduce the previously hardcoded xacro values.
+    const auto chaser_damping  = declare_parameter<std::vector<double>>(
+        "chaser_damping", std::vector<double>{0.05, 0.05, 0.02});
+    const auto chaser_floss    = declare_parameter<std::vector<double>>(
+        "chaser_frictionloss", std::vector<double>{0.0, 0.0, 0.0});
+    const auto target_damping  = declare_parameter<std::vector<double>>(
+        "target_damping", std::vector<double>{0.01, 0.01, 0.005});
+    const auto target_floss    = declare_parameter<std::vector<double>>(
+        "target_frictionloss", std::vector<double>{0.0, 0.0, 0.0});
+    for (const auto* v : {&chaser_damping, &chaser_floss, &target_damping, &target_floss})
+        if (v->size() != 3)
+            throw std::runtime_error(
+                "chaser/target damping and frictionloss must each have exactly 3 entries (x, y, yaw)");
+    sim_->setJointDrag({"chaser_x", "chaser_y", "chaser_yaw"}, chaser_damping, chaser_floss);
+    sim_->setJointDrag({"target_x", "target_y", "target_yaw"}, target_damping, target_floss);
+
     // Publishers
     ch_odom_ = create_publisher<nav_msgs::msg::Odometry>("/chaser/odom", 10);
     tg_odom_ = create_publisher<nav_msgs::msg::Odometry>("/target/odom", 10);

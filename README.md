@@ -15,6 +15,28 @@ Planar Air-bearing Table simulator for ISAM GNC and manipulation research.
     QP (unconstrained backward-Riccati fallback if the QP fails to converge)
 - Chaser bus + two planar Agilex-Piper 3R arms, shared between the sim plant and
   the NMPC's internal dynamics model via a `pat_platform_description` xacro
+- Real CAD meshes (from the PAT digital twin) rendered over simple collision
+  primitives; the primitives stay the sole authority for physics and collision
+- Configurable air-bearing table drag (viscous damping + dry friction per planar
+  DOF) in `pat_simulation/config/simulation.yaml`
+- Live telemetry plotting (`pat_telemetry` + PlotJuggler)
+
+## Packages
+
+| Package | Role |
+|---|---|
+| `pat_msgs` | `ThrusterCommand`, `ControlError` messages |
+| `pat_platform_description` | shared xacro: bus + planar arm, expanded to MJCF at build time |
+| `pat_simulation` | MuJoCo sim node + viewer — the hardware stand-in |
+| `pat_gnc` | PID controller, direct/EKF navigation |
+| `pat_robotics` | per-joint arm PID |
+| `pat_arm_nmpc` | dual-arm task-space NMPC |
+| `pat_telemetry` | merges joint state/torque, publishes EE-to-setpoint distance |
+
+`tools/pinn_datagen/` (offline training-data generator, not a ROS package) and
+`src/PAT_digital_twin-main/` (RViz digital-twin viewer and CAD source) live
+alongside these; see their own READMEs. Architecture rules and conventions for
+contributors are in [`CLAUDE.md`](CLAUDE.md).
 
 ## Docker (recommended)
 
@@ -54,14 +76,31 @@ many terminals into it as you like. `docker compose down` stops it when you're
 done; leaving it running is also fine.
 
 Rebuild one package: `colcon build --packages-select pat_arm_nmpc` (`MAKEFLAGS=-j2`
-is preset so it won't OOM). Config / launch / xacro edits need no rebuild
-(`--symlink-install`).
+is preset so it won't OOM). Rebuild after editing anything under `src/`
+(including YAML configs and xacro models — installed files are copies, and
+xacro is expanded to MJCF at build time). Only the top-level `launch/*.py`
+files run straight from the source tree and pick up edits immediately.
 
 **VS Code / Cursor:** *"Dev Containers: Reopen in Container"* uses the same
 `dev` compose service; [`.devcontainer/`](.devcontainer/devcontainer.json) only
 adds the extension set and runs the first `colcon build`.
 
-Local-machine tweaks (GPU, extra mounts, ports) go in a gitignored
+**Graphics acceleration.** `docker-compose.yml` passes through `/dev/dri` (and
+reserves an NVIDIA GPU) so the MuJoCo viewer is hardware-accelerated — with the
+CAD meshes, software rendering (Mesa `llvmpipe`) is very slow. Two host-specific
+details to check on a new machine:
+
+- `group_add` uses the maintainer's `video`/`render` GIDs (`44`, `110`); check
+  yours with `getent group video render` and edit to match.
+- If the container won't start because `/dev/dri` or the NVIDIA runtime doesn't
+  exist on your host, delete those entries (or override them).
+
+Verify inside the container with `sudo apt-get install -y mesa-utils && glxinfo -B`
+— you want `Accelerated: yes`, not `llvmpipe`. On a hybrid-graphics laptop the
+`/dev/dri` passthrough is what matters, since the X server usually runs on the
+integrated GPU rather than the NVIDIA card.
+
+Other local-machine tweaks (extra mounts, ports) go in a gitignored
 `docker-compose.override.yml`.
 
 Other targets: `--target runtime` is the headless Jetson deploy image (algorithm
@@ -94,9 +133,10 @@ All launch files take `use_sim_time:=true` by default.
 | Launch | Brings up |
 |---|---|
 | `full_stack.launch.py` | sim + GNC (PID) + arm PID (`pat_robotics`) |
-| `full_stack_nmpc.launch.py` | sim + dual-arm NMPC (`pat_arm_nmpc`), chaser **undriven** — `with_gnc:=true` also runs GNC; `with_targets:=true` also runs `ee_target_publisher` |
+| `full_stack_nmpc.launch.py` | sim + dual-arm NMPC (`pat_arm_nmpc`), chaser **undriven** — `with_gnc:=true` also runs GNC; `with_targets:=true` also runs `ee_target_publisher`; `telemetry:=true` adds `pat_telemetry`; `plotjuggler:=true` also opens PlotJuggler with the saved layout |
 | `simulation.launch.py` | MuJoCo sim only |
-| `gnc.launch.py` | GNC only (against the sim or real hardware) — `navigator:=ekf` for the EKF |
+| `gnc.launch.py` | GNC only (against the sim or real hardware) — choose the EKF with `navigator: "ekf"` in `src/pat_gnc/config/pid.yaml` |
+| `arm_control.launch.py` | per-joint arm PID (`pat_robotics`) only |
 
 ### Command the arms (task-space NMPC)
 
@@ -149,10 +189,58 @@ If nothing moves: check `ros2 node list` shows `/pat_arm_nmpc_left` and
 non-zero. An empty `ros2 node list` or a `ros2 topic hz` segfault means the DDS
 transport is broken — the container needs `--ipc=host --pid=host` (above).
 
+### The viewer
+
+| Input | Action |
+|---|---|
+| Left-drag | rotate camera |
+| Right-drag / scroll | zoom |
+| `C` | toggle collision geometry (semi-transparent magenta) and the EE-site markers, both hidden by default |
+| `Space` | pause / resume rendering (physics keeps running) |
+| `Esc` / `Q` | close the window |
+
+For a headless run, add `visualise: false` under `pat_simulation.ros__parameters`
+in `src/pat_simulation/config/simulation.yaml` (then rebuild).
+
+### Simulation parameters
+
+`src/pat_simulation/config/simulation.yaml` also holds the initial arm pose
+(`initial_arm_qpos`) and the air-bearing table drag on the chaser and target,
+per planar DOF `[x, y, yaw]`:
+
+```yaml
+chaser_damping:      [0.05, 0.05, 0.02]   # viscous
+chaser_frictionloss: [0.0, 0.0, 0.0]      # dry / Coulomb
+target_damping:      [0.01, 0.01, 0.005]
+target_frictionloss: [0.0, 0.0, 0.0]
+```
+
+The platforms never contact the table geometry (gravity is off and they sit in a
+different collision group), so these joint terms are the only drag they feel.
+`pat_arm_nmpc`'s internal model has no such drag, so raising them appears to the
+controller as unmodelled disturbance.
+
+### Live telemetry
+
+```bash
+ros2 launch launch/full_stack_nmpc.launch.py with_targets:=true telemetry:=true plotjuggler:=true
+```
+
+`pat_telemetry` publishes `/chaser/telemetry/joint_states` (position, velocity
+and torque merged by joint name) and `/chaser/telemetry/ee_distance/{left,right}`
+(planar distance from each end effector to its setpoint). PlotJuggler opens with
+the layout in `src/pat_telemetry/config/telemetry.xml` — joint torque / position /
+velocity, base odometry (the free-floating base's velocity is the disturbance
+from arm reaction), and EE tracking distance. It still asks you to confirm the
+streaming plugin and the topic list on each start; the delay before it opens is
+the `TimerAction` period in `launch/full_stack_nmpc.launch.py`. To run PlotJuggler
+yourself: `ros2 run plotjuggler plotjuggler --layout <path to telemetry.xml>`.
+PlotJuggler is installed in the `dev` image only.
+
 ## Test
 
 ```bash
-colcon test --packages-select pat_gnc pat_robotics pat_simulation pat_arm_nmpc
+colcon test --packages-select pat_gnc pat_robotics pat_simulation pat_arm_nmpc pat_telemetry
 colcon test-result --verbose
 ```
 

@@ -143,12 +143,22 @@ void ArmTaskSpaceController::getDynamics(
     Eigen::MatrixXd H_mm = M.bottomRightCorner(n_joints_, n_joints_);
 
     // Generalised inertia:  H_g = H_mm − H_bm^T H_bb^{−1} H_bm
-    H_g = H_mm - H_bm.transpose() * H_bb.ldlt().solve(H_bm);
+    const auto H_bb_ldlt = H_bb.ldlt();
+    H_g = H_mm - H_bm.transpose() * H_bb_ldlt.solve(H_bm);
 
+    // Generalised bias, same base elimination as H_g (unactuated base):
+    //   Cv_g = c_m − H_bm^T H_bb^{−1} c_b
+    // The raw joint slice c_m alone is not the reduced-system bias -- it
+    // omits the base Coriolis reaction, so the feedforward under-cancels and
+    // H_g q̈ = J^T τ no longer holds (consistent with H_g, gjm6 and
+    // jdotQdot6, which all apply this same elimination).
+    Eigen::VectorXd c_b(6);
+    for (int i = 0; i < 6; ++i) c_b[i] = d->qfrc_bias[i];
     Cv_joints.resize(n_joints_);
     for (int i = 0; i < n_joints_; ++i) {
         Cv_joints[i] = d->qfrc_bias[6 + i];
     }
+    Cv_joints -= H_bm.transpose() * H_bb_ldlt.solve(c_b);
 }
 
 Eigen::Matrix3Xd ArmTaskSpaceController::gjm(int site_id, mjData* data) const
@@ -301,24 +311,34 @@ void ArmTaskSpaceController::integrateStep(
     for (int i = 0; i < nq; ++i) d->qpos[i] = q[i];
     for (int i = 0; i < nv; ++i) d->qvel[i] = v[i];
 
-    // Raw commanded joint torque only -- no direct actuation on the free
-    // floating base. mj_forward computes the true coupled bias/Coriolis/
-    // gravity forces for the FULL system itself as part of solving qacc, so
-    // qfrc_applied must NOT also carry a separately-derived Cv_joints term
-    // (that would double-count it).
+    // Joint torque as the real plant receives it (the caller includes the
+    // Cv_joints feedforward) -- no direct actuation on the free floating
+    // base. mj_forward computes the true coupled bias/Coriolis/gravity forces
+    // for the FULL system itself as part of solving qacc; the feedforward in
+    // qfrc_applied cancels them, exactly as it does on the real plant.
     for (int i = 0; i < 6; ++i) d->qfrc_applied[i] = 0.0;
     for (int i = 0; i < n_joints_; ++i) d->qfrc_applied[6 + i] = tau_joints_generalized[i];
 
     mj_forward(mj_->model, d);   // solves the full coupled base+joint qacc
 
     v_next.resize(nv);
-    for (int i = 0; i < nv; ++i) v_next[i] = v[i] + Ts * d->qacc[i];
+    Eigen::VectorXd v_mid(nv);
+    for (int i = 0; i < nv; ++i) {
+        v_next[i] = v[i] + Ts * d->qacc[i];
+        v_mid[i]  = v[i] + 0.5 * Ts * d->qacc[i];
+    }
 
     q_next = q;
+    // Position advances with the MID-interval velocity, i.e. exact
+    // constant-acceleration integration (dq = Ts*v + Ts^2/2*a). Using v_next
+    // (semi-implicit Euler) gives dq = Ts*v + Ts^2*a -- double the
+    // acceleration's contribution, inconsistent with both the real plant
+    // (constant torque over Ts) and the QP model's B (-Ts^2/2 * Lambda_inv),
+    // and worse the larger Ts is.
     // mj_integratePos correctly integrates the free joint's quaternion
     // component via the exponential map -- naive q + Ts*v is only valid for
     // the hinge/slide joint rows and would corrupt the base orientation.
-    mj_integratePos(mj_->model, q_next.data(), v_next.data(), Ts);
+    mj_integratePos(mj_->model, q_next.data(), v_mid.data(), Ts);
 }
 
 Eigen::Vector3d ArmTaskSpaceController::sat(const Eigen::Vector3d& x)

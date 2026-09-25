@@ -150,6 +150,18 @@ pat_arm_nmpc::NMPCParams ArmNMPCNode::loadParams() {
     p.du_max_x = du_trans[0];  p.du_max_y = du_trans[1];  p.du_max_z = du_trans[2];
     p.du_max_wx = du_rot[0];   p.du_max_wy = du_rot[1];   p.du_max_wz = du_rot[2];
 
+    // The planar law's θz channel is built from Qwz / Qdotwz / Rwz (see
+    // ArmNMPC::controlLaw), but the documented contract (nmpc.yaml header) is
+    // that weights.Q_pos / Q_vel / R are 3-vectors [x, y, θz] and Q_ori /
+    // Q_angvel / R_ori are unused. Map the θz entries onto the fields the law
+    // reads, otherwise the yaw weights a user tunes are silently ignored and
+    // yaw runs with Q_ori/Q_angvel/R_ori's defaults instead (undamped, near-
+    // zero effort cost against a plant gain ~100x the x/y channels', which
+    // makes the SQP iteration diverge at larger Ts).
+    p.Qwz    = q_pos[2];
+    p.Qdotwz = q_vel[2];
+    p.Rwz    = r_trans[2];
+
     p.qp_max_iter    = declare_parameter<int>("qp.max_iter", p.qp_max_iter);
     p.qp_tol         = declare_parameter<double>("qp.tol", p.qp_tol);
     p.qp_reg_prim    = declare_parameter<double>("qp.reg_prim", p.qp_reg_prim);

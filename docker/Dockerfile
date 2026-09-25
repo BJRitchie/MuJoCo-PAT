@@ -110,10 +110,15 @@ ARG MUJOCO_VERSION
 ARG DEBIAN_FRONTEND=noninteractive
 ARG USER_UID=1000
 ARG USER_GID=1000
+# plotjuggler-ros: live telemetry plotting GUI for pat_telemetry's topics.
+# dev-only — a GUI tool has no place on the headless Jetson `runtime` image;
+# view real-hardware telemetry from a laptop's own PlotJuggler pointed at
+# the Jetson's ROS 2 domain over the network instead.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libglfw3-dev libglew-dev libgl1-mesa-dev \
         gdb clangd sudo \
     && apt-get install -y --no-install-recommends ros-${ROS_DISTRO}-desktop \
+    && apt-get install -y --no-install-recommends ros-${ROS_DISTRO}-plotjuggler-ros \
     && rm -rf /var/lib/apt/lists/*
 RUN apt-get update && apt-get install -y --no-install-recommends python3-pip \
     && rm -rf /var/lib/apt/lists/*

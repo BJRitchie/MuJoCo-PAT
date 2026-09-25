@@ -22,8 +22,12 @@
   <worldbody>
     <light name="top" pos="0 0 3" dir="0 0 -1" diffuse="0.8 0.8 0.8"/>
     <body name="table">
+      <!-- No friction attribute: the chaser/target (collision group 2) never
+           contact this plane (group 1), so it would be inert. Table drag is
+           the planar joints' damping/frictionloss, set from
+           config/simulation.yaml at startup. -->
       <geom name="surface" type="plane" size="1 1 0.01" material="table_mat"
-            friction="0.001 0.001 0.001" contype="1" conaffinity="1"/>
+            contype="1" conaffinity="1"/>
     </body>
     <body name="wall_n" pos=" 0    1.05 0.05"><geom type="box" size="1.05 0.05 0.05" material="wall_mat"/></body>
     <body name="wall_s" pos=" 0   -1.05 0.05"><geom type="box" size="1.05 0.05 0.05" material="wall_mat"/></body>
@@ -36,6 +40,8 @@
          Origin height (0.2445) is the real bus's own half-height, resting on
          the table - derived from the digital-twin's live TF tree, see
          pat_platform_bus.xacro's bus_box comment for the full derivation. -->
+    <!-- Joint damping below is only the standalone-MJCF default; pat_simulation
+         overrides it (and frictionloss) from simulation.yaml at startup. -->
     <body name="chaser" pos="-0.5 0 0.2445">
       <joint name="chaser_x"   type="slide" axis="1 0 0" damping="0.05"/>
       <joint name="chaser_y"   type="slide" axis="0 1 0" damping="0.05"/>

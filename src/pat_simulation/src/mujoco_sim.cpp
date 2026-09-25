@@ -57,6 +57,22 @@ void MuJoCoSim::setJointPositions(const std::vector<std::string>& joint_names,
     mj_forward(model_, data_);
 }
 
+void MuJoCoSim::setJointDrag(const std::vector<std::string>& joint_names,
+                             const std::vector<double>& damping,
+                             const std::vector<double>& frictionloss) {
+    if (joint_names.size() != damping.size() || joint_names.size() != frictionloss.size())
+        throw std::runtime_error(
+            "MuJoCoSim::setJointDrag: joint_names/damping/frictionloss size mismatch");
+    for (size_t i = 0; i < joint_names.size(); ++i) {
+        if (damping[i] < 0.0 || frictionloss[i] < 0.0)
+            throw std::runtime_error(
+                "MuJoCoSim::setJointDrag: negative value for joint '" + joint_names[i] + "'");
+        const int dof = model_->jnt_dofadr[jointId(joint_names[i].c_str())];
+        model_->dof_damping[dof]      = damping[i];
+        model_->dof_frictionloss[dof] = frictionloss[i];
+    }
+}
+
 void MuJoCoSim::step(const std::vector<double>& ctrl) {
     // Update the control input
     for (int i = 0; i < model_->nu && static_cast<size_t>(i) < ctrl.size(); ++i)
