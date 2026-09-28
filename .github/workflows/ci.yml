@@ -29,7 +29,7 @@ jobs:
             source /opt/ros/humble/setup.bash &&
             MAKEFLAGS=-j2 colcon build --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_TESTING=ON &&
             source install/setup.bash &&
-            colcon test --packages-select pat_gnc pat_robotics pat_simulation pat_arm_nmpc &&
+            colcon test --packages-select pat_gnc pat_robotics pat_simulation pat_arm_nmpc pat_telemetry &&
             colcon test-result --verbose'
 
   # The Jetson image: algorithm packages only, no simulator. amd64 always;

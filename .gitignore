@@ -31,3 +31,7 @@ docker-compose.override.yml
 tools/pinn_datagen/.trial_*.yaml
 tools/pinn_datagen/.trial_*.npz
 *.zip
+
+# Miscellaneous 
+docs/realtime_deployment_research.md 
+MUJOCO_LOG.TXT

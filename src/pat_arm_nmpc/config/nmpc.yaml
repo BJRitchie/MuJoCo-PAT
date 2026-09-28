@@ -43,19 +43,7 @@
 #                                   # ~19ms vs ~6ms (eats the whole 50 Hz control period).
 #                                   # Keep at 20 unless the SQP path gets ported.
       
-#       full_nonlinear: false       # true ⇒ multiple-shooting SQP path. Ported and
-#                                   # runs (no crashes, correct fallback chain), but
-#                                   # UNTUNED: at this file's linear-path tuning
-#                                   # (N=20) the multi-stage QP occasionally fails
-#                                   # to converge (falls back to the single-stage
-#                                   # QP, which itself occasionally falls back to
-#                                   # Riccati) and averages ~6-7ms/tick, over
-#                                   # budget at control_hz=200 (fine at 50Hz's
-#                                   # 20ms). Needs its own tuning pass before
-#                                   # relying on it — VORTEX's own reference specs
-#                                   # for this exact model (N=40,
-#                                   # terminal_cost_multiplier=2000) were written
-#                                   # for this path, not the linear one.
+#       full_nonlinear: false       # true ⇒ multiple-shooting SQP path. 
 #       sqp_iters: 1
 #       Hg_damping: 0.001           # DLS damping for H_g inversion
 #       tau_max: 1.0              # [N*m] global post-hoc torque clamp
@@ -104,7 +92,7 @@
 #       q_min:   [ 0.0,   -2.967, -1.22]   # [rad]  (servicer model joint ranges)
 #       q_max:   [ 3.14,   0.0,    1.22]   # [rad]
 #       qd_max:  [ 1.0,    1.0,    0.5 ]   # [rad/s], symmetric
-#       tau_max: [ 0.5,   0.5,    0.5 ]   # [N*m], symmetric — matches MJCF motor ctrlrange
+#       tau_max: [ 0.25,   0.25,    0.25 ]   # [N*m], symmetric — matches MJCF motor ctrlrange
 
 # pat_arm_nmpc_right:
 #   ros__parameters:
@@ -116,7 +104,7 @@
 #       q_min:   [ 0.0,   -2.967, -1.22]
 #       q_max:   [ 3.14,   0.0,    1.22]
 #       qd_max:  [ 1.0,    1.0,    0.5 ]
-#       tau_max: [ 0.5,    0.5,    0.5 ]
+#       tau_max: [ 0.25,    0.25,    0.25 ]
 
 # ------------------------------------------------ #
 # ------------------- SQP NMPC ------------------- #
@@ -178,10 +166,10 @@ pat_arm_nmpc_left:
     joint_names:  [joint2_L, joint3_L, joint5_L]
     owned_joints: [joint2_L, joint3_L, joint5_L]
     limits:
-      q_min:   [ 0.0,   -2.967, -1.22]   # [rad]  (servicer model joint ranges)
-      q_max:   [ 3.14,   0.0,    1.22]   # [rad]
-      qd_max:  [ 2.0,    2.0,    1.5 ]   # [rad/s], symmetric
-      tau_max: [ 0.5,   0.5,    0.5 ]   # [N*m], symmetric — matches MJCF motor ctrlrange
+      q_min:   [ 0.0,   -2.967, -1.22 ]   # [rad]  (servicer model joint ranges)
+      q_max:   [ 3.14,   0.0,    1.22 ]   # [rad]
+      qd_max:  [ 2.0,    2.0,    1.50 ]   # [rad/s], symmetric
+      tau_max: [ 0.25,   0.25,   0.25 ]   # [N*m], symmetric — matches MJCF motor ctrlrange
 
 pat_arm_nmpc_right:
   ros__parameters:
@@ -190,7 +178,7 @@ pat_arm_nmpc_right:
     joint_names:  [joint2_R, joint3_R, joint5_R]
     owned_joints: [joint2_R, joint3_R, joint5_R]
     limits:
-      q_min:   [ 0.0,   -2.967, -1.22]
-      q_max:   [ 3.14,   0.0,    1.22]
-      qd_max:  [ 2.0,    2.0,    1.5 ]
-      tau_max: [ 0.5,    0.5,    0.5 ]
+      q_min:   [ 0.0,   -2.967, -1.22 ]
+      q_max:   [ 3.14,   0.0,    1.22 ]
+      qd_max:  [ 2.0,    2.0,    1.50 ]
+      tau_max: [ 0.25,   0.25,   0.25 ]
