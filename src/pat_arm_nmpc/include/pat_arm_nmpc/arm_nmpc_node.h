@@ -78,6 +78,11 @@ private:
     double base_vx_{0.0}, base_vy_{0.0}, base_omega_{0.0};
     bool has_state_{false}, has_odom_{false}, has_setpoint_{false};
 
+    // Last mode seen, so safe-mode entry and recovery are logged once per
+    // transition rather than once per control tick.
+    pat_arm_nmpc::ArmNMPC::ControlMode prev_mode_{
+        pat_arm_nmpc::ArmNMPC::ControlMode::Nominal};
+
     rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr state_sub_;
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;
     rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr ee_setpoint_sub_;

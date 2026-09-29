@@ -74,6 +74,24 @@ private:
     double marker_height_{0.0};
     rclcpp::TimerBase::SharedPtr sim_tmr_, pub_tmr_;
     std::vector<double> ctrl_;
+
+    // Arm-torque watchdog. ctrl_ is otherwise held indefinitely, so a
+    // controller that dies or stalls would leave its last torque applied for
+    // the rest of the run — and a latched constant torque does not merely
+    // coast the arm, it accelerates it without bound once the joint reverses.
+    // Zeroing on silence is also what a real motor driver's watchdog does, so
+    // the simulated actuators behave like the hardware they stand in for.
+    // <= 0 disables the check.
+    //
+    // Counted in sim steps rather than off a clock: use_sim_time is on by
+    // default and nothing in this workspace publishes /clock, so
+    // get_clock()->now() is frozen at zero. Counting steps also keeps the
+    // window in SIMULATED time, which is the time the arm dynamics actually
+    // experience, whatever wall rate the sim happens to run at.
+    double arm_torque_timeout_{0.0};        //!< [s], as configured
+    int  arm_torque_timeout_steps_{0};      //!< the above, in sim steps
+    int  arm_torque_silent_steps_{0};
+    bool arm_torque_seen_{false};
     std::vector<std::string> arm_joint_names_;
     std::vector<int> arm_actuator_ids_;
     std::mutex mu_;

@@ -10,10 +10,20 @@
 
 using namespace std::chrono_literals;
 
+// Unnamed namespace: helpers private to this file. Unnamed rather than named
+// deliberately — it gives them internal linkage, so they never reach the linker
+// and cannot collide with a same-named helper in another translation unit.
 namespace {
 double quatToYaw(const geometry_msgs::msg::Quaternion& q) {
     return std::atan2(2.0 * (q.w * q.z + q.x * q.y),
                       1.0 - 2.0 * (q.y * q.y + q.z * q.z));
+}
+
+/*! True when every element is finite — used to reject a poisoned measurement at
+ *  the subscription instead of latching it into the cached state. */
+bool allFinite(const std::vector<double>& v) {
+    return std::all_of(v.begin(), v.end(),
+                       [](double x) { return std::isfinite(x); });
 }
 }  // namespace
 
@@ -123,6 +133,10 @@ pat_arm_nmpc::NMPCParams ArmNMPCNode::loadParams() {
     p.fullNonlinear = declare_parameter<bool>("nmpc.full_nonlinear", p.fullNonlinear);
     p.sqp_iters     = declare_parameter<int>("nmpc.sqp_iters", p.sqp_iters);
     p.Hg_damping    = declare_parameter<double>("nmpc.Hg_damping", p.Hg_damping);
+    p.safe_mode_damping_frac =
+        declare_parameter<double>("safe_mode.damping_frac", p.safe_mode_damping_frac);
+    p.safe_mode_recovery_ticks =
+        declare_parameter<int>("safe_mode.recovery_ticks", p.safe_mode_recovery_ticks);
     p.rollout_v_clamp_mult =
         declare_parameter<double>("nmpc.rollout_v_clamp_mult", p.rollout_v_clamp_mult);
     p.terminal_velocity_constraint =
@@ -219,6 +233,15 @@ void ArmNMPCNode::applyNamedValues(const sensor_msgs::msg::JointState::SharedPtr
 }
 
 void ArmNMPCNode::onJointState(sensor_msgs::msg::JointState::SharedPtr msg) {
+    // Reject a non-finite measurement rather than latching it: once it is in
+    // q_joints_/v_joints_ it poisons every later tick, since these arrays are
+    // only ever overwritten, never invalidated.
+    if (!allFinite(msg->position) || !allFinite(msg->velocity)) {
+        RCLCPP_ERROR_THROTTLE(get_logger(), *get_clock(), 1000,
+            "pat_arm_nmpc[%s]: dropping joint_states with non-finite values",
+            arm_side_.c_str());
+        return;
+    }
     std::lock_guard<std::mutex> lk(mu_);
     applyNamedValues(msg, msg->position, model_joint_names_, q_joints_);
     if (!msg->velocity.empty())
@@ -227,6 +250,18 @@ void ArmNMPCNode::onJointState(sensor_msgs::msg::JointState::SharedPtr msg) {
 }
 
 void ArmNMPCNode::onOdom(nav_msgs::msg::Odometry::SharedPtr msg) {
+    const auto& pp = msg->pose.pose.position;
+    const auto& tl = msg->twist.twist.linear;
+
+    if (!std::isfinite(pp.x) || !std::isfinite(pp.y) ||
+        !std::isfinite(tl.x) || !std::isfinite(tl.y) ||
+        !std::isfinite(msg->twist.twist.angular.z)) {
+            
+        RCLCPP_ERROR_THROTTLE(get_logger(), *get_clock(), 1000,
+            "pat_arm_nmpc[%s]: dropping odom with non-finite values",
+            arm_side_.c_str());
+        return;
+    }
     std::lock_guard<std::mutex> lk(mu_);
     // + base_anchor_{x,y}: see the header's comment on why odom's raw value
     // isn't the true world position on its own.
@@ -254,8 +289,10 @@ void ArmNMPCNode::onEeSetpoint(geometry_msgs::msg::PoseStamped::SharedPtr msg) {
 void ArmNMPCNode::controlLoop() {
     std::lock_guard<std::mutex> lk(mu_);
     if (!has_state_ || !has_odom_) {
-        RCLCPP_WARN(get_logger(),
-            "pat_arm_nmpc[%s]: controlLoop called but controller hasn't receieved state and/or odom information ", 
+        // Throttled: this fires every tick until both arrive, which at
+        // control_hz is hundreds of lines a second.
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
+            "pat_arm_nmpc[%s]: waiting for joint_states and/or odom",
             arm_side_.c_str());
         return;
     }
@@ -304,7 +341,46 @@ void ArmNMPCNode::controlLoop() {
     controller_->setDesiredPos(ee_x_, ee_y_, 0.0);
     controller_->setDesiredOrient(ee_quat_[0], ee_quat_[1], ee_quat_[2], ee_quat_[3]);
 
-    const Eigen::VectorXd tau = controller_->computeControl(q, v);
+    // computeControl handles its own numerical failures by entering safe mode,
+    // so an exception reaching here means something outside the control law
+    // itself. Damp rather than let it escape spin() and kill the process: the
+    // simulator (and a real motor driver) holds the last torque it was sent, so
+    // dying mid-motion leaves a torque applied indefinitely.
+    Eigen::VectorXd tau;
+    try {
+        tau = controller_->computeControl(q, v);
+    } catch (const std::exception& e) {
+        tau = controller_->dampingTorque(v);
+        RCLCPP_ERROR_THROTTLE(get_logger(), *get_clock(), 1000,
+            "pat_arm_nmpc[%s]: control tick threw (%s) — commanding joint damping",
+            arm_side_.c_str(), e.what());
+    }
+
+    // Log safe-mode entry/exit once per transition, not per tick.
+    const auto mode = controller_->mode();
+    if (mode != prev_mode_) {
+        if (mode == pat_arm_nmpc::ArmNMPC::ControlMode::Damping) {
+            RCLCPP_ERROR(get_logger(),
+                "pat_arm_nmpc[%s]: entering SAFE MODE (joint damping) — last QP status %d",
+                arm_side_.c_str(), controller_->lastQpStatus());
+        } else {
+            RCLCPP_INFO(get_logger(),
+                "pat_arm_nmpc[%s]: recovered from safe mode, resuming tracking "
+                "(%ld ticks damped in total)",
+                arm_side_.c_str(), controller_->safeModeTicks());
+        }
+        prev_mode_ = mode;
+    }
+
+    // Last line of defence: never hand a non-finite effort to an actuator that
+    // will latch it. dampingTorque is finite by construction, so this should be
+    // unreachable — which is exactly why it is worth asserting.
+    if (!tau.allFinite()) {
+        tau.setZero();
+        RCLCPP_ERROR_THROTTLE(get_logger(), *get_clock(), 1000,
+            "pat_arm_nmpc[%s]: non-finite torque suppressed, commanding zero",
+            arm_side_.c_str());
+    }
 
     sensor_msgs::msg::JointState cmd;
     cmd.header.stamp = get_clock()->now();
@@ -317,6 +393,18 @@ void ArmNMPCNode::controlLoop() {
 
 int main(int argc, char** argv) {
     rclcpp::init(argc, argv);
-    rclcpp::spin(std::make_shared<ArmNMPCNode>());
+    // Construction throws stay fatal — a misconfigured controller must refuse to
+    // run rather than degrade — but report them through the logger and a clean
+    // exit code instead of an uncaught terminate, which prints nothing useful.
+    std::shared_ptr<ArmNMPCNode> node;
+    try {
+        node = std::make_shared<ArmNMPCNode>();
+    } catch (const std::exception& e) {
+        RCLCPP_FATAL(rclcpp::get_logger("pat_arm_nmpc"),
+                     "failed to construct node: %s", e.what());
+        rclcpp::shutdown();
+        return 1;
+    }
+    rclcpp::spin(node);
     rclcpp::shutdown();
 }

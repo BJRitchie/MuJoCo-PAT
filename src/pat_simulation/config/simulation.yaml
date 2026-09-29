@@ -9,6 +9,13 @@ pat_simulation:
     # position: arm_joint_names[i] <-> arm_actuator_names[i].
     arm_joint_names:    ["joint2_L", "joint3_L", "joint5_L", "joint2_R", "joint3_R", "joint5_R"]
     arm_actuator_names: ["motor2_L", "motor3_L", "motor5_L", "motor2_R", "motor3_R", "motor5_R"]
+    # [s] Zero the arm actuators if no torque_command arrives for this long.
+    # Without it the last command is held for the rest of the run, so a
+    # controller that dies mid-motion leaves a constant torque applied - which
+    # does not merely coast the arm, it keeps accelerating it once the joint
+    # reverses. A real motor driver's watchdog does the same thing, so this is
+    # hardware behaviour rather than a simulation artefact. <= 0 disables.
+    arm_torque_timeout: 0.1
     # initial_arm_qpos: 6 angles (arm_joint_names order) applied once at
     # startup instead of the MJCF's default all-zero pose. NOT just a
     # tools/pinn_datagen/ convenience: with arm_contype=2 (air_bearing_table.xacro

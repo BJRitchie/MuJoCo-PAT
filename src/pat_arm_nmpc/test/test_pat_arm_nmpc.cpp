@@ -31,6 +31,10 @@ public:
     using ArmNMPC::NodeTaskSpace;
     using ArmNMPC::buildAugmentedModel;
     using ArmNMPC::ee_site_id_;
+    using ArmNMPC::enterDamping;
+    using ArmNMPC::kd_;
+    using ArmNMPC::torqueLimsByIndex;
+    using ArmNMPC::vlimsByIndex;
     using ArmNMPC::evalTaskSpace;
     using ArmNMPC::ownedJointInds;
     using ArmNMPC::n_qpsolve_;
@@ -636,6 +640,215 @@ TEST(NmpcSlack, AbsorbsAViolationInsteadOfFailing)
     NMPCParams p = liveParams();
     p.joint_lims[0].q_min = 1.60;
     EXPECT_GT(maxBoxSlackOverRun(p, 200), 1e-9);
+}
+
+// --- Safe mode ------------------------------------------------------------
+
+/*! liveParams() with the QP crippled so it cannot converge. iter_max = 1 is the
+ *  load-bearing part: the forced cold-start retry inside QuadProbSolver runs with
+ *  the same cap, so it fails too and solveMultiStage genuinely returns false.
+ *  This is an ordinary config path, so the fallback is reachable in a test
+ *  without any production seam. */
+NMPCParams failingParams()
+{
+    NMPCParams p = liveParams();
+    p.qp_max_iter = 1;
+    p.qp_tol      = 1e-14;
+    return p;
+}
+
+TEST(SafeMode, DampingTorqueIsDissipative)
+{
+    ModelProbe c(kMjcf, liveParams());
+    const State s = referenceState(c.n_joints_);
+
+    // A spread of velocities, including sign flips, so this is not passing off
+    // one lucky direction.
+    for (double scale : {0.1, 1.0, -1.0, 3.7}) {
+        Eigen::VectorXd v = s.v * scale;
+        const Eigen::VectorXd tau = c.dampingTorque(v);
+        EXPECT_LE(tau.dot(v.tail(c.n_joints_)), 0.0) << "scale " << scale;
+    }
+
+    // Owned joints only: the node publishes no effort for the rest, and writing
+    // them would be a silent claim on the other arm.
+    Eigen::VectorXd tau = c.dampingTorque(s.v);
+    for (int i = 0; i < c.n_joints_; ++i) {
+        const bool owned = std::find(c.ownedJointInds.begin(), c.ownedJointInds.end(), i)
+                           != c.ownedJointInds.end();
+        if (!owned) EXPECT_DOUBLE_EQ(tau[i], 0.0) << "non-owned joint " << i;
+    }
+    EXPECT_GT(tau.cwiseAbs().maxCoeff(), 0.0) << "owned joints produced no damping";
+}
+
+TEST(SafeMode, DampingTorqueIsFiniteWithNonFiniteVelocity)
+{
+    // Safe mode is most often reached BECAUSE the state went non-finite, so
+    // -kd*v must not hand NaN to an actuator that will latch it forever.
+    ModelProbe c(kMjcf, liveParams());
+    State s = referenceState(c.n_joints_);
+    const int owned0 = c.ownedJointInds.front();
+
+    for (double bad : {std::numeric_limits<double>::quiet_NaN(),
+                        std::numeric_limits<double>::infinity(),
+                       -std::numeric_limits<double>::infinity()}) {
+        Eigen::VectorXd v = s.v;
+        v[6 + owned0] = bad;
+        const Eigen::VectorXd tau = c.dampingTorque(v);
+        EXPECT_TRUE(tau.allFinite()) << "tau = " << tau.transpose();
+        EXPECT_DOUBLE_EQ(tau[owned0], 0.0) << "poisoned joint should get zero";
+    }
+}
+
+TEST(SafeMode, DampingRespectsTorqueLimits)
+{
+    ModelProbe c(kMjcf, liveParams());
+    State s = referenceState(c.n_joints_);
+    s.v.tail(c.n_joints_).setConstant(50.0);   // far past any rated speed
+
+    const Eigen::VectorXd tau = c.dampingTorque(s.v);
+    for (int idx : c.ownedJointInds) {
+        EXPECT_LE(std::abs(tau[idx]), c.torqueLimsByIndex[idx] + 1e-12)
+            << "joint " << idx;
+    }
+}
+
+TEST(SafeMode, DampingIsNonSaturatingWithinRatedSpeed)
+{
+    // kd = frac * tau_max / qd_max, so at exactly qd_max the command should sit
+    // at frac*tau_max — i.e. safe mode never needs the output clamp to stay
+    // physical. That is the property that makes the gain derivable at all.
+    NMPCParams p = liveParams();
+    ModelProbe c(kMjcf, p);
+    State s = referenceState(c.n_joints_);
+    for (int idx : c.ownedJointInds) s.v[6 + idx] = c.vlimsByIndex[idx];
+
+    const Eigen::VectorXd tau = c.dampingTorque(s.v);
+    for (int idx : c.ownedJointInds) {
+        EXPECT_NEAR(std::abs(tau[idx]),
+                    p.safe_mode_damping_frac * c.torqueLimsByIndex[idx], 1e-9)
+            << "joint " << idx;
+    }
+}
+
+TEST(SafeMode, DampingIsStableInDiscreteTime)
+{
+    // Explicit velocity damping diverges if kd*dt exceeds the joint's inertia.
+    // Nothing at runtime checks this, so pin it: it is the one way a raised
+    // damping_frac could make safe mode actively unsafe.
+    const double dt = 1.0 / 200.0;          // control_hz in nmpc.yaml
+    ModelProbe c(kMjcf, liveParams());
+    const State s = referenceState(c.n_joints_);
+    const NodeDynamics nd = c.dynamicsAt(s.q, s.v, c.ee_site_id_);
+
+    for (int idx : c.ownedJointInds) {
+        EXPECT_LT(c.kd_[idx] * dt, nd.H_g(idx, idx))
+            << "joint " << idx << ": kd=" << c.kd_[idx]
+            << " dt=" << dt << " H_g=" << nd.H_g(idx, idx)
+            << " — raise control_hz or lower safe_mode_damping_frac";
+    }
+}
+
+TEST(SafeMode, QpFailureEntersDampingAndCommandsIt)
+{
+    ModelProbe c(kMjcf, failingParams());
+    const State s = referenceState(c.n_joints_);
+
+    const Eigen::VectorXd tau = c.computeControl(s.q, s.v);
+    EXPECT_EQ(c.mode(), ArmNMPC::ControlMode::Damping);
+    EXPECT_TRUE(tau.isApprox(c.dampingTorque(s.v)))
+        << "tau = " << tau.transpose();
+    EXPECT_GT(c.safeModeTicks(), 0);
+}
+
+TEST(SafeMode, StaysDampingUntilRecoveryTicks)
+{
+    // The mode must not clear on the first good solve, or a marginal solver
+    // would chatter the output between damping and full tracking.
+    NMPCParams p = liveParams();
+    p.safe_mode_recovery_ticks = 5;
+    ModelProbe c(kMjcf, p);
+    const State s = referenceState(c.n_joints_);
+
+    c.enterDamping();
+    ASSERT_EQ(c.mode(), ArmNMPC::ControlMode::Damping);
+
+    for (int t = 1; t < p.safe_mode_recovery_ticks; ++t) {
+        c.computeControl(s.q, s.v);
+        EXPECT_EQ(c.mode(), ArmNMPC::ControlMode::Damping)
+            << "left safe mode after only " << t << " good solves";
+    }
+    c.computeControl(s.q, s.v);
+    EXPECT_EQ(c.mode(), ArmNMPC::ControlMode::Nominal)
+        << "never recovered after " << p.safe_mode_recovery_ticks << " good solves";
+}
+
+TEST(SafeMode, NonFiniteStateEntersDampingWithoutThrowing)
+{
+    // checkNaN used to throw here and take the process with it.
+    ModelProbe c(kMjcf, liveParams());
+    State s = referenceState(c.n_joints_);
+    s.v[6 + c.ownedJointInds.front()] = std::numeric_limits<double>::quiet_NaN();
+
+    Eigen::VectorXd tau;
+    EXPECT_NO_THROW(tau = c.computeControl(s.q, s.v));
+    EXPECT_EQ(c.mode(), ArmNMPC::ControlMode::Damping);
+    EXPECT_TRUE(tau.allFinite()) << "tau = " << tau.transpose();
+}
+
+TEST(SafeMode, DampingBringsTheArmToRest)
+{
+    // End to end: with the QP unable to solve, closed-loop damping must actually
+    // dissipate the joint velocity rather than merely being signed correctly.
+    const double dt = 1.0 / 200.0;
+    ModelProbe c(kMjcf, failingParams());
+    State s = referenceState(c.n_joints_);
+
+    auto ownedSpeed = [&c](const Eigen::VectorXd& v) {
+        double sq = 0.0;
+        for (int idx : c.ownedJointInds) sq += v[6 + idx] * v[6 + idx];
+        return std::sqrt(sq);
+    };
+
+    const double v0 = ownedSpeed(s.v);
+    double v_mid = 0.0;
+    for (int t = 0; t < 1200; ++t) {          // 6 s at 200 Hz
+        const Eigen::VectorXd tau_all = c.computeControl(s.q, s.v);
+        Eigen::VectorXd tau = Eigen::VectorXd::Zero(c.n_joints_);
+        for (int idx : c.ownedJointInds) tau[idx] = tau_all[idx];
+        Eigen::VectorXd q1, v1;
+        c.integrateStep(s.q, s.v, tau, dt, q1, v1);
+        s.q = q1;
+        s.v = v1;
+        if (t == 599) v_mid = ownedSpeed(s.v);
+    }
+    const double v_end = ownedSpeed(s.v);
+
+    // Still decaying at the end rather than settling on a floor: the slowest
+    // joint's time constant is H_ii/kd_i, so an absolute target would encode
+    // this arm's inertia rather than the property being tested.
+    EXPECT_LT(v_mid, 0.25 * v0) << "v0=" << v0 << " v_mid=" << v_mid;
+    EXPECT_LT(v_end, 0.5 * v_mid)
+        << "decay stalled: v_mid=" << v_mid << " v_end=" << v_end;
+}
+
+TEST(SafeMode, RejectsInvalidParams)
+{
+    {   // sqp_iters = 0 skipped the rollout loop and left J_task0 at 0x0
+        NMPCParams p = liveParams();
+        p.sqp_iters = 0;
+        EXPECT_THROW(ModelProbe(kMjcf, p), std::runtime_error);
+    }
+    {
+        NMPCParams p = liveParams();
+        p.safe_mode_damping_frac = 0.0;
+        EXPECT_THROW(ModelProbe(kMjcf, p), std::runtime_error);
+    }
+    {
+        NMPCParams p = liveParams();
+        p.safe_mode_recovery_ticks = 0;
+        EXPECT_THROW(ModelProbe(kMjcf, p), std::runtime_error);
+    }
 }
 
 }  // namespace

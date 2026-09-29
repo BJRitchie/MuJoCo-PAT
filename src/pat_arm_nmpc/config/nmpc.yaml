@@ -129,6 +129,19 @@
     # Whichever figure reflects the real Piper joints, the two should agree.
     model_tau_max: [0.25, 0.25, 0.25, 0.25, 0.25, 0.25]
 
+    # Safe mode: when the QP fails or the numerics go non-finite, the controller
+    # stops tracking and commands pure joint damping (tau = -kd*qdot) so the arm
+    # slows to rest. Shared by both arms; each damps only its own joints.
+    safe_mode:
+      # kd = damping_frac * model_tau_max / limits.qd_max, per joint. A fraction
+      # rather than an absolute gain, so it tracks the torque limits, and so
+      # |tau| stays within damping_frac*tau_max at rated speed. Note the torque
+      # limit sets how fast the arm can actually stop, not this number.
+      damping_frac: 1.0
+      # Consecutive good solves needed to resume tracking. Hysteresis against
+      # failure chatter only - the handover is a step, not a ramp.
+      recovery_ticks: 10
+
     # /chaser/odom's chaser_x/y are the chaser's slide-joint values relative
     # to air_bearing_table.xacro's own <body name="chaser" pos="-0.5 0 ...">
     # anchor, NOT true world-frame position -- this controller's own internal

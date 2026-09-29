@@ -26,6 +26,20 @@ ArmNMPC::ArmNMPC(
     if (params_.Ts <= 0.0) {
         throw std::runtime_error("ArmNMPC: NMPCParams.Ts must be > 0");
     }
+    if (params_.sqp_iters < 1) {
+        // 0 would skip the rollout loop entirely, leaving J_task0 at 0x0 and
+        // producing a dimension mismatch in finalizeJointTorques.
+        throw std::runtime_error("ArmNMPC: NMPCParams.sqp_iters must be >= 1");
+    }
+    if (params_.safe_mode_damping_frac <= 0.0) {
+        throw std::runtime_error(
+            "ArmNMPC: NMPCParams.safe_mode_damping_frac must be > 0 — safe mode "
+            "with zero damping would leave the arm coasting.");
+    }
+    if (params_.safe_mode_recovery_ticks < 1) {
+        throw std::runtime_error(
+            "ArmNMPC: NMPCParams.safe_mode_recovery_ticks must be >= 1");
+    }
     ee_site_id_ = siteIdFromName(params_.ee_site_name);
 
     if (params_.joint_lims.empty()) {
@@ -103,6 +117,21 @@ ArmNMPC::ArmNMPC(
                 "ArmNMPC: owned_joints resolved to zero joints — "
                 "this controller would have no box-constrained state at all.");
         }
+
+        // Safe-mode damping gains, owned joints only (the node publishes no
+        // effort for the rest). Scaling by tau_max/qd_max keeps the damping
+        // torque inside damping_frac*tau_max for any speed within qd_max, so
+        // safe mode never relies on the output clamp to stay physical.
+        kd_.assign(n_joints_, 0.0);
+        for (int idx : ownedJointInds) {
+            if (vlimsByIndex[idx] <= 0.0) {
+                throw std::runtime_error(
+                    "ArmNMPC: qd_max must be > 0 for owned joint at arm-local index " +
+                    std::to_string(idx) + " — safe-mode damping is scaled by it.");
+            }
+            kd_[idx] = params_.safe_mode_damping_frac *
+                        torqueLimsByIndex[idx] / vlimsByIndex[idx];
+        }
     }
 
     // --- Build the QuadProbSolver --------------------------------- //
@@ -171,6 +200,22 @@ ArmNMPC::EePose ArmNMPC::currentEePose(
 
 // === CONTROL LAW ================================================================ //
 Eigen::VectorXd ArmNMPC::controlLaw(
+    const Eigen::VectorXd& q, const Eigen::VectorXd& v)
+{
+    try {
+        return controlLawImpl(q, v);
+    } catch (const std::exception&) {
+        // A non-finite intermediate (checkNaN), a solver size mismatch, or an
+        // Eigen failure. Damping depends on none of that machinery, so it is
+        // still a valid command here — and it is finite by construction even if
+        // the measured velocity is not.
+        enterDamping();
+        ++safe_mode_ticks_;
+        return dampingTorque(v);
+    }
+}
+
+Eigen::VectorXd ArmNMPC::controlLawImpl(
     const Eigen::VectorXd& q, const Eigen::VectorXd& v)
 {
     // Record start time of control loop
@@ -262,8 +307,22 @@ Eigen::VectorXd ArmNMPC::controlLaw(
         Eigen::VectorXd lg, ug;
         buildTorqueGeneralConstraint(J_g, Cv_joints, D, lg, ug);
 
-        Eigen::VectorXd tau_task = solveQPWithFallback(
-            A, B, Q, R, lbx_j, ubx_j, D, lg, ug, x_aug, nOwned, Q_N);
+        Eigen::VectorXd tau_task;
+        if (!solveStageQP(A, B, Q, R, lbx_j, ubx_j, D, lg, ug,
+                          x_aug, nOwned, Q_N, tau_task)) {
+            enterDamping();
+            ++safe_mode_ticks_;
+            printTimingInfo(start);
+            return dampingTorque(v);
+        }
+        if (mode_ == ControlMode::Damping) {
+            ++safe_mode_ticks_;
+            if (++consecutive_ok_ < params_.safe_mode_recovery_ticks) {
+                printTimingInfo(start);
+                return dampingTorque(v);
+            }
+            mode_ = ControlMode::Nominal;   // recovered; fall through to tracking
+        }
 
         out = finalizeJointTorques(J_g, tau_task, Cv_joints);
     }
@@ -331,99 +390,43 @@ Eigen::MatrixXd ArmNMPC::computeLambdaInv(
     return Lambda_inv;
 }
 
-Eigen::VectorXd ArmNMPC::solveQPWithFallback(
+bool ArmNMPC::solveStageQP(
     Eigen::MatrixXd& A, Eigen::MatrixXd& B,
     Eigen::MatrixXd& Q, Eigen::MatrixXd& R,
     Eigen::VectorXd& lbx_j, Eigen::VectorXd& ubx_j,
     Eigen::MatrixXd& D, Eigen::VectorXd& lg, Eigen::VectorXd& ug,
-    Eigen::VectorXd& x_aug, int nOwned, Eigen::MatrixXd& Q_N)
+    Eigen::VectorXd& x_aug, int nOwned, Eigen::MatrixXd& Q_N,
+    Eigen::VectorXd& tau_task_out)
 {
     const int nx = static_cast<int>(A.rows());
     const int nu = static_cast<int>(B.cols());
 
-    Eigen::VectorXd tau_task(nu);
+    tau_task_out.resize(nu);
+    bool ok = false;
     {
         ScopedTimer t(t_qpsolve_us_, n_qpsolve_);
 
         // Native HPIPM affine offset b stays zero every stage -- the frozen
         // acceleration bias is carried through A's constant channel instead
-        // (x_aug's trailing "1" row), same trick as ArmNMPController's
-        // closed-form Riccati recursion.
+        // (x_aug's trailing "1" row).
         Eigen::VectorXd zero_b = Eigen::VectorXd::Zero(nx);
 
-        bool ok = qp_->solve(
+        ok = qp_->solve(
             A.data(), B.data(), zero_b.data(),
             Q.data(), R.data(),
             lbx_j.data(), ubx_j.data(),
             D.data(), lg.data(), ug.data(),
             x_aug.data(),
             Q_N.data());
-        
-        if (!ok) {
-            // The Δq/qdot joint-limit rows AND the torque general
-            // constraint are both SOFT now (see NMPCParams::
-            // joint_limit_slack_linear/torque_slack_linear's doc
-            // comments), so a solve failure here is no longer the routine
-            // "a limit made this infeasible" case — the slack absorbs
-            // that instead. A nonzero status now means the IPM genuinely
-            // didn't converge within qp_max_iter iterations (a purely
-            // numerical failure), so this still fails SAFE (hold last good
-            // torque) rather than zeroing, which would otherwise inject a
-            // torque discontinuity into the next tick's linearization.
-            std::cerr << "[WARNING] ArmNMPC["<< params_.ee_site_name.c_str() << "]: "
-                      << "QP solve failed/did not converge — defaulting to backward Riccati recursion"
-                      << std::endl; 
 
-            // Default to backward Riccati recursion (unconstrained fallback,
-            // same math as ArmNMPController's primary solve path -- but P/K
-            // must be sized to nx/nu, NOT the bare task-space dims, since
-            // Q/A/B/x_aug here are the Δq/qdot-augmented matrices, not the
-            // un-augmented task-space-only ones. S is nu x nu (dynamic) --
-            // B^T*P*B is genuinely nu x nu regardless of nx, since it's
-            // sized by B's column count.
-            Eigen::MatrixXd P = Q_N;                            // nx x nx, terminal cost
-            Eigen::MatrixXd K = Eigen::MatrixXd::Zero(nu, nx);  // nu x nx
-            for (int k = params_.N - 1; k >= 0; --k) {
-                Eigen::MatrixXd S = R + B.transpose() * P * B;
-                K = S.ldlt().solve(B.transpose() * P * A);
-                P = Q + A.transpose() * P * A - A.transpose() * P * B * K;
-            }
-            tau_task = -K * x_aug;
-
-        }
-        else {
-            qp_->getU(0, tau_task.data());
-
-            // Diagnostic: how hard are the soft constraints straining? A
-            // large slack means the solve succeeded but is leaning heavily
-            // on the penalty -- same "surface it, don't silently absorb
-            // it" spirit as the Lambda_inv6 conditioning warning elsewhere.
-            // Stage 1 combines both soft row types (box rows first, then
-            // general/torque rows -- see the constructor's idxs_mid
-            // layout), so size the buffer via nsAt() rather than assuming
-            // 2*nOwned, and split accordingly.
-            Eigen::VectorXd sl(qp_->nsAt(1)), su(qp_->nsAt(1));
-            qp_->getSlack(1, sl.data(), su.data());
-            double maxJointSlack = std::max(sl.head(2 * nOwned).maxCoeff(),
-                                             su.head(2 * nOwned).maxCoeff());
-            double maxTorqueSlack = std::max(sl.tail(n_joints_).maxCoeff(),
-                                              su.tail(n_joints_).maxCoeff());
-            if (maxJointSlack > 1e-3) {
-                std::cerr << "[WARNING] ArmNMPC["<< params_.ee_site_name.c_str() << "]: "
-                        << "joint-limit slack = " << maxJointSlack 
-                        << " (soft constraint straining -- arm near/outside a limit)." 
-                        << std::endl; 
-            }
-            if (maxTorqueSlack > 1e-3) {
-                std::cerr << "[WARNING] ArmNMPC["<< params_.ee_site_name.c_str() << "]: "
-                        << "torque slack = " << maxTorqueSlack 
-                        << " (soft constraint straining -- commanded torque near/over limit)." 
-                        << std::endl; 
-            }
+        if (ok) {
+            qp_->getU(0, tau_task_out.data());
+            recordSlack(nOwned);
         }
     }
-    checkNaN(tau_task.hasNaN(), "tau_task");
-    return tau_task;
+    // A non-finite solution is a failed solve, not an exception: it means the
+    // same thing to the caller as a nonzero solver status.
+    return ok && tau_task_out.allFinite();
 }
 
 // === Augmented prediction model ===============================================
@@ -519,6 +522,33 @@ Eigen::VectorXd ArmNMPC::finalizeJointTorques(
                                  std::min(torqueLimsByIndex[i], tau_joints[i]));
     }
     return tau_joints;
+}
+
+Eigen::VectorXd ArmNMPC::dampingTorque(const Eigen::VectorXd& v) const
+{
+    Eigen::VectorXd tau = Eigen::VectorXd::Zero(n_joints_);
+    if (v.size() < 6 + n_joints_) return tau;   // nothing trustworthy to damp against
+
+    for (int idx : ownedJointInds) {
+        const double vd = v[6 + idx];
+        if (!std::isfinite(vd)) continue; // a poisoned joint gets zero, never NaN
+        
+        const double lim = torqueLimsByIndex[idx];
+        tau[idx] = std::max(-lim, std::min(lim, -kd_[idx] * vd));
+    }
+    return tau;
+}
+
+void ArmNMPC::enterDamping()
+{
+    mode_ = ControlMode::Damping;
+    consecutive_ok_ = 0;
+    u_bar_.assign(params_.N, Eigen::VectorXd::Zero(3));
+}
+
+int ArmNMPC::lastQpStatus() const
+{
+    return qp_ ? qp_->lastStatus() : 0;
 }
 
 void ArmNMPC::recordSlack(int nOwned)
@@ -807,17 +837,14 @@ Eigen::VectorXd ArmNMPC::solveNonlinearMPC(
             }
             tau_task_result = u_bar_[0];
         } else {
-            std::cerr << "[WARNING] ArmNMPC[" << params_.ee_site_name << "]: "
-                      << "multi-stage QP solve failed/did not converge — "
-                      << "falling back to node-0 single-stage QP" << std::endl;
-            tau_task_result = solveQPWithFallback(
-                A_k[0], B_k[0], Q, R, lbx_j, ubx_j, D_k[0], lg_k[0], ug_k[0], x_aug_nodes[0], nOwned, Q_N);
-            u_bar_[0] = tau_task_result;
-            // Rest of u_bar_ is NOT trustworthy as a warm start here -- see
-            // the shift-vs-reset logic below, which resets the whole
-            // trajectory to zero instead of shifting it when this happens.
+            // No approximate substitute is attempted: safe mode takes over
+            // below, which is predictable in a way an unconstrained fallback
+            // solve is not. The status reaches the ROS node via lastQpStatus()
+            // rather than being logged here, since this runs every tick while
+            // the solver is marginal.
+            //
             // Remaining SQP iterations are skipped: they would relinearize
-            // around that untrusted trajectory.
+            // around an untrusted trajectory.
             break;
         }
     }
@@ -825,31 +852,31 @@ Eigen::VectorXd ArmNMPC::solveNonlinearMPC(
     // Shift for next tick's warm start (once per tick, after all SQP
     // iterations -- NOT once per inner iteration, which should keep
     // re-linearizing around the just-solved trajectory). Only valid when the
-    // LAST iteration's solveMultiStage() actually succeeded -- when it
-    // didn't, only u_bar_[0] holds a real (fallback) value and
-    // u_bar_[1..N-1] are whatever they were before this tick (stale,
-    // possibly from an earlier failed tick too). Shifting in that case would
-    // discard the one value we DO trust (u_bar_[0]) and promote
-    // untrustworthy stale entries into use as next tick's rollout input --
-    // reset the whole trajectory to zero instead, which is a safe (if
-    // conservative) fallback: an all-zero nominal control makes the next
-    // tick's open-loop rollout simply coast rather than risk compounding
-    // whatever caused this tick's solve to fail.
+    // LAST iteration's solveMultiStage() actually succeeded -- when it didn't,
+    // u_bar_[0..N-1] are whatever they were before this tick (stale, possibly
+    // from an earlier failed tick too), and shifting would promote those into
+    // next tick's rollout input. enterDamping() zeroes the whole trajectory
+    // instead, so the next rollout coasts rather than compounding whatever
+    // caused this tick's solve to fail.
     if (lastIterOk) {
         for (int k = 0; k < N - 1; ++k) u_bar_[k] = u_bar_[k + 1];
         // u_bar_[N-1] keeps its last value (repeat-last-hold).
     } else {
-        // Deliberately bypasses the du_max control trust region above --
-        // this reset already exists specifically to escape a possibly-
-        // already-diverged trajectory, so damping the jump FROM that
-        // untrustworthy state TO zero would only partially reset it,
-        // undermining the reason this branch exists. The trust region still
-        // applies normally starting next tick, rate-limiting how far the
-        // very first post-reset solve can move away from zero.
-        u_bar_.assign(N, Eigen::VectorXd::Zero(d));
+        enterDamping();
     }
 
-    checkNaN(tau_task_result.hasNaN(), "tau_task (nonlinear)");
+    // Safe mode is sticky: hold the damping command until the solver has been
+    // healthy for safe_mode_recovery_ticks in a row, so a marginal solve cannot
+    // chatter the output between damping and full tracking. Hysteresis only --
+    // the handover on recovery is a step, not a ramp.
+    if (mode_ == ControlMode::Damping) {
+        ++safe_mode_ticks_;
+        if (!lastIterOk || ++consecutive_ok_ < params_.safe_mode_recovery_ticks) {
+            return dampingTorque(v);
+        }
+        mode_ = ControlMode::Nominal;
+    }
+
     return finalizeJointTorques(J_task0, tau_task_result, Cv_joints0);
 }
 

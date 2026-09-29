@@ -47,6 +47,9 @@ SimulationNode::SimulationNode() : Node("pat_simulation") {
     // and the MJCF; no source changes here are needed.
     arm_joint_names_ = declare_parameter<std::vector<std::string>>(
         "arm_joint_names", std::vector<std::string>{});
+    arm_torque_timeout_ = declare_parameter<double>("arm_torque_timeout", 0.1);
+    arm_torque_timeout_steps_ =
+        static_cast<int>(std::lround(arm_torque_timeout_ * sim_hz));
     const auto arm_actuator_names = declare_parameter<std::vector<std::string>>(
         "arm_actuator_names", std::vector<std::string>{});
     for (const auto& n : arm_actuator_names)
@@ -294,6 +297,8 @@ void SimulationNode::armTorqueSubscriberCallback(
             }
         }
     }
+    arm_torque_silent_steps_ = 0;
+    arm_torque_seen_ = true;
 }
 
 void SimulationNode::eeSetpointMarkerCallback(
@@ -310,7 +315,26 @@ void SimulationNode::eeSetpointMarkerCallback(
 }
 
 void SimulationNode::simTimerCallback() {
-    std::lock_guard<std::mutex> lk(mu_); 
+    std::lock_guard<std::mutex> lk(mu_);
+
+    // Drop the arm torques if their controller has gone quiet. Only the arm
+    // actuators are zeroed: the thrusters are a separate topic, and GNC is never
+    // run alongside the arm NMPC.
+    if (arm_torque_timeout_steps_ > 0 && arm_torque_seen_ &&
+        ++arm_torque_silent_steps_ > arm_torque_timeout_steps_) {
+        bool was_commanding = false;
+        for (int id : arm_actuator_ids_) {
+            if (ctrl_[static_cast<size_t>(id)] != 0.0) was_commanding = true;
+            ctrl_[static_cast<size_t>(id)] = 0.0;
+        }
+        if (was_commanding) {
+            RCLCPP_ERROR(get_logger(),
+                "pat_simulation: no arm torque_command for %.2f s — zeroing arm "
+                "actuators (a held torque would keep accelerating the joints)",
+                arm_torque_timeout_);
+        }
+    }
+
     sim_->step(ctrl_);
 }
 

@@ -247,6 +247,13 @@ public:
     // actually applies each tick).
     const Eigen::VectorXd& lastTauTask() const { return last_tau_task; }
 
+    /*! HPIPM status from the most recent solve attempt: 0 = converged, 1 =
+     *  max iterations, 2 = minimum step, 3 = NaN in the solution. Exposed
+     *  instead of logged, because a caller that retries every tick would
+     *  otherwise turn one failure into a stream of stderr writes at the control
+     *  rate — and stderr bypasses ROS logging entirely. */
+    int lastStatus() const { return last_status_; }
+
 private:
     QuadProbSolverParams params_;
     ocp_qp_solver_plan_t plan;
@@ -271,6 +278,7 @@ private:
     Eigen::VectorXd terminal_zero_bound_;
 
     Eigen::VectorXd last_tau_task;
+    int             last_status_ = 0;
 };
 
 }  // namespace quad_prob_solver

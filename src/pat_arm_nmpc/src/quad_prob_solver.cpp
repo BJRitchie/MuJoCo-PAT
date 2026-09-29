@@ -328,6 +328,8 @@ bool QuadProbSolver::solve(
         qp_status = ocp_qp_solve(solver, qp_in, qp_out);
         ocp_qp_xcond_solver_opts_set(config, opts, "warm_start", &params_.qp_warm_start);
     }
+    last_status_ = qp_status;
+
     if (qp_status == 0) {
         // 6. Extract solution -- stash stage-0 control on the object so
         // callers that only care about the receding-horizon control (the
@@ -340,8 +342,7 @@ bool QuadProbSolver::solve(
 
         return true;
     } else {
-        std::cerr << "QuadProbSolver: QP solve failed with status " << qp_status << std::endl;
-        return false;
+        return false;   // status is on lastStatus(); the caller decides how to report it
     }
 }
 
@@ -443,14 +444,15 @@ bool QuadProbSolver::solveMultiStage(
         qp_status = ocp_qp_solve(solver, qp_in, qp_out);
         ocp_qp_xcond_solver_opts_set(config, opts, "warm_start", &params_.qp_warm_start);
     }
+    last_status_ = qp_status;
+
     if (qp_status == 0) {
         Eigen::VectorXd u0_sol(params_.nu);
         d_ocp_qp_sol_get_u(0, qp_out, u0_sol.data());
         last_tau_task = u0_sol;
         return true;
     } else {
-        std::cerr << "QuadProbSolver: multi-stage QP solve failed with status " << qp_status << std::endl;
-        return false;
+        return false;   // status is on lastStatus(); the caller decides how to report it
     }
 }
 

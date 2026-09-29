@@ -99,6 +99,21 @@ struct NMPCParams {
     bool   terminal_velocity_constraint = false;
     double terminal_cost_multiplier = 1.0;
 
+    // --- Safe mode -----------------------------------------------------------
+    /*! Joint damping gain for safe mode, as a fraction of the torque available
+     *  at each joint's rated speed: kd = frac * tau_max / qd_max. Derived the
+     *  same way du_max_frac is, and for the same reason — an absolute N*m*s/rad
+     *  gain cannot track the torque limits. Sizing it this way also makes safe
+     *  mode non-saturating by construction: |tau| <= frac*tau_max whenever
+     *  |qdot| <= qd_max. Note the torque limit, not this gain, sets how quickly
+     *  the arm can actually stop (H_ii*qdot/tau_max at best). */
+    double safe_mode_damping_frac = 1.0;
+
+    /*! Consecutive successful solves required to leave safe mode. Pure
+     *  hysteresis against solve-failure chatter — it does NOT ramp the handover,
+     *  which steps straight from damping to the full QP solution. */
+    int    safe_mode_recovery_ticks = 10;
+
     NMPCParams() = default;
 };
 
@@ -131,9 +146,42 @@ public:
      *  external setpoint arrives. */
     EePose currentEePose(const Eigen::VectorXd& q, const Eigen::VectorXd& v);
 
+    /*! Nominal = tracking the setpoint. Damping = safe mode, commanding
+     *  tau = -kd*qdot to bring the arm to rest. */
+    enum class ControlMode { Nominal, Damping };
+
+    /*! Safe-mode joint damping: tau = -kd*qdot on the owned joints, zero
+     *  elsewhere, clamped per joint. Deliberately depends on nothing but the
+     *  measured velocity and constants fixed at construction — no H_g, no
+     *  Lambda_inv, no Cv feedforward — because the usual reason for needing it
+     *  is that the model pipeline has just produced something non-finite.
+     *  Dissipative by construction: tau·qdot = -qdot^T Kd qdot <= 0, so it
+     *  removes energy however wrong the model is. Non-finite velocity entries
+     *  yield zero torque on that joint rather than propagating NaN to the
+     *  actuators. Public because the ROS node's own exception handler needs it.
+     *  v has the same layout as controlLaw's (length 6 + numArmJoints()). */
+    Eigen::VectorXd dampingTorque(const Eigen::VectorXd& v) const;
+
+    ControlMode mode() const { return mode_; }
+    /*! Ticks spent in safe mode since construction — a health counter for the
+     *  node to log, since a brief excursion and a permanent one look the same
+     *  from a single transition message. */
+    long safeModeTicks() const { return safe_mode_ticks_; }
+    /*! HPIPM status from the most recent solve (0 = converged), for the node to
+     *  report when it logs a transition into safe mode. */
+    int lastQpStatus() const;
+
 protected:
+    /*! Thin guard around controlLawImpl: any exception escaping the control
+     *  computation becomes safe mode instead of terminating the process. Wrapped
+     *  here rather than around computeControl so loadLiveState's size-mismatch
+     *  throw stays fatal — that one is a static configuration error, and if it
+     *  fires, v cannot be trusted enough to damp against. */
     Eigen::VectorXd controlLaw(const Eigen::VectorXd& q,
                                const Eigen::VectorXd& v) override;
+
+    Eigen::VectorXd controlLawImpl(const Eigen::VectorXd& q,
+                                    const Eigen::VectorXd& v);
 
 protected:
     // === Shared helpers used in the controlLaw function above ======
@@ -178,22 +226,23 @@ protected:
                                        Eigen::MatrixXd& D, Eigen::VectorXd& lg,
                                        Eigen::VectorXd& ug);
 
-    /*! Solves the QP (timed under t_qpsolve_us_); on failure/non-convergence
-     *  falls back to an unconstrained backward-Riccati recursion; on success
-     *  logs a diagnostic if the soft box/torque slack is straining. Returns
-     *  tau_task (size = B.cols()). Q_N: terminal-stage cost, used in place
-     *  of Q for both the QP's terminal weight and the Riccati fallback's
-     *  terminal cost -- callers pass Q itself when there's no separate
-     *  terminal weight (NMPCParams::terminal_cost_multiplier == 1.0). */
+    /*! Solves the single-stage QP (timed under t_qpsolve_us_), writing the
+     *  stage-0 control into tau_task_out (size = B.cols()) and recording the
+     *  soft-constraint slack on success. Returns false if the solver did not
+     *  converge or returned a non-finite solution — the caller's job is then to
+     *  enter safe mode, not to substitute an approximation. Q_N: terminal-stage
+     *  cost, used in place of Q at the terminal weight; callers pass Q itself
+     *  when terminal_cost_multiplier == 1.0. */
     // Non-const refs: qp_->solve() takes raw non-const double* into these
     // (HPIPM's C API doesn't promise not to touch its inputs), matching the
     // pre-refactor call sites, which all passed freshly-built locals anyway.
-    Eigen::VectorXd solveQPWithFallback(Eigen::MatrixXd& A, Eigen::MatrixXd& B,
-                                         Eigen::MatrixXd& Q, Eigen::MatrixXd& R,
-                                         Eigen::VectorXd& lbx_j, Eigen::VectorXd& ubx_j,
-                                         Eigen::MatrixXd& D, Eigen::VectorXd& lg,
-                                         Eigen::VectorXd& ug, Eigen::VectorXd& x_aug,
-                                         int nOwned, Eigen::MatrixXd& Q_N);
+    bool solveStageQP(Eigen::MatrixXd& A, Eigen::MatrixXd& B,
+                       Eigen::MatrixXd& Q, Eigen::MatrixXd& R,
+                       Eigen::VectorXd& lbx_j, Eigen::VectorXd& ubx_j,
+                       Eigen::MatrixXd& D, Eigen::VectorXd& lg,
+                       Eigen::VectorXd& ug, Eigen::VectorXd& x_aug,
+                       int nOwned, Eigen::MatrixXd& Q_N,
+                       Eigen::VectorXd& tau_task_out);
 
     /*! tau_joints = J^T*tau_task + Cv_joints, clamped to torqueLimsByIndex. */
     Eigen::VectorXd finalizeJointTorques(const Eigen::MatrixXd& J,
@@ -235,6 +284,11 @@ protected:
                                     Eigen::MatrixXd& Q, Eigen::MatrixXd& R,
                                     Eigen::MatrixXd& Q_N);
 
+    /*! Enter safe mode: latch the mode, restart the recovery count, and drop the
+     *  nominal control trajectory, since whatever it holds was either produced
+     *  by a failed solve or linearized around one. */
+    void enterDamping();
+
     /*! Fold the last solve's stage-1 slacks into max_box_slack_/max_tau_slack_.
      *  Stage 1 is where both soft row types coexist (box rows first, then
      *  general/torque rows). */
@@ -265,6 +319,16 @@ protected:
     std::vector<double>                    torqueLimsByIndex;
     std::vector<int>                       ownedJointInds;
     int                                    n_owned = 0;
+
+    // Safe mode. kd_ is sized n_joints_ and nonzero only on owned indices,
+    // fixed at construction from the torque and velocity limits. The mode
+    // latches on failure and only clears after safe_mode_recovery_ticks
+    // consecutive good solves, so the output cannot chatter between damping and
+    // tracking while the solver is marginal.
+    std::vector<double> kd_;
+    ControlMode         mode_ = ControlMode::Nominal;
+    int                 consecutive_ok_ = 0;
+    long                safe_mode_ticks_ = 0;
 
     // Box/torque-constrained QP solver (acados_c + HPIPM backend).
     std::unique_ptr<quad_prob_solver::QuadProbSolver> qp_;
