@@ -71,11 +71,17 @@ install(FILES "${_model_xml}" "${CMAKE_CURRENT_SOURCE_DIR}/models/platform.xml"
         DESTINATION share/${PROJECT_NAME}/models/)
 
 # ─── Tests ───────────────────────────────────────────────────────────────
-# if(BUILD_TESTING)
-#     find_package(ament_cmake_gtest REQUIRED)
-#     ament_add_gtest(test_pat_arm_nmpc test/test_pat_arm_nmpc.cpp)
-#     target_link_libraries(test_pat_arm_nmpc pat_arm_nmpc_lib)
-# endif()
+# The model-fidelity tests load the generated MJCF straight out of the build
+# tree (they run before install), so the path is compiled in rather than
+# resolved via FindPackageShare the way the node does it.
+if(BUILD_TESTING)
+    find_package(ament_cmake_gtest REQUIRED)
+    ament_add_gtest(test_pat_arm_nmpc test/test_pat_arm_nmpc.cpp)
+    add_dependencies(test_pat_arm_nmpc pat_arm_nmpc_models)
+    target_link_libraries(test_pat_arm_nmpc pat_arm_nmpc_lib)
+    target_compile_definitions(test_pat_arm_nmpc PRIVATE
+        PAT_NMPC_TEST_MJCF="${_model_xml}")
+endif()
 
 install(TARGETS pat_arm_nmpc_lib
     ARCHIVE DESTINATION lib LIBRARY DESTINATION lib

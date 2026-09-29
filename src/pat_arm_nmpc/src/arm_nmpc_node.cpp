@@ -123,7 +123,6 @@ pat_arm_nmpc::NMPCParams ArmNMPCNode::loadParams() {
     p.fullNonlinear = declare_parameter<bool>("nmpc.full_nonlinear", p.fullNonlinear);
     p.sqp_iters     = declare_parameter<int>("nmpc.sqp_iters", p.sqp_iters);
     p.Hg_damping    = declare_parameter<double>("nmpc.Hg_damping", p.Hg_damping);
-    p.tau_max       = declare_parameter<double>("nmpc.tau_max", p.tau_max);
     p.rollout_v_clamp_mult =
         declare_parameter<double>("nmpc.rollout_v_clamp_mult", p.rollout_v_clamp_mult);
     p.terminal_velocity_constraint =
@@ -139,16 +138,13 @@ pat_arm_nmpc::NMPCParams ArmNMPCNode::loadParams() {
     const auto q_ori     = getVec3("weights.Q_ori",        {p.Qwx, p.Qwy, p.Qwz});
     const auto q_angvel  = getVec3("weights.Q_angvel",     {p.Qdotwx, p.Qdotwy, p.Qdotwz});
     const auto r_ori     = getVec3("weights.R_ori",        {p.Rwx, p.Rwy, p.Rwz});
-    const auto du_trans  = getVec3("weights.du_max_trans", {p.du_max_x, p.du_max_y, p.du_max_z});
-    const auto du_rot    = getVec3("weights.du_max_rot",   {p.du_max_wx, p.du_max_wy, p.du_max_wz});
     p.Qx = q_pos[0];    p.Qy = q_pos[1];    p.Qz = q_pos[2];
     p.Qdotx = q_vel[0]; p.Qdoty = q_vel[1]; p.Qdotz = q_vel[2];
     p.Rx = r_trans[0];  p.Ry = r_trans[1];  p.Rz = r_trans[2];
     p.Qwx = q_ori[0];   p.Qwy = q_ori[1];   p.Qwz = q_ori[2];
     p.Qdotwx = q_angvel[0]; p.Qdotwy = q_angvel[1]; p.Qdotwz = q_angvel[2];
     p.Rwx = r_ori[0];   p.Rwy = r_ori[1];   p.Rwz = r_ori[2];
-    p.du_max_x = du_trans[0];  p.du_max_y = du_trans[1];  p.du_max_z = du_trans[2];
-    p.du_max_wx = du_rot[0];   p.du_max_wy = du_rot[1];   p.du_max_wz = du_rot[2];
+    p.du_max_frac = declare_parameter<double>("nmpc.du_max_frac", p.du_max_frac);
 
     // The planar law's θz channel is built from Qwz / Qdotwz / Rwz (see
     // ArmNMPC::controlLaw), but the documented contract (nmpc.yaml header) is
@@ -175,18 +171,35 @@ pat_arm_nmpc::NMPCParams ArmNMPCNode::loadParams() {
     p.torque_slack_quadratic =
         declare_parameter<double>("qp.torque_slack_quadratic", p.torque_slack_quadratic);
 
-    // Per-joint limits: parallel arrays, entry i belongs to joint_names_[i].
+    // Per-joint position/velocity limits: parallel arrays, entry i belongs to
+    // joint_names_[i] — this node's OWN joints, the ones it box-constrains.
     const auto q_min   = getJointArray("limits.q_min");
     const auto q_max   = getJointArray("limits.q_max");
     const auto qd_max  = getJointArray("limits.qd_max");
-    const auto tau_max = getJointArray("limits.tau_max");
     p.joint_lims.clear();
     p.joint_lims.reserve(joint_names_.size());
     for (size_t i = 0; i < joint_names_.size(); ++i) {
         if (q_min[i] > q_max[i])
             throw std::runtime_error("limits: q_min > q_max for joint '" +
                                      joint_names_[i] + "'");
-        p.joint_lims.push_back({joint_names_[i], q_min[i], q_max[i], qd_max[i], tau_max[i]});
+        p.joint_lims.push_back({joint_names_[i], q_min[i], q_max[i], qd_max[i]});
+    }
+
+    // Torque limits are a property of the model's actuators, not of which arm
+    // this node drives, so they are set once for every model joint in the
+    // shared parameter block — one array, one place, both nodes.
+    const auto model_tau_max = declare_parameter<std::vector<double>>(
+        "model_tau_max", std::vector<double>{});
+    if (model_tau_max.size() != model_joint_names_.size()) {
+        throw std::runtime_error(
+            "model_tau_max: expected " + std::to_string(model_joint_names_.size()) +
+            " entries (one per model_joint_names), got " +
+            std::to_string(model_tau_max.size()));
+    }
+    p.model_torque_lims.clear();
+    p.model_torque_lims.reserve(model_joint_names_.size());
+    for (size_t i = 0; i < model_joint_names_.size(); ++i) {
+        p.model_torque_lims.emplace_back(model_joint_names_[i], model_tau_max[i]);
     }
 
     return p;

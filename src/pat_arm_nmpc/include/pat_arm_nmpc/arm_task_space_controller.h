@@ -119,6 +119,19 @@ protected:
      *  construction time, not as a silent -1 read later. */
     int siteIdFromName(const std::string& name) const;
 
+    /*! Per-joint position range from the loaded MJCF, indexed arm-locally (the
+     *  same index space jointIndexFromName() returns). Joints the model leaves
+     *  unlimited come back as {-M_PI, M_PI}: a finite fallback, because these
+     *  feed QP box bounds and HPIPM's factorization does not tolerate bounds
+     *  spanning many orders of magnitude.
+     *
+     *  The model is the authority. A controller owning one arm still rolls the
+     *  WHOLE model forward, and MuJoCo enforces every joint's range with
+     *  constraint forces that the linearized prediction model has no term for
+     *  — so a rollout allowed past a range it does not know about diverges
+     *  against forces the QP cannot see. */
+    std::vector<std::pair<double, double>> modelJointRanges() const;
+
     /*! Resolve a MuJoCo joint name to its ARM-LOCAL index — i.e. the same
      *  index space as getJointPosInMsg(i)/getJointVelInMsg(i)/q[6+i]/v[6+i]
      *  (0 = first arm joint after the 6 free-floating base DOFs), not the

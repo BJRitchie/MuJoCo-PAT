@@ -34,33 +34,55 @@ ArmNMPC::ArmNMPC(
     } else {
         // Parse joint lims etc 
         for (const auto& lims : params_.joint_lims) {
-            qlims[lims.name] = std::make_pair(lims.q_min, lims.q_max); 
-            vlims[lims.name] = lims.qd_max; 
-            torque_lims[lims.name] = lims.tau_max; 
+            qlims[lims.name] = std::make_pair(lims.q_min, lims.q_max);
+            vlims[lims.name] = lims.qd_max;
+        }
+        for (const auto& [jname, tau] : params_.model_torque_lims) {
+            torque_lims[jname] = tau;
         }
 
         // Re-index by arm-local joint index (0..n_joints_-1) for cheap per-tick
         // lookups instead of re-hashing joint names every control tick.
         //
-        // Joints NOT listed in joint_lims (the other arm's joints, when one
-        // controller owns a subset of a multi-arm model) are never box-
-        // constrained: buildJointBoxBounds only touches ownedJointInds, so the
-        // q/v defaults set here for the non-owned joints are dead. They DO
-        // appear in the all-model-joint torque general constraint, though, so
-        // that default matters: give them the same nominal magnitude as the
-        // global torque clamp. NOT 0 (a +-0 bound strains against their
-        // Coriolis bias every tick) and NOT 1e9 (HPIPM's IPM factorization
-        // fails with qp_status 2 once box magnitudes span ~1e0..1e9 — seen in
-        // the VORTEX sim; keep every bound within an order of magnitude).
-        const double tau_default = params_.tau_max > 0.0 ? params_.tau_max : 100.0;
-        qlimsByIndex.assign(n_joints_, std::make_pair(-M_PI, M_PI));
+        // Joints NOT listed in joint_lims (the other arm's, when one controller
+        // owns a subset of a multi-arm model) are never box-constrained:
+        // buildJointBoxBounds only touches ownedJointInds. They DO appear in the
+        // all-model-joint torque constraint and in the rollout clamp, so every
+        // joint needs a real torque limit -- model_torque_lims supplies one per
+        // model joint and is required to be complete, so there is no fallback
+        // magnitude to guess at (and none to silently disagree with the config).
+        //
+        // Position ranges come from the MJCF, which is what MuJoCo actually
+        // enforces during the rollout, so every joint gets a real range rather
+        // than a placeholder -- including the ones this controller does not own.
+        qlimsByIndex = modelJointRanges();
         vlimsByIndex.assign(n_joints_, 10.0);
-        torqueLimsByIndex.assign(n_joints_, tau_default);
+        torqueLimsByIndex.assign(n_joints_, -1.0);   // sentinel: must all be filled below
+        for (const auto& [jname, tau] : torque_lims) {
+            if (tau <= 0.0) {
+                throw std::runtime_error(
+                    "ArmNMPC: model_torque_lims entry for joint \"" + jname +
+                    "\" must be > 0, got " + std::to_string(tau));
+            }
+            torqueLimsByIndex[jointIndexFromName(jname)] = tau;
+        }
+        for (int i = 0; i < n_joints_; ++i) {
+            if (torqueLimsByIndex[i] < 0.0) {
+                throw std::runtime_error(
+                    "ArmNMPC: model_torque_lims is missing arm-local joint index " +
+                    std::to_string(i) + " — it must name every joint in the model, "
+                    "not only the ones this controller owns (the torque constraint "
+                    "and the rollout clamp cover all of them).");
+            }
+        }
         for (const auto& [jname, bounds] : qlims) {
             int idx = jointIndexFromName(jname);
-            qlimsByIndex[idx]      = bounds;
-            vlimsByIndex[idx]      = vlims.at(jname);
-            torqueLimsByIndex[idx] = torque_lims.at(jname);
+            // Intersect rather than replace: a configured range may tighten the
+            // model's (a software limit inside the mechanical one) but must not
+            // widen it past what MuJoCo will enforce.
+            qlimsByIndex[idx].first  = std::max(qlimsByIndex[idx].first,  bounds.first);
+            qlimsByIndex[idx].second = std::min(qlimsByIndex[idx].second, bounds.second);
+            vlimsByIndex[idx]        = vlims.at(jname);
         }
 
         // Resolve which arm-local joint indices this controller owns (i.e.
@@ -172,10 +194,7 @@ Eigen::VectorXd ArmNMPC::controlLaw(
             const Eigen::MatrixXd& J_g6, const Eigen::Matrix<double, 6, 1>& jdot_qdot6) {
             return evalTaskSpace(q_node, v_node, ee_pos, ee_quat, J_g6, jdot_qdot6);
         };
-        Eigen::VectorXd du_max(3);
-        du_max << params_.du_max_x, params_.du_max_y, params_.du_max_wz;
-
-        out = solveNonlinearMPC(q, v, /*d=*/3, eval, Q, R, du_max, Q_N);
+        out = solveNonlinearMPC(q, v, /*d=*/3, eval, Q, R, Q_N);
     } else {
         // --- Current EE state -------------------------------------------------------
         Eigen::Vector3d  p_ee    = eePosition(ee_site_id_);
@@ -223,11 +242,8 @@ Eigen::VectorXd ArmNMPC::controlLaw(
         Eigen::Vector3d bias;
         bias << a_d - jdot_qdot6.head<2>(), aw_d - jdot_qdot6(5);
 
-        Eigen::VectorXd v_d_task(3);
-        v_d_task << v_d, w_d;
-
         Eigen::MatrixXd A, B;
-        buildAugmentedModel(J_g, Lambda_inv, bias, v_d_task, A, B);
+        buildAugmentedModel(Lambda_inv, bias, H_g_inv * J_g.transpose(), A, B);
 
         Eigen::VectorXd q0 = q.tail(n_j);   // current measured joint angles
 
@@ -278,6 +294,29 @@ Eigen::MatrixXd ArmNMPC::computeGeneralizedInertiaInv(
         H_g_inv = pinvDLS(H_g, params_.Hg_damping, params_.ee_site_name + " H_g");
     }
     return H_g_inv;
+}
+
+Eigen::VectorXd ArmNMPC::reachableWrenchBound(const Eigen::MatrixXd& J_task) const
+{
+    // Finite cap for channels the Jacobian barely couples to: tau/|J| runs away
+    // as |J| -> 0, and HPIPM's factorization does not tolerate bounds spanning
+    // many orders of magnitude.
+    constexpr double kMaxBound = 1.0e3;
+
+    const int d = static_cast<int>(J_task.rows());
+    Eigen::VectorXd bound(d);
+    for (int j = 0; j < d; ++j) {
+        double lim = kMaxBound;
+
+        for (int i = 0; i < n_joints_; ++i) {
+            const double a = std::abs(J_task(j, i));
+            
+            if (a > 1e-9) 
+                lim = std::min(lim, torqueLimsByIndex[i] / a);
+        }
+        bound(j) = std::min(lim, kMaxBound);
+    }
+    return bound;
 }
 
 Eigen::MatrixXd ArmNMPC::computeLambdaInv(
@@ -392,8 +431,8 @@ Eigen::VectorXd ArmNMPC::solveQPWithFallback(
 // constant channel carrying the frozen acceleration bias) augmented with
 // Δq/qdot rows so joint position/velocity limits are plain box bounds.
 void ArmNMPC::buildAugmentedModel(
-    const Eigen::MatrixXd& J_task, const Eigen::MatrixXd& Lambda_inv,
-    const Eigen::VectorXd& bias, const Eigen::VectorXd& v_d_task,
+    const Eigen::MatrixXd& Lambda_inv,
+    const Eigen::VectorXd& bias, const Eigen::MatrixXd& H_g_inv_Jt,
     Eigen::MatrixXd& A, Eigen::MatrixXd& B)
 {
     const int d   = static_cast<int>(Lambda_inv.rows());   // task dim == nu
@@ -414,29 +453,29 @@ void ArmNMPC::buildAugmentedModel(
     B_task.block(0, 0, d, d) = -(Ts * Ts / 2.0) * Lambda_inv;
     B_task.block(d, 0, d, d) = -Ts * Lambda_inv;
 
-    // Joint-space augmentation. qdot ≈ J_pinv * v_ee = J_pinv * (v_d_task - edot),
-    // linear in edot with the v_d_task term folded into the constant channel.
-    // Δq(k+1) = Δq(k) + Ts*qdot(k).
-    Eigen::MatrixXd J_pinv = pinvDLS(
-        J_task, params_.Hg_damping,
-        params_.ee_site_name + " J_task (joint-limit augmentation)");
-    Eigen::MatrixXd dq_from_edot   = Ts * J_pinv;        // n_j x d
-    Eigen::MatrixXd qdot_from_edot = J_pinv;             // n_j x d
-    Eigen::VectorXd qdot_bias      = J_pinv * v_d_task;  // n_j, frozen this tick
-
     A = Eigen::MatrixXd::Zero(nx, nx);
     B = Eigen::MatrixXd::Zero(nx, d);
     A.block(0, 0, nt, nt) = A_task;
     B.block(0, 0, nt, d)  = B_task;
 
+    // Joint-space augmentation. Δq and qdot are states in their own right, so
+    // they integrate their own dynamics rather than being reconstructed from
+    // the task-space rows: the Cv_joints feedforward cancels the generalised
+    // bias exactly (H_g qddot = J^T u), leaving qddot = H_g^-1 J^T u. Held
+    // constant across the step, the same assumption and the same integration
+    // order as the task rows above:
+    //   qdot(k+1) = qdot(k) + Ts * H_g^-1 J^T u
+    //   Δq(k+1)   = Δq(k) + Ts*qdot(k) + Ts²/2 * H_g^-1 J^T u
+    // Sign is positive where the task rows' is negative: those track an error
+    // (x_d − x), these track the joint quantities themselves.
+
     // Δq rows: [nt, nt+n_j)
-    A.block(nt, nt, n_j, n_j)   = Eigen::MatrixXd::Identity(n_j, n_j);
-    A.block(nt, d, n_j, d)      = -dq_from_edot;
-    A.block(nt, 2 * d, n_j, 1)  = Ts * qdot_bias;
+    A.block(nt, nt, n_j, n_j)       = Eigen::MatrixXd::Identity(n_j, n_j);
+    A.block(nt, nt + n_j, n_j, n_j) = Ts * Eigen::MatrixXd::Identity(n_j, n_j);
+    B.block(nt, 0, n_j, d)          = (Ts * Ts / 2.0) * H_g_inv_Jt;
     // qdot rows: [nt+n_j, nt+2*n_j)
-    A.block(nt + n_j, d, n_j, d)     = -qdot_from_edot;
-    A.block(nt + n_j, 2 * d, n_j, 1) = qdot_bias;
-    // B rows for Δq/qdot stay zero — control couples only through edot above.
+    A.block(nt + n_j, nt + n_j, n_j, n_j) = Eigen::MatrixXd::Identity(n_j, n_j);
+    B.block(nt + n_j, 0, n_j, d)          = Ts * H_g_inv_Jt;
 }
 
 // Δq/qdot box bounds on the OWNED joints, offset by the current measurement q0.
@@ -482,6 +521,29 @@ Eigen::VectorXd ArmNMPC::finalizeJointTorques(
     return tau_joints;
 }
 
+void ArmNMPC::recordSlack(int nOwned)
+{
+    const int ns = qp_->nsAt(1);
+    if (ns <= 0) return;
+    if (slack_lo_.size() != ns) {          // first tick only
+        slack_lo_.resize(ns);
+        slack_hi_.resize(ns);
+    }
+    qp_->getSlack(1, slack_lo_.data(), slack_hi_.data());
+
+    const int n_box = 2 * nOwned;
+    if (n_box > 0) {
+        max_box_slack_ = std::max({max_box_slack_,
+                                    slack_lo_.head(n_box).maxCoeff(),
+                                    slack_hi_.head(n_box).maxCoeff()});
+    }
+    if (ns > n_box) {
+        max_tau_slack_ = std::max({max_tau_slack_,
+                                    slack_lo_.tail(ns - n_box).maxCoeff(),
+                                    slack_hi_.tail(ns - n_box).maxCoeff()});
+    }
+}
+
 void ArmNMPC::printTimingInfo(
     const std::chrono::time_point<std::chrono::high_resolution_clock> start,
     int modulo)
@@ -496,7 +558,13 @@ void ArmNMPC::printTimingInfo(
             << "  lambda="   << avgOrNan(t_lambda_us_,  n_lambda_)
             << "  qpsolve="  << avgOrNan(t_qpsolve_us_, n_qpsolve_)
             << "  TOTAL="    << avgOrNan(t_total_us_,   n_total_)
+            << "  | peak slack: box=" << max_box_slack_
+            << " torque="             << max_tau_slack_
             << "\n";
+        // Peaks are per-report, not cumulative: a strain that has passed should
+        // stop being reported.
+        max_box_slack_ = 0.0;
+        max_tau_slack_ = 0.0;
     }
 }
 
@@ -543,8 +611,6 @@ ArmNMPC::NodeTaskSpace ArmNMPC::evalTaskSpace(
     ts.edot << v_d - v_ee.head<2>(), w_d - v_ee(2);
     ts.bias.resize(3);
     ts.bias << a_d - jdot_qdot6.head<2>(), aw_d - jdot_qdot6(5);
-    ts.v_d_task.resize(3);
-    ts.v_d_task << v_d, w_d;
     return ts;
 }
 
@@ -559,7 +625,6 @@ Eigen::VectorXd ArmNMPC::solveNonlinearMPC(
     const Eigen::VectorXd& q, const Eigen::VectorXd& v,
     int d, const TaskSpaceEval& evalTaskSpace,
     Eigen::MatrixXd& Q, Eigen::MatrixXd& R,
-    const Eigen::VectorXd& du_max,
     Eigen::MatrixXd& Q_N)
 {
     const int N   = params_.N;
@@ -619,9 +684,10 @@ Eigen::VectorXd ArmNMPC::solveNonlinearMPC(
                     nd.H_g, params_.Hg_damping,
                     params_.ee_site_name + " H_g (nonlinear rollout node " + std::to_string(k) + ")");
                 Eigen::MatrixXd Lambda_inv = computeLambdaInv(ts.J_task, H_g_inv);
+                Eigen::MatrixXd H_g_inv_Jt = H_g_inv * ts.J_task.transpose();
 
                 Eigen::MatrixXd A_node, B_node;
-                buildAugmentedModel(ts.J_task, Lambda_inv, ts.bias, ts.v_d_task, A_node, B_node);
+                buildAugmentedModel(Lambda_inv, ts.bias, H_g_inv_Jt, A_node, B_node);
                 A_k[k] = A_node;
                 B_k[k] = B_node;
 
@@ -725,6 +791,15 @@ Eigen::VectorXd ArmNMPC::solveNonlinearMPC(
             // tick's trusted/shifted value, so this one clamp site covers
             // both tick-to-tick and (when sqp_iters>1) iteration-to-iteration
             // damping -- no separate site needed.
+            //
+            // Sized from node 0's Jacobian, the point the QP was just built
+            // around, so the region tracks the arm's actual authority in this
+            // configuration instead of a fixed wrench that stops binding the
+            // moment either the configuration or the torque limits change.
+            recordSlack(nOwned);
+
+            const Eigen::VectorXd du_max =
+                params_.du_max_frac * reachableWrenchBound(J_task0);
             for (int k = 0; k < N; ++k) {
                 Eigen::VectorXd uk(d);
                 qp_->getU(k, uk.data());

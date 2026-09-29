@@ -244,6 +244,18 @@ colcon test --packages-select pat_gnc pat_robotics pat_simulation pat_arm_nmpc p
 colcon test-result --verbose
 ```
 
+`pat_arm_nmpc`'s suite is the one worth knowing about, since it asserts things
+that are otherwise invisible until the arm misbehaves. It links the algorithm lib
+only (no ROS, no launch) and checks the prediction model against MuJoCo's own
+forward dynamics at a known state: that the generalised inertia reduction is
+symmetric positive-definite and its damped inverse is not over-damped, that the
+rollout integrator advances position by `Ts·v + Ts²/2·a`, that both the task-space
+and joint rows of the augmented `A`/`B` reproduce the plant's one-step response
+and respond to control, that every model joint gets its MJCF range, that the
+derived trust region matches the reachable wrench, that the QP's hard bounds hold
+exactly while its stages stay dynamically consistent, and that the soft
+constraints are idle inside the limits but absorb a violation outside them.
+
 ## Sim-to-real
 
 `pat_simulation` (MuJoCo) publishes `/chaser/odom`, `/chaser/imu`,
@@ -265,10 +277,100 @@ To deploy: bring up hardware driver nodes on the same topics and drop
 | `/chaser/thruster_command` | `pat_simulation` | thruster driver |
 | `/chaser/arm/torque_command` | `pat_simulation` | arm motor driver |
 
+## Known limitations and future work
+
+Standing debt in the current implementation — open items a contributor would
+otherwise have to rediscover. None are regressions.
+
+### NMPC formulation (`pat_arm_nmpc`)
+
+- **The arm's real torque limit is unsettled, and the two models disagree.**
+  `nmpc.yaml`'s `model_tau_max` is 0.25 N·m per joint; `air_bearing_table.xacro`'s
+  `<motor ctrlrange>` is ±10 N·m (joint2/joint3) and ±5 N·m (joint5), so the
+  simulated actuators deliver up to 40× what the controller will command. One of
+  the two is wrong about the hardware. Everything downstream scales off whichever
+  it is — the derived SQP trust region and the torque constraint both come from
+  `model_tau_max`.
+- **The soft-constraint penalties are strong enough to miss the control period.**
+  With `joint_slack_*` at 1e3/1e4, a run where the arm starts outside a software
+  limit solves in ~8.3 ms against the 5 ms period at `control_hz: 200`; the
+  penalty is stiff enough to spend interior-point iterations refusing to violate
+  by more than ~5 µrad. Scaling all four slack weights down 100× gives ~1.9 ms for
+  a still-negligible ~7e-5 rad violation. In nominal operation the slacks are
+  inert (≤1e-11), so this only bites off-nominal — which is also when the deadline
+  matters most. `peak slack` on the profile line is the signal to watch.
+- **Joint velocity limits have no model source.** MJCF has no velocity range, so
+  `qd_max` comes from the per-node `limits.qd_max` (2.0 rad/s) for owned joints and
+  a hardcoded 10.0 rad/s default for the rest — and the rollout clamp is
+  `rollout_v_clamp_mult` × that, so non-owned joints are clamped 5× looser than
+  owned ones. Position and torque limits are both single-sourced now; this one is
+  not.
+- **`nmpc.yaml` still carries dead weights.** `Q_ori`, `Q_angvel` and `R_ori` are
+  unused by the planar law (the θz channel reads `Q_pos`/`Q_vel`/`R`'s third
+  entry). The commented-out reference block's `full_nonlinear` comment also still
+  describes the SQP path as untuned and QP-failing.
+- Test with hard constraints 
+- Fallback logic - joint damping (push to zero velocity) 
+
+### Settled by measurement — don't redo these
+
+- **Hard `lb == ub` bounds are deliberately NOT declared as equalities.** The
+  stage-0 state pin and the terminal velocity constraint reach HPIPM as coincident
+  inequality bounds rather than through its equality path (`nbxe` / `idxbxe`). The
+  equality path was implemented and measured, and lost on every count:
+  enforcement is identical either way (`lb == ub` pins the row on its own), the
+  solution moves only at ~1e-8, and under `PARTIAL_CONDENSING_HPIPM` the solve is
+  consistently about **2× slower** (~70 µs vs ~35 µs on the double-integrator case
+  in `test/`). The `idxbxe` index convention is also undocumented in the installed
+  HPIPM headers and cannot be distinguished by any observable behaviour, since a
+  mis-declared row is not unpinned — it silently mis-declares a different row
+  instead. Revisit only with HPIPM sources to hand.
+- **`qp.warm_start: 2` (primal+dual) earns its place.** Over a 400-tick closed
+  loop: 443 µs/solve at `2`, against 1176 µs cold and 1221 µs primal-only, with
+  identical tracking and torque in all three. The dual warm start is doing the
+  work, not the primal one.
+
+### Realtime readiness (Jetson)
+
+`docs/realtime_deployment_research.md` holds the full research brief.
+
+- **The control loop allocates on the heap every tick.** Each SQP iteration
+  builds six horizon-length `std::vector<Eigen::MatrixXd/VectorXd>` plus per-node
+  temporaries — estimated at several hundred `malloc`/`free` per tick, order 1e5/s
+  at `control_hz: 200`. Invisible on a general-purpose kernel; an unbounded
+  latency violation under `PREEMPT_RT`. The fix is a preallocated workspace with
+  `Eigen::Map` views over it.
+- **`std::cerr` on the QP-failure path**, which fires every tick precisely when
+  the solver is already struggling. Not realtime-safe.
+- **Off-nominal solves blow the 5 ms period even though nominal ones are
+  comfortable.** At `N: 40` a nominal tick costs ~0.4–0.9 ms of QP solve. A
+  setpoint well outside the workspace pushes it to ~4 ms, and a strained soft
+  joint box to ~8.3 ms (see the slack item above). The budget is exceeded exactly
+  in the cases a deadline guarantee is for.
+- **Profiling reports means only.** `ScopedTimer` accumulates a sum and a count;
+  the profile line now also carries peak soft-constraint slack, but there is still
+  no max, percentile, wakeup jitter or deadline-miss counter — the numbers that
+  decide whether a realtime deadline holds.
+- **No realtime scheduling anywhere.** Default `rclcpp` executor, default-priority
+  DDS threads, no `SCHED_FIFO`, no `mlockall`, no core pinning. The dev container
+  also lacks `CAP_SYS_NICE`, so it cannot currently request an RT policy at all.
+
+### Elsewhere
+
+- **`IManipulator` (FK/IK/Jacobian) is an unimplemented interface.**
+  `pat_robotics/include/pat_robotics/i_manipulator.hpp` declares it and nothing
+  implements it. The NMPC takes its kinematics from MuJoCo directly, so nothing
+  depends on it yet.
+- **`ee_target_publisher` is a stand-in**, cycling fixed reachable waypoints. A
+  planner or teleop node publishing `/chaser/arm/<side>/ee_setpoint` is the
+  intended replacement; the topic contract already accommodates it.
+- **PID gains and `planar_dynamics.hpp` are still tuned for a 15 kg chaser**,
+  where the modelled bus is 49.22 kg.
+
 ## Phase roadmap
 
 | Phase | Features |
 |---|---|
 | MVP | Rendezvous · PID GNC · direct navigation · scaffold interfaces |
 | Phase 2 (in progress) | EKF navigation · dual-arm task-space NMPC (acados QP) · GNC retune for the real bus mass · additional scenarios · target tumbling |
-| Phase 3 | full-nonlinear SQP NMPC path · mission/teleop node for setpoints · `pat_vision` CV pipeline · Jetson deployment |
+| Phase 3 | SQP NMPC tuning and realtime hardening · mission/teleop node for setpoints · `pat_vision` CV pipeline · Jetson deployment |

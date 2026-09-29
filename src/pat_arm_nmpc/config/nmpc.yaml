@@ -45,7 +45,7 @@
       
 #       full_nonlinear: false       # true ⇒ multiple-shooting SQP path. 
 #       sqp_iters: 1
-#       Hg_damping: 0.001           # DLS damping for H_g inversion
+#       Hg_damping: 0.0001           # DLS damping for H_g inversion
 #       tau_max: 1.0              # [N*m] global post-hoc torque clamp
 #       rollout_v_clamp_mult: 2.0
 #       terminal_velocity_constraint: true
@@ -115,6 +115,20 @@
     mjcf_path: ""
     control_hz: 200.0
     model_joint_names: [joint2_L, joint3_L, joint5_L, joint2_R, joint3_R, joint5_R]
+
+    # Per-joint torque limit [N*m], parallel to model_joint_names. THE single
+    # place arm torque limits are set: a torque limit belongs to the actuator,
+    # not to whichever node drives that arm, and each node constrains every
+    # model joint (it rolls the whole model forward, both arms). Both nodes read
+    # this one array. Joint position ranges are NOT here -- they come from the
+    # MJCF, which is what MuJoCo actually enforces; limits.q_min/q_max below may
+    # only tighten them.
+    #
+    # NOTE: air_bearing_table.xacro's <motor ctrlrange> is +-10 (joint2/joint3)
+    # and +-5 (joint5), so the simulated actuators deliver far more than this.
+    # Whichever figure reflects the real Piper joints, the two should agree.
+    model_tau_max: [0.25, 0.25, 0.25, 0.25, 0.25, 0.25]
+
     # /chaser/odom's chaser_x/y are the chaser's slide-joint values relative
     # to air_bearing_table.xacro's own <body name="chaser" pos="-0.5 0 ...">
     # anchor, NOT true world-frame position -- this controller's own internal
@@ -133,9 +147,13 @@
       
       full_nonlinear: true       
       sqp_iters: 1
-      Hg_damping: 0.001           # DLS damping for H_g inversion
-      tau_max: 1.0              # [N*m] global post-hoc torque clamp
+      Hg_damping: 0.0001           # DLS damping for H_g inversion
       rollout_v_clamp_mult: 2.0
+      # SQP trust region, as a fraction of the wrench the arm can actually
+      # produce at its current configuration (derived from model_tau_max and
+      # the Jacobian, so it needs no absolute N / N*m figure of its own).
+      # 1.0 = may swing across the full reachable range in one tick.
+      du_max_frac: 1.0
       terminal_velocity_constraint: true
       terminal_cost_multiplier: 100.0
 
@@ -146,8 +164,6 @@
       Q_ori:        [10.0,   10.0,   10.0  ]   # unused in the planar law
       Q_angvel:     [ 0.0,    0.0,    0.0  ]   # unused
       R_ori:        [ 1.0e-3, 1.0e-3, 1.0e-3]  # unused
-      du_max_trans: [50.0,   50.0,   50.0  ]   # SQP trust region (full-nonlinear only)
-      du_max_rot:   [ 5.0,    5.0,    5.0  ]   # SQP trust region (full-nonlinear only)
 
     qp:
       max_iter: 100
@@ -166,10 +182,9 @@ pat_arm_nmpc_left:
     joint_names:  [joint2_L, joint3_L, joint5_L]
     owned_joints: [joint2_L, joint3_L, joint5_L]
     limits:
-      q_min:   [ 0.0,   -2.967, -1.22 ]   # [rad]  (servicer model joint ranges)
+      q_min:   [ 0.0,   -2.967, -1.22 ]   # [rad]  may only TIGHTEN the MJCF ranges
       q_max:   [ 3.14,   0.0,    1.22 ]   # [rad]
       qd_max:  [ 2.0,    2.0,    1.50 ]   # [rad/s], symmetric
-      tau_max: [ 0.25,   0.25,   0.25 ]   # [N*m], symmetric — matches MJCF motor ctrlrange
 
 pat_arm_nmpc_right:
   ros__parameters:
@@ -181,4 +196,3 @@ pat_arm_nmpc_right:
       q_min:   [ 0.0,   -2.967, -1.22 ]
       q_max:   [ 3.14,   0.0,    1.22 ]
       qd_max:  [ 2.0,    2.0,    1.50 ]
-      tau_max: [ 0.25,   0.25,   0.25 ]

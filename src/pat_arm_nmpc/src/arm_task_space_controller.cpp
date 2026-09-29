@@ -85,6 +85,26 @@ int ArmTaskSpaceController::siteIdFromName(const std::string& name) const
     return id;
 }
 
+std::vector<std::pair<double, double>> ArmTaskSpaceController::modelJointRanges() const
+{
+    std::vector<std::pair<double, double>> ranges(
+        n_joints_, std::make_pair(-M_PI, M_PI));
+
+    for (int j = 0; j < mj_->model->njnt; ++j) {
+        const int type = mj_->model->jnt_type[j];
+
+        // skip the base freejoint
+        if (type != mjJNT_HINGE && type != mjJNT_SLIDE) continue;   
+
+        const int idx = mj_->model->jnt_dofadr[j] - 6;
+        if (idx < 0 || idx >= n_joints_) continue;
+        if (!mj_->model->jnt_limited[j]) continue; // keep the finite fallback
+        ranges[idx] = std::make_pair(mj_->model->jnt_range[2 * j],
+                                      mj_->model->jnt_range[2 * j + 1]);
+    }
+    return ranges;
+}
+
 int ArmTaskSpaceController::jointIndexFromName(const std::string& name) const
 {
     int jnt_id = mj_name2id(mj_->model, mjOBJ_JOINT, name.c_str());

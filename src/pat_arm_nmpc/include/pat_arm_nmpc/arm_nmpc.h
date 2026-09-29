@@ -19,7 +19,11 @@
 
 namespace pat_arm_nmpc {
 
-struct JointLimit { std::string name; double q_min, q_max, qd_max, tau_max; };
+/*! Position/velocity limits for a joint this controller OWNS -- i.e. whose
+ *  Δq/qdot rows become box-constrained state. Torque limits are not here:
+ *  they apply to every model joint, owned or not, and live in
+ *  NMPCParams::model_torque_lims. */
+struct JointLimit { std::string name; double q_min, q_max, qd_max; };
 
 struct NMPCParams {    
     // --- Horizon discretization ------------------------------------------
@@ -42,19 +46,30 @@ struct NMPCParams {
     double Rwx = 1e-3, Rwy = 1e-3, Rwz = 1e-3;         //!< task-space torque effort regularization
 
     // --- Joint limits (required) --------------------------------------------
-    // Per-joint limits  
+    // Position/velocity limits for the OWNED joints.
     std::vector<JointLimit> joint_lims;
+
+    /*! Torque limit [N*m] for EVERY joint in the model, as {name, tau_max}.
+     *  The torque constraint and the rollout clamp both cover all model joints
+     *  -- this controller rolls the whole model forward, including the arm it
+     *  does not own -- so a limit is needed for each one, and this is the
+     *  single place they are set. Must name every model joint. */
+    std::vector<std::pair<std::string, double>> model_torque_lims;
 
     // --- Name of owned joints ----------------------------------------------
     // Joint names this controller owns (whose Δq/qdot rows become
     // box-constrained state). Empty ⇒ owns all arm joints.
     std::vector<std::string> owned_joints;
 
-    double Hg_damping  = 0.001;   //!< DLS damping for H_g inversion (see ArmTaskSpaceController::pinvDLS)
+    //! DLS damping for H_g inversion (see ArmTaskSpaceController::pinvDLS).
+    //! pinvDLS scales each singular value by s/(s²+λ²), so λ has to sit well
+    //! below H_g's smallest singular value or the inverse is distorted rather
+    //! than merely regularised. A planar Piper arm's smallest is ~5e-3, where
+    //! λ=1e-3 costs ~3.4% and λ=1e-4 costs ~0.03%, still bounding the inverse
+    //! at 1/(2λ) near a genuine singularity.
+    double Hg_damping  = 1e-4;
 
     std::string ee_site_name;     //!< name of the MJCF <site> at the end effector (required)
-
-    double tau_max = 100.0;   //!< [N*m] per-joint torque saturation (post-hoc clamp, see .cpp)
 
     // --- QP solver tuning ----------------------------------------------------
     int    qp_max_iter = 50;      //!< HPIPM iteration cap ("iter_max" field)
@@ -70,8 +85,16 @@ struct NMPCParams {
     double torque_slack_quadratic = 1e3;
 
     double rollout_v_clamp_mult = 2.0;
-    double du_max_x = 50.0, du_max_y = 50.0, du_max_z = 50.0;
-    double du_max_wx = 5.0, du_max_wy = 5.0, du_max_wz = 5.0;
+
+    /*! SQP control trust region, as a fraction of the wrench the arm can
+     *  actually produce in its current configuration (see
+     *  ArmNMPC::reachableWrenchBound). Derived rather than absolute because an
+     *  absolute N / N*m bound cannot track either the configuration or the
+     *  torque limits: sized for one, it silently stops binding for the other.
+     *  1.0 lets the solution swing across the full reachable range in a single
+     *  tick — finite and physically meaningful, but loose; lower it to damp the
+     *  SQP step harder. */
+    double du_max_frac = 1.0;
 
     bool   terminal_velocity_constraint = false;
     double terminal_cost_multiplier = 1.0;
@@ -112,8 +135,12 @@ protected:
     Eigen::VectorXd controlLaw(const Eigen::VectorXd& q,
                                const Eigen::VectorXd& v) override;
 
-private:
+protected:
     // === Shared helpers used in the controlLaw function above ======
+    // Protected rather than private: these are the extension points a future
+    // control law reuses (the same role getDynamics()/dynamicsAt() play in the
+    // base class), and the model-fidelity tests drive them directly through a
+    // subclass rather than inferring A/B from closed-loop behaviour.
 
     /*! Runs getDynamics() and DLS-inverts H_g (timed under t_dynamics_us_). */
     Eigen::MatrixXd computeGeneralizedInertiaInv(Eigen::VectorXd& Cv_joints);
@@ -123,12 +150,23 @@ private:
                                       const Eigen::MatrixXd& H_g_inv);
 
     /*! Builds the full augmented (task + Δq/qdot) A/B prediction matrices,
-     *  sized off J_task's/Lambda_inv's dimension d (task dim == nu). */
-    void buildAugmentedModel(const Eigen::MatrixXd& J_task,
-                              const Eigen::MatrixXd& Lambda_inv,
+     *  sized off J_task's/Lambda_inv's dimension d (task dim == nu).
+     *  H_g_inv_Jt = H_g^-1 J_task^T (n_joints_ x d) maps a task wrench to the
+     *  joint acceleration it produces, which is what couples the control into
+     *  the Δq/qdot rows. */
+    void buildAugmentedModel(const Eigen::MatrixXd& Lambda_inv,
                               const Eigen::VectorXd& bias,
-                              const Eigen::VectorXd& v_d_task,
+                              const Eigen::MatrixXd& H_g_inv_Jt,
                               Eigen::MatrixXd& A, Eigen::MatrixXd& B);
+
+    /*! Per-channel bound on the task wrench the arm can produce at this
+     *  configuration: entry j is the largest |u_j| that, acting alone, keeps
+     *  every joint torque J^T u within torqueLimsByIndex. Acting alone is the
+     *  caveat — the simultaneous feasible set is smaller by up to a factor of d
+     *  — which suits a trust region, whose job is to bound a wild step rather
+     *  than to replace the torque constraint. Channels the Jacobian cannot
+     *  actuate are capped at a finite value, since these feed QP bounds. */
+    Eigen::VectorXd reachableWrenchBound(const Eigen::MatrixXd& J_task) const;
 
     /*! Δq/qdot box bounds on the OWNED joints, offset by current measurement q0. */
     void buildJointBoxBounds(const Eigen::VectorXd& q0,
@@ -177,7 +215,6 @@ private:
         Eigen::VectorXd e, edot;    // task-space error state, dim d
         Eigen::MatrixXd J_task;     // d x n_joints_
         Eigen::VectorXd bias;       // dim d (a_d - h')
-        Eigen::VectorXd v_d_task;   // dim d
     };
     using TaskSpaceEval = std::function<NodeTaskSpace(
         const Eigen::VectorXd& q_node, const Eigen::VectorXd& v_node,
@@ -196,13 +233,17 @@ private:
     Eigen::VectorXd solveNonlinearMPC(const Eigen::VectorXd& q, const Eigen::VectorXd& v,
                                     int d, const TaskSpaceEval& evalTaskSpace,
                                     Eigen::MatrixXd& Q, Eigen::MatrixXd& R,
-                                    const Eigen::VectorXd& du_max,
                                     Eigen::MatrixXd& Q_N);
+
+    /*! Fold the last solve's stage-1 slacks into max_box_slack_/max_tau_slack_.
+     *  Stage 1 is where both soft row types coexist (box rows first, then
+     *  general/torque rows). */
+    void recordSlack(int nOwned);
 
     // Print the timing info at the end of a control loop
     void printTimingInfo(
-        const std::chrono::time_point<std::chrono::high_resolution_clock> start, 
-        int modulo = 100); 
+        const std::chrono::time_point<std::chrono::high_resolution_clock> start,
+        int modulo = 100);
 
     NMPCParams params_;
     int        ee_site_id_ = -1;
@@ -251,6 +292,16 @@ private:
     long   n_dynamics_ = 0, n_lambda_ = 0, n_jdotqdot_ = 0, n_qpsolve_ = 0, n_total_ = 0;
     double t_rollout_dynamics_us_ = 0, t_rollout_integrate_us_ = 0;
     long   n_rollout_dynamics_ = 0, n_rollout_integrate_ = 0;
+
+    // Worst soft-constraint slack since the last profile report -- box (joint
+    // position/velocity) and general (torque) rows kept apart, since they carry
+    // separate penalty weights. Reported alongside the timing line rather than
+    // logged per tick: straining is a sustained condition, not a per-tick
+    // event, and the loop cannot afford a stderr write at every control period.
+    // slack_lo_/slack_hi_ are getSlack()'s destinations, sized once so
+    // recordSlack() does not allocate on the control path.
+    double max_box_slack_ = 0.0, max_tau_slack_ = 0.0;
+    Eigen::VectorXd slack_lo_, slack_hi_;
 };
 
 }  // namespace pat_arm_nmpc
