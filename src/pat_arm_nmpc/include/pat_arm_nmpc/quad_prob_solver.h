@@ -67,6 +67,53 @@ struct QuadProbSolverParams {
     double slack_penalty_linear    = 1e2;  //!< z: cost per unit of slack
     double slack_penalty_quadratic = 1e3;  //!< Z: cost per unit^2 of slack
 
+    /*! false makes the joint position/velocity boxes HARD, so the penalties
+     *  above stop being used and a state outside its box makes the QP infeasible
+     *  rather than expensive. The stage-0 pin and the terminal rows are hard
+     *  either way.
+     *
+     *  Hard is not automatically safer. A soft box PENALISES being outside and
+     *  so actively pulls the joint back; a hard box merely forbids the solution
+     *  from going there, and if the current state is already outside, the QP has
+     *  no answer at all. Because the box constrains Δq relative to the measured
+     *  q0 and one step can only move it by Ts*qdot + (Ts²/2)*H⁻¹Jᵀu, a joint even
+     *  slightly outside its range is infeasible immediately -- see
+     *  relax_box_to_contain_x0, which exists to make hard boxes usable.
+     *
+     *  Construction-time only: the dims are fixed in the constructor and
+     *  warm_start carries a dual iterate, so this cannot be flipped at runtime. */
+    bool soft_joint_limits = true;
+
+    /*! false makes the torque rows HARD. Note this changes the QP's PLAN, not
+     *  the applied torque: the caller already clamps per joint before publishing,
+     *  so the realised torque respects the limit either way. Hard here is
+     *  feasible at u = 0 only if every |Cv_i| <= tau_max_i, i.e. only if the arm
+     *  can hold itself statically. Construction-time only. */
+    bool soft_torque_limits = true;
+
+    /*! Widen each stage-1..N box row, if necessary, so that it contains the
+     *  stage-0 pinned state (plus a margin). Only meaningful with a hard box,
+     *  where an out-of-box measurement is otherwise instantly infeasible.
+     *
+     *  Three properties worth knowing:
+     *   - It un-inverts unconditionally. Containing a point forces lbx <= x0 <=
+     *     ubx, so an empty configured/model limit intersection degenerates to a
+     *     zero-width row instead of failing every solve.
+     *   - It is a ratchet, not a relaxation: a joint already past its limit is
+     *     forbidden from getting worse by more than the margin, but is free to
+     *     recover.
+     *   - It removes the restoring force a soft box provides. Recovery is left
+     *     entirely to the tracking cost, which is why hard + this guard can
+     *     behave WORSE than soft for a joint parked outside its range. */
+    bool   relax_box_to_contain_x0 = false;
+
+    /*! Margin for the guard above. Must be > 0: a zero margin leaves a
+     *  zero-width row exactly at the current state, which a converging
+     *  interior-point method plus reg_prim will simply sit on. The Δq rows also
+     *  take at least Ts*|qdot_0|, the distance one step can drift regardless of
+     *  control. */
+    double relax_box_margin = 1e-3;
+
     // Number of general (polytopic) constraint rows: lg <= C*x + D*u <= ug,
     // pushed fresh every solve() call via D_data/lg_data/ug_data (C is
     // always the zero matrix in this class -- no caller currently needs a
@@ -222,24 +269,28 @@ public:
     // params.nx.
     void getX(int stage, double* x_out) const;
 
-    // Number of soft-constraint rows (and hence the required size of
-    // getSlack's sl_out/su_out buffers) at a given stage: idxbx_k.size()
-    // box rows plus ng general rows, MINUS whichever of the two isn't
-    // active at that stage -- stage 0 has general rows only (ng), stage N
-    // has box rows only (idxbx_k.size()), stages 1..N-1 have both. Returns
-    // 0 if stage is out of [0, N] or neither constraint type is in use.
+    // Soft-row counts at a given stage, read straight off the layout the
+    // constructor built -- never re-derived, so a caller can never disagree
+    // with how the solver was actually wired. All three return 0 for a stage
+    // outside [0, N].
+    //
+    // nsAt is the total, and hence the required size of getSlack's buffers.
+    // nsbxAt/nsgAt are the box and general halves: slice getSlack's output with
+    // these rather than assuming a count, because which groups are soft depends
+    // on the configuration (see soft_joint_limits / soft_torque_limits) and the
+    // two halves are NOT always both present or both the same size.
     int nsAt(int stage) const;
+    int nsbxAt(int stage) const;
+    int nsgAt(int stage) const;
 
     // Retrieve the lower/upper slack values (how far the soft rows at this
     // stage exceeded their bound, 0 if within bound) from the most recent
-    // successful solve, into caller-owned storage of size nsAt(stage). When
-    // both box and general rows are soft at this stage (see nsAt), the
-    // first idxbx_k.size() entries are the box (e.g. joint position/
-    // velocity) slack and the remaining ng are the general (e.g. torque)
-    // slack -- same order the constructor wires idxs in. A large slack
-    // means the solve succeeded but is leaning heavily on the penalty
-    // rather than respecting the real bound -- worth surfacing as a
-    // diagnostic (see armConstrainedNMPController.cpp).
+    // successful solve, into caller-owned storage of size nsAt(stage). The
+    // first nsbxAt(stage) entries are box (e.g. joint position/velocity) slack
+    // and the next nsgAt(stage) are general (e.g. torque) slack -- the same
+    // order the constructor wires idxs in. No-op when nsAt(stage) is 0. A large
+    // slack means the solve succeeded but is leaning heavily on the penalty
+    // rather than respecting the real bound -- worth surfacing as a diagnostic.
     void getSlack(int stage, double* sl_out, double* su_out) const;
 
     // Convenience accessor for the stage-0 control from the most recent
@@ -253,6 +304,14 @@ public:
      *  otherwise turn one failure into a stream of stderr writes at the control
      *  rate — and stderr bypasses ROS logging entirely. */
     int lastStatus() const { return last_status_; }
+
+    /*! How many box rows the relax_box_to_contain_x0 guard had to widen on the
+     *  most recent solve, and by how much at worst. Worth watching: if the guard
+     *  fires on nearly every row of nearly every tick, a "hard" box has quietly
+     *  become no box at all, and a comparison against soft is measuring nothing.
+     *  Both are 0 when the guard is disabled. */
+    int    lastRelaxCount() const { return last_relax_count_; }
+    double lastRelaxMax()   const { return last_relax_max_; }
 
 private:
     QuadProbSolverParams params_;
@@ -279,6 +338,23 @@ private:
 
     Eigen::VectorXd last_tau_task;
     int             last_status_ = 0;
+
+    // Which rows are soft, per stage, decided once in the constructor and read
+    // back by nsAt/nsbxAt/nsgAt. Single source of truth: the constructor wires
+    // HPIPM from these same vectors, so the accessors cannot describe a layout
+    // different from the one the solver was built with.
+    std::vector<int> nsbx_per_stage_;
+    std::vector<int> nsg_per_stage_;
+
+    /*! Widen lbx/ubx into lbx_relaxed_/ubx_relaxed_ so every box row contains
+     *  the stage-0 pinned state plus relax_box_margin, and record how much had
+     *  to give. Reads x0 through idxbx_k, so it is agnostic to what each row
+     *  means and to which control path built it. */
+    void relaxBoxToContainX0(const double* x0, const double* lbx, const double* ubx);
+
+    Eigen::VectorXd lbx_relaxed_, ubx_relaxed_;
+    int             last_relax_count_ = 0;
+    double          last_relax_max_   = 0.0;
 };
 
 }  // namespace quad_prob_solver

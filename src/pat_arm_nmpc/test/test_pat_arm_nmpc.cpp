@@ -13,7 +13,10 @@
 #include <gtest/gtest.h>
 
 #include <Eigen/Dense>
+#include <chrono>
 #include <cmath>
+#include <cstdio>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -38,7 +41,10 @@ public:
     using ArmNMPC::evalTaskSpace;
     using ArmNMPC::ownedJointInds;
     using ArmNMPC::n_qpsolve_;
+    using ArmNMPC::lastQpStatus;
+    using ArmNMPC::mode;
     using ArmNMPC::params_;
+    using ArmNMPC::qlimsByIndex;
     using ArmNMPC::qp_;
     using ArmNMPC::reachableWrenchBound;
     using ArmNMPC::t_qpsolve_us_;
@@ -453,7 +459,10 @@ DoubleIntegratorQP makeDoubleIntegratorQP(bool pin_terminal_velocity)
     p.params.nx      = 3;
     p.params.nu      = 1;
     p.params.N       = N;
-    p.params.ng      = 0;
+    // One general row bounding the control, standing in for the real
+    // controller's torque constraint. Without it `u` is unbounded and ANY box is
+    // reachable in a single step, which would make every hard-box test vacuous.
+    p.params.ng      = 1;
     p.params.qp_max_iter = 200;
     p.params.qp_tol      = 1e-9;
     p.params.idxbx_k = {0, 2};
@@ -467,9 +476,11 @@ DoubleIntegratorQP makeDoubleIntegratorQP(bool pin_terminal_velocity)
         p.B_k[k](0, 0) = 0.5 * Ts * Ts;
         p.B_k[k](1, 0) = Ts;
     }
-    p.D_k.clear();
-    p.lg_k.clear();
-    p.ug_k.clear();
+    // |u| <= 10: enough authority to track, far too little to jump a box in one
+    // step, which is what makes an out-of-box x0 genuinely infeasible.
+    p.D_k.assign(N, Eigen::MatrixXd::Constant(1, 1, 1.0));
+    p.lg_k.assign(N, Eigen::VectorXd::Constant(1, -10.0));
+    p.ug_k.assign(N, Eigen::VectorXd::Constant(1,  10.0));
 
     p.Q = Eigen::MatrixXd::Zero(3, 3);
     p.Q(0, 0) = 1.0;
@@ -549,6 +560,122 @@ TEST(NmpcQP, HardBoundsAreSatisfiedExactly)
     }
 }
 
+TEST(NmpcQP, SoftLayoutMatchesWhatTheSolverWasBuiltWith)
+{
+    // nsAt/nsbxAt/nsgAt must describe the wiring for every flag combination --
+    // this is what lets a slack reader slice by asking instead of assuming, and
+    // in the real model the box and general counts are equal, so a wrong split
+    // would go unnoticed.
+    for (bool soft_box : {true, false}) {
+        for (bool soft_tau : {true, false}) {
+            DoubleIntegratorQP p = makeDoubleIntegratorQP(true);
+            p.params.soft_joint_limits  = soft_box;
+            p.params.soft_torque_limits = soft_tau;
+            quad_prob_solver::QuadProbSolver qp(p.params);
+
+            const int nbx_k = static_cast<int>(p.params.idxbx_k.size());
+            const int N     = p.params.N;
+            for (int k = 0; k <= N; ++k) {
+                const int want_box = (soft_box && k > 0) ? nbx_k : 0;
+                const int want_gen = (soft_tau && k < N) ? p.params.ng : 0;
+                EXPECT_EQ(qp.nsbxAt(k), want_box)
+                    << "stage " << k << " box, soft_box=" << soft_box;
+                EXPECT_EQ(qp.nsgAt(k), want_gen)
+                    << "stage " << k << " general, soft_tau=" << soft_tau;
+                EXPECT_EQ(qp.nsAt(k), want_box + want_gen) << "stage " << k;
+            }
+        }
+    }
+}
+
+TEST(NmpcQP, HardBoxGoesInfeasibleWhenX0IsOutsideIt)
+{
+    // The mechanism behind "hard constraints failed at every loop": the box
+    // constrains stages 1..N, the stage-0 pin fixes where the trajectory starts,
+    // and bounded control cannot travel far in one step. Put x0 outside the box
+    // and there is no feasible trajectory at all.
+    DoubleIntegratorQP p = makeDoubleIntegratorQP(false);
+    p.params.soft_joint_limits  = false;
+    p.params.soft_torque_limits = false;   // else the plan buys its way out, below
+    p.x0 << 50.0, 0.0, 0.0;                // position box is [-10, 10]
+
+    quad_prob_solver::QuadProbSolver qp(p.params);
+    EXPECT_FALSE(solveQP(qp, p))
+        << "hard box with x0 outside it should not solve; status "
+        << qp.lastStatus();
+}
+
+TEST(NmpcQP, SoftBoxToleratesX0OutsideIt)
+{
+    // The same problem stays solvable when the box is soft -- the contrast that
+    // makes the hard-vs-soft comparison meaningful at all.
+    DoubleIntegratorQP p = makeDoubleIntegratorQP(false);
+    p.params.soft_joint_limits = true;
+    p.x0 << 50.0, 0.0, 0.0;
+
+    quad_prob_solver::QuadProbSolver qp(p.params);
+    EXPECT_TRUE(solveQP(qp, p)) << "status " << qp.lastStatus();
+}
+
+TEST(NmpcQP, HardBoxWithSoftTorqueFailsWithANaNSolution)
+{
+    // The mixed configuration is the worst of the three, and worth pinning. A
+    // hard box the state cannot reach, combined with a soft control bound the
+    // solver can buy its way through, does not produce a clean infeasibility --
+    // it produces status 3, a NaN solution. Consistent with the HPIPM behaviour
+    // recorded on QuadProbSolverParams::ng, where soft general rows are the
+    // fragile ones. The caller's allFinite() checks turn this into a failed
+    // solve, so it reaches safe mode rather than the actuators, but anyone
+    // choosing to harden only the box should know this is the failure they get.
+    DoubleIntegratorQP p = makeDoubleIntegratorQP(false);
+    p.params.soft_joint_limits  = false;
+    p.params.soft_torque_limits = true;
+    p.x0 << 50.0, 0.0, 0.0;
+
+    quad_prob_solver::QuadProbSolver qp(p.params);
+    EXPECT_FALSE(solveQP(qp, p));
+    EXPECT_EQ(qp.lastStatus(), 3) << "expected NAN_SOL (3), got " << qp.lastStatus();
+}
+
+TEST(NmpcQP, GuardMakesAHardBoxSolvableAndReportsTheRelaxation)
+{
+    DoubleIntegratorQP p = makeDoubleIntegratorQP(false);
+    p.params.soft_joint_limits         = false;
+    p.params.relax_box_to_contain_x0   = true;
+    p.params.relax_box_margin          = 1e-2;
+    p.x0 << 50.0, 0.0, 0.0;
+
+    quad_prob_solver::QuadProbSolver qp(p.params);
+    ASSERT_TRUE(solveQP(qp, p)) << "status " << qp.lastStatus();
+
+    // The pin is still honoured exactly — the guard widens the box, it does not
+    // move the trajectory's start.
+    Eigen::VectorXd x_at_0(3);
+    qp.getX(0, x_at_0.data());
+    EXPECT_NEAR(x_at_0(0), 50.0, 1e-8);
+
+    // And it reports what it had to give, so a study can tell a guarded hard box
+    // from no box at all.
+    EXPECT_GT(qp.lastRelaxCount(), 0);
+    EXPECT_GT(qp.lastRelaxMax(), 0.0);
+}
+
+TEST(NmpcQP, GuardIsInertWhenX0IsAlreadyInsideTheBox)
+{
+    // A ratchet, not a blanket relaxation: with the state inside its bounds the
+    // guard must change nothing, or "hard + guard" would quietly mean "no box".
+    DoubleIntegratorQP p = makeDoubleIntegratorQP(false);
+    p.params.soft_joint_limits       = false;
+    p.params.relax_box_to_contain_x0 = true;
+    p.params.relax_box_margin        = 1e-3;
+    p.x0 << 1.0, 0.0, 0.0;           // well inside [-10, 10]
+
+    quad_prob_solver::QuadProbSolver qp(p.params);
+    ASSERT_TRUE(solveQP(qp, p)) << "status " << qp.lastStatus();
+    EXPECT_EQ(qp.lastRelaxCount(), 0);
+    EXPECT_DOUBLE_EQ(qp.lastRelaxMax(), 0.0);
+}
+
 TEST(NmpcQP, DynamicsAreConsistentAcrossStages)
 {
     // Guards the pin test above: a solver that satisfied the bounds but
@@ -594,34 +721,122 @@ NMPCParams liveParams()
 /*! Runs the real controller closed-loop against MuJoCo and reports the worst
  *  slack seen, so a test can distinguish "the soft constraints are idle" from
  *  "they are absorbing a violation". */
-double maxBoxSlackOverRun(const NMPCParams& params, int ticks)
+/*! Everything a soft-vs-hard comparison needs from one closed-loop run. The
+ *  headline pair is availability and max_consecutive_damping: "failed at every
+ *  loop" is a max-consecutive claim, and a mean alone cannot tell 2% scattered
+ *  dropouts from one long outage. */
+struct RunMetrics {
+    double availability = 0.0;          // fraction of ticks that produced NMPC torque
+    int    max_consecutive_damping = 0;
+    double max_pos_violation = 0.0;     // [rad]   worst excursion past the config limits
+    double pos_violation_integral = 0.0;// [rad s] distinguishes a transient from parking outside
+    double max_vel_violation = 0.0;     // [rad/s]
+    double mean_ee_err = 0.0;           // [m]
+    double max_box_slack = 0.0;
+    double guard_relax_frac = 0.0;      // fraction of ticks the guard widened anything
+    double guard_relax_max = 0.0;
+    double mean_tick_us = 0.0;
+    double max_tick_us = 0.0;
+    double frac_over_budget = 0.0;      // ticks exceeding one control period
+    std::map<int, int> status_hist;     // HPIPM status -> count
+};
+
+struct Scenario {
+    double setpoint_offset = 0.06;      // [m] per axis, from the measured start pose
+    double q_min_override  = 0.0;       // >0 raises joint_lims[0].q_min, parking it outside
+};
+
+RunMetrics runClosedLoop(NMPCParams params, const Scenario& sc, int ticks)
 {
-    const double dt = 1.0 / 200.0;
+    const double dt = 1.0 / 200.0;      // control_hz
+    if (sc.q_min_override > 0.0) params.joint_lims[0].q_min = sc.q_min_override;
+
     ModelProbe c(kMjcf, params);
     State s = referenceState(c.n_joints_);
 
     const ArmNMPC::EePose start = c.currentEePose(s.q, s.v);
-    c.setDesiredPos(start.pos.x() + 0.06, start.pos.y() + 0.06, start.pos.z());
+    const double tx = start.pos.x() + sc.setpoint_offset;
+    const double ty = start.pos.y() + sc.setpoint_offset;
+    c.setDesiredPos(tx, ty, start.pos.z());
     c.setDesiredOrient(start.quat(0), start.quat(1), start.quat(2), start.quat(3));
 
-    double worst = 0.0;
+    RunMetrics m;
+    long damping_ticks = 0, relax_ticks = 0;
+    int  run_damping = 0;
+    double err_sum = 0.0, t_sum = 0.0;
+
     for (int t = 0; t < ticks; ++t) {
+        const auto t0 = std::chrono::high_resolution_clock::now();
         const Eigen::VectorXd tau_all = c.computeControl(s.q, s.v);
-        const int ns = c.qp_->nsAt(1);
-        if (ns > 0) {
-            Eigen::VectorXd sl(ns), su(ns);
-            c.qp_->getSlack(1, sl.data(), su.data());
-            const int n_box = 2 * static_cast<int>(c.ownedJointInds.size());
-            worst = std::max({worst, sl.head(n_box).maxCoeff(), su.head(n_box).maxCoeff()});
+        const double tick_us =
+            std::chrono::duration<double, std::micro>(
+                std::chrono::high_resolution_clock::now() - t0).count();
+
+        t_sum += tick_us;
+        m.max_tick_us = std::max(m.max_tick_us, tick_us);
+        if (tick_us > dt * 1e6) m.frac_over_budget += 1.0;
+        ++m.status_hist[c.lastQpStatus()];
+
+        if (c.mode() == ArmNMPC::ControlMode::Damping) {
+            ++damping_ticks;
+            m.max_consecutive_damping = std::max(m.max_consecutive_damping, ++run_damping);
+        } else {
+            run_damping = 0;
         }
+
+        if (c.qp_->lastRelaxCount() > 0) {
+            ++relax_ticks;
+            m.guard_relax_max = std::max(m.guard_relax_max, c.qp_->lastRelaxMax());
+        }
+
+        const int n_box = c.qp_->nsbxAt(1);
+        if (n_box > 0) {
+            Eigen::VectorXd sl(c.qp_->nsAt(1)), su(c.qp_->nsAt(1));
+            c.qp_->getSlack(1, sl.data(), su.data());
+            m.max_box_slack = std::max({m.max_box_slack,
+                                         sl.head(n_box).maxCoeff(),
+                                         su.head(n_box).maxCoeff()});
+        }
+
         Eigen::VectorXd tau = Eigen::VectorXd::Zero(c.n_joints_);
         for (int idx : c.ownedJointInds) tau[idx] = tau_all[idx];
         Eigen::VectorXd q1, v1;
         c.integrateStep(s.q, s.v, tau, dt, q1, v1);
         s.q = q1;
         s.v = v1;
+
+        // Realised violation of the trajectory actually flown, against the
+        // configured limits -- the safety payoff a hard constraint is meant to buy.
+        double worst_pos = 0.0;
+        for (int idx : c.ownedJointInds) {
+            const double q = s.q[7 + idx];
+            worst_pos = std::max({worst_pos,
+                                   c.qlimsByIndex[idx].first - q,
+                                   q - c.qlimsByIndex[idx].second});
+            m.max_vel_violation = std::max(
+                m.max_vel_violation, std::abs(s.v[6 + idx]) - c.vlimsByIndex[idx]);
+        }
+        worst_pos = std::max(0.0, worst_pos);
+        m.max_pos_violation = std::max(m.max_pos_violation, worst_pos);
+        m.pos_violation_integral += worst_pos * dt;
+
+        const ArmNMPC::EePose now = c.currentEePose(s.q, s.v);
+        err_sum += std::hypot(now.pos.x() - tx, now.pos.y() - ty);
     }
-    return worst;
+
+    m.availability      = 1.0 - static_cast<double>(damping_ticks) / ticks;
+    m.guard_relax_frac  = static_cast<double>(relax_ticks) / ticks;
+    m.mean_ee_err       = err_sum / ticks;
+    m.mean_tick_us      = t_sum / ticks;
+    m.frac_over_budget /= ticks;
+    m.max_vel_violation = std::max(0.0, m.max_vel_violation);
+    return m;
+}
+
+// Thin wrapper keeping the two soft-contract tests below expressed as they were.
+double maxBoxSlackOverRun(const NMPCParams& params, int ticks)
+{
+    return runClosedLoop(params, Scenario{}, ticks).max_box_slack;
 }
 
 TEST(NmpcSlack, IdleWhenInsideTheLimits)
@@ -848,6 +1063,219 @@ TEST(SafeMode, RejectsInvalidParams)
         NMPCParams p = liveParams();
         p.safe_mode_recovery_ticks = 0;
         EXPECT_THROW(ModelProbe(kMjcf, p), std::runtime_error);
+    }
+}
+
+// --- Hard vs soft constraints ---------------------------------------------
+
+TEST(HardConstraints, RolloutClampDoesNotSatisfyTheBoxForFree)
+{
+    // The rollout clamps its predicted joint positions to keep the open-loop
+    // trajectory out of a kinematic singularity. It must clamp to the MECHANICAL
+    // range, not to the configured software margin: the box is written on
+    // Δq = q_k − q0, so clamping into the margin would put the nominal trajectory
+    // inside the box by construction, and the multiple-shooting defect b_k would
+    // hand the QP that teleport as free dynamics. The constraint could then never
+    // bind, soft or hard.
+    //
+    // joint2_L sits at 0.90 with q_min raised to 1.60, so the box is [0.70, 2.24]
+    // and Δq is pinned to 0 at stage 0. Bounded torque moves Δq by ~0.017 in one
+    // 25 ms step, so the plan must stay near that, NOT jump to the box edge.
+    NMPCParams p = liveParams();
+    p.joint_lims[0].q_min = 1.60;
+    p.soft_joint_limits   = true;      // soft, so this stays feasible and observable
+    ModelProbe c(kMjcf, p);
+    State s = referenceState(c.n_joints_);
+    const ArmNMPC::EePose st = c.currentEePose(s.q, s.v);
+    c.setDesiredPos(st.pos.x() + 0.06, st.pos.y() + 0.06, st.pos.z());
+    c.setDesiredOrient(st.quat(0), st.quat(1), st.quat(2), st.quat(3));
+
+    c.computeControl(s.q, s.v);
+    ASSERT_EQ(c.mode(), ArmNMPC::ControlMode::Nominal);
+
+    const int idx   = c.ownedJointInds[0];
+    const double lo = c.qlimsByIndex[idx].first - s.q[7 + idx];   // 0.70
+    Eigen::VectorXd x1(7 + 2 * c.n_joints_);
+    c.qp_->getX(1, x1.data());
+
+    EXPECT_LT(x1[7 + idx], 0.25 * lo)
+        << "stage 1 planned Δq = " << x1[7 + idx] << ", suspiciously close to the "
+        << "box edge " << lo << " that bounded torque cannot reach in one step";
+}
+
+TEST(HardConstraints, SoftBoxCarriesRealSlackWhenTheArmIsOutsideItsLimit)
+{
+    // The other half: with the box genuinely unreachable, a SOFT box must show
+    // slack of the order of the violation. Slack near zero here would mean the
+    // constraint is being satisfied by something other than the control.
+    NMPCParams p = liveParams();
+    p.soft_joint_limits = true;
+    const RunMetrics m = runClosedLoop(p, Scenario{0.06, 1.60}, 200);
+
+    EXPECT_GT(m.max_box_slack, 1e-3)
+        << "box slack " << m.max_box_slack << " is too small for an arm parked "
+        << "0.7 rad outside its limit";
+    // A soft box does NOT come free here: straining it this hard costs both time
+    // and some availability (measured ~0.7-0.8, with a handful of NaN solves),
+    // because soft general rows are the fragile ones in HPIPM. Asserted loosely,
+    // as the point is that soft degrades gracefully where raw hard does not.
+    EXPECT_GT(m.availability, 0.5)
+        << "availability " << m.availability << ", longest damping run "
+        << m.max_consecutive_damping;
+}
+
+TEST(HardConstraints, RawHardBoxFailsWhenTheArmStartsOutsideItsLimit)
+{
+    // The historical failure, now honest and reproducible: the box cannot contain
+    // the measured state, one step cannot reach it, and with no guard the QP has
+    // no answer at all. Encoded deliberately so it regresses loudly if the
+    // rollout clamp ever starts papering over it again.
+    NMPCParams p = liveParams();
+    p.soft_joint_limits       = false;
+    p.relax_box_to_contain_x0 = false;
+    const RunMetrics m = runClosedLoop(p, Scenario{0.06, 1.60}, 200);
+
+    EXPECT_LT(m.availability, 0.5)
+        << "expected mostly safe mode, got availability " << m.availability;
+    EXPECT_GT(m.max_consecutive_damping, 50)
+        << "expected a sustained outage, longest run " << m.max_consecutive_damping;
+}
+
+TEST(HardConstraints, GuardKeepsAHardBoxFeasibleFromOutsideTheLimit)
+{
+    // Same scenario, guard on: the box is widened just enough to contain the
+    // measurement, so the solve stays feasible throughout.
+    NMPCParams p = liveParams();
+    p.soft_joint_limits       = false;
+    p.relax_box_to_contain_x0 = true;
+    const RunMetrics m = runClosedLoop(p, Scenario{0.06, 1.60}, 200);
+
+    EXPECT_GT(m.availability, 0.99)
+        << "availability " << m.availability
+        << ", longest damping run " << m.max_consecutive_damping;
+    EXPECT_GT(m.guard_relax_frac, 0.0) << "the guard should have been needed here";
+}
+
+TEST(HardConstraints, GuardIsNotNeededWhenTheArmIsInsideItsLimits)
+{
+    // The guard must not be silently load-bearing in normal operation: if it
+    // fired every tick here, a "hard" box would really be no box at all and any
+    // comparison against soft would be measuring nothing.
+    NMPCParams p = liveParams();
+    p.soft_joint_limits       = false;
+    p.relax_box_to_contain_x0 = true;
+    const RunMetrics m = runClosedLoop(p, Scenario{}, 200);
+
+    EXPECT_LT(m.guard_relax_frac, 0.01)
+        << "guard fired on " << (100.0 * m.guard_relax_frac) << "% of nominal ticks";
+    EXPECT_GT(m.availability, 0.99);
+}
+
+TEST(HardConstraints, HardTorqueDoesNotChangeTheNominalCommand)
+{
+    // Hardening the torque rows changes the QP's PLAN, not the applied torque:
+    // the controller already clamps per joint before publishing. Nominal
+    // behaviour should therefore be essentially unchanged.
+    NMPCParams soft = liveParams();
+    NMPCParams hard = liveParams();
+    hard.soft_torque_limits = false;
+
+    const RunMetrics ms = runClosedLoop(soft, Scenario{}, 100);
+    const RunMetrics mh = runClosedLoop(hard, Scenario{}, 100);
+
+    EXPECT_GT(mh.availability, 0.99) << "hard torque rows cost availability";
+    EXPECT_NEAR(mh.mean_ee_err, ms.mean_ee_err, 0.25 * ms.mean_ee_err + 1e-4)
+        << "soft " << ms.mean_ee_err << " vs hard " << mh.mean_ee_err;
+}
+
+TEST(DISABLED_ConstraintStudy, BoxIsActuallyEnforced)
+{
+    // Diagnostic: with joint2_L at 0.90 and q_min raised to 1.60, the Δq box for
+    // that joint is [0.70, 2.24] while Δq is pinned to 0 at stage 0. Print what
+    // the solver actually does with that, for both soft and hard.
+    for (bool soft : {true, false}) {
+        NMPCParams p = liveParams();
+        p.joint_lims[0].q_min = 1.60;
+        p.soft_joint_limits   = soft;
+        ModelProbe c(kMjcf, p);
+        State s = referenceState(c.n_joints_);
+        const ArmNMPC::EePose st = c.currentEePose(s.q, s.v);
+        c.setDesiredPos(st.pos.x() + 0.06, st.pos.y() + 0.06, st.pos.z());
+        c.setDesiredOrient(st.quat(0), st.quat(1), st.quat(2), st.quat(3));
+
+        c.computeControl(s.q, s.v);
+
+        const int nx = 7 + 2 * c.n_joints_;
+        Eigen::VectorXd x0(nx), x1(nx);
+        c.qp_->getX(0, x0.data());
+        c.qp_->getX(1, x1.data());
+        const int row = 7 + c.ownedJointInds[0];   // Δq of the offending joint
+        printf("DIAG soft=%d  qlim=[%.3f,%.3f] q0=%.3f -> box=[%.3f,%.3f]  "
+               "x0[dq]=%.4f x1[dq]=%.4f  status=%d mode=%s nsbx(1)=%d\n",
+               soft, c.qlimsByIndex[c.ownedJointInds[0]].first,
+               c.qlimsByIndex[c.ownedJointInds[0]].second, s.q[7 + c.ownedJointInds[0]],
+               c.qlimsByIndex[c.ownedJointInds[0]].first - s.q[7 + c.ownedJointInds[0]],
+               c.qlimsByIndex[c.ownedJointInds[0]].second - s.q[7 + c.ownedJointInds[0]],
+               x0[row], x1[row], c.lastQpStatus(),
+               c.mode() == ArmNMPC::ControlMode::Damping ? "DAMP" : "nom",
+               c.qp_->nsbxAt(1));
+    }
+}
+
+/*! The experiment. Disabled so it never runs in CI:
+ *    ./build/pat_arm_nmpc/test_pat_arm_nmpc \
+ *        --gtest_also_run_disabled_tests --gtest_filter='DISABLED_ConstraintStudy.*'
+ */
+TEST(DISABLED_ConstraintStudy, Ladder)
+{
+    struct Cfg { const char* name; bool soft_box; bool soft_tau; bool guard; };
+    const Cfg cfgs[] = {
+        {"soft        ", true,  true,  false},
+        {"hard-raw    ", false, false, false},
+        {"hard-guarded", false, false, true },
+        {"hardbox-only", false, true,  true },
+    };
+    struct Sc { const char* name; Scenario sc; };
+    const Sc scs[] = {
+        {"nominal (constraints idle)", Scenario{0.06, 0.0}},
+        {"aggressive setpoint",        Scenario{0.25, 0.0}},
+        {"starts outside a limit",     Scenario{0.06, 1.60}},
+    };
+
+    printf("\nHard vs soft constraints. availability = fraction of ticks with an\n"
+           "NMPC command (rest is safe-mode damping); maxdamp = longest unbroken\n"
+           "damping run; pos_viol = worst realised excursion past the configured\n"
+           "joint limits on the flown trajectory; relax = fraction of ticks the\n"
+           "guard had to widen a box.\n"
+           "NOTE a hard box provides no RESTORING force: soft slack penalises\n"
+           "being outside and pulls back, hard+guard only forbids getting worse.\n");
+
+    for (bool term_vel : {true, false}) {
+        printf("\n=== terminal_velocity_constraint = %s ===\n", term_vel ? "true" : "false");
+        for (const auto& s : scs) {
+            printf("\n  scenario: %s\n", s.name);
+            printf("    %-13s  avail  maxdamp  pos_viol  vel_viol  ee_err   "
+                   "box_slack  relax%%/max      tick_us(mean/max)  over%%  status\n", "config");
+            for (const auto& cf : cfgs) {
+                NMPCParams p = liveParams();
+                p.terminal_velocity_constraint = term_vel;
+                p.soft_joint_limits            = cf.soft_box;
+                p.soft_torque_limits           = cf.soft_tau;
+                p.relax_box_to_contain_x0      = cf.guard;
+                const RunMetrics m = runClosedLoop(p, s.sc, 300);
+
+                std::string hist;
+                for (const auto& [st, n] : m.status_hist)
+                    hist += std::to_string(st) + ":" + std::to_string(n) + " ";
+                printf("    %-13s %5.1f%%  %7d  %8.2e  %8.2e  %7.4f  %9.2e  "
+                       "%5.1f%%/%7.1e  %8.0f/%8.0f  %4.1f%%  %s\n",
+                       cf.name, 100.0 * m.availability, m.max_consecutive_damping,
+                       m.max_pos_violation, m.max_vel_violation, m.mean_ee_err,
+                       m.max_box_slack, 100.0 * m.guard_relax_frac, m.guard_relax_max,
+                       m.mean_tick_us, m.max_tick_us, 100.0 * m.frac_over_budget,
+                       hist.c_str());
+            }
+        }
     }
 }
 

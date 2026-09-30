@@ -12,7 +12,12 @@ Planar Air-bearing Table simulator for ISAM GNC and manipulation research.
   - `pat_robotics` — per-joint PID (`IJointController`)
   - `pat_arm_nmpc` — dual-arm task-space NMPC: planar (x, y, θz) receding-horizon
     control with joint position/velocity/torque limits solved by an acados/HPIPM
-    QP (unconstrained backward-Riccati fallback if the QP fails to converge)
+    QP, soft (penalised) or hard per constraint group. On a failed or non-finite
+    solve it enters a sticky safe mode commanding pure joint damping, so the arm
+    slows to rest rather than acting on an untrustworthy plan
+- Arm-torque watchdog in `pat_simulation`: the simulated actuators zero on command
+  silence, as a real motor driver's watchdog would, so a dead controller cannot
+  leave a torque latched on
 - Chaser bus + two planar Agilex-Piper 3R arms, shared between the sim plant and
   the NMPC's internal dynamics model via a `pat_platform_description` xacro
 - Real CAD meshes (from the PAT digital twin) rendered over simple collision
@@ -256,6 +261,26 @@ derived trust region matches the reachable wrench, that the QP's hard bounds hol
 exactly while its stages stay dynamically consistent, and that the soft
 constraints are idle inside the limits but absorb a violation outside them.
 
+It also covers safe mode (the damping command is dissipative, finite even when the
+measured velocity is not, within the torque limits, stable at the control rate, and
+sticky until the solver recovers) and the soft/hard constraint switch (the soft-row
+layout matches what the solver was built with for every flag combination, a hard box
+with an out-of-box `x0` fails while a soft one tolerates it, and the relax-to-contain
+guard makes it solvable again without moving the pin).
+
+Two `DISABLED_` tests are experiments rather than assertions, excluded from CI:
+
+```bash
+./build/pat_arm_nmpc/test_pat_arm_nmpc --gtest_also_run_disabled_tests \
+    --gtest_filter='DISABLED_ConstraintStudy.*' 2>&1 | grep -v 'ArmNMPC profile'
+```
+
+`Ladder` prints a soft-vs-hard comparison across scenarios (availability, longest
+safe-mode run, realised violation, guard-relax fraction, per-tick timing, HPIPM
+status histogram); `BoxIsActuallyEnforced` prints what the QP plans for a joint
+parked outside its limit, which is how the rollout-clamp problem was found. The
+profile line is filtered out because it interleaves with the table.
+
 ## Sim-to-real
 
 `pat_simulation` (MuJoCo) publishes `/chaser/odom`, `/chaser/imu`,
@@ -291,26 +316,44 @@ otherwise have to rediscover. None are regressions.
   the two is wrong about the hardware. Everything downstream scales off whichever
   it is — the derived SQP trust region and the torque constraint both come from
   `model_tau_max`.
-- **The soft-constraint penalties are strong enough to miss the control period.**
-  With `joint_slack_*` at 1e3/1e4, a run where the arm starts outside a software
-  limit solves in ~8.3 ms against the 5 ms period at `control_hz: 200`; the
-  penalty is stiff enough to spend interior-point iterations refusing to violate
-  by more than ~5 µrad. Scaling all four slack weights down 100× gives ~1.9 ms for
-  a still-negligible ~7e-5 rad violation. In nominal operation the slacks are
-  inert (≤1e-11), so this only bites off-nominal — which is also when the deadline
-  matters most. `peak slack` on the profile line is the signal to watch.
+- **The soft-constraint penalties are expensive once the box is actually active.**
+  With `joint_slack_*` at 1e3/1e4 and the arm parked outside a software limit, the
+  solve runs ~8 ms against the 5 ms period at `control_hz: 200`, spends 55% of
+  ticks over budget, and produces a handful of NaN solves (~9 in 300). In nominal
+  operation the slacks are inert (~1e-16), so this only bites off-nominal — which
+  is when the deadline matters most. `peak slack` on the profile line is the
+  signal to watch. Worth a retune now that the constraint genuinely binds; the
+  earlier measurement that suggested 100× smaller weights were nearly free was
+  taken while the rollout clamp was still masking the constraint.
+- **A restoring joint-limit term is unbuilt, and its premise is unverified.** A
+  box forbids being outside a limit but supplies no gradient pulling a joint back
+  in, so a cost term with an inward gradient is an obvious candidate. But the
+  evidence that the box fails to recover is currently **not established** —
+  `runClosedLoop`'s `max_pos_violation` is a running max over a run that *begins*
+  at the violation, so it is pinned to the initial condition and reads ~0.699 for
+  any controller, including a perfect one. Three configurations with opposite
+  restoring properties all reporting 0.699 was the tell. Before building anything:
+  add `initial`/`final`/`recovered` to `RunMetrics` and read the
+  `pos_violation_integral` column that is already collected but never printed. If
+  the soft box does recover, the feature is an avoidance improvement, not a
+  recovery fix. Two things to know either way: `buildJointBoxBounds` sets
+  `lbx = q_min − q0`, which is an absolute persistent target and not a per-tick
+  relative one; and the owned arm has **no redundancy** (three owned joints against
+  a three-dimensional task, so the owned `J_task` block is 3×3 and invertible), so
+  any joint recovery must be paid for in EE error — roughly 0.2 m per 0.7 rad.
+  Design notes in the plan file if that investigation resumes.
 - **Joint velocity limits have no model source.** MJCF has no velocity range, so
   `qd_max` comes from the per-node `limits.qd_max` (2.0 rad/s) for owned joints and
   a hardcoded 10.0 rad/s default for the rest — and the rollout clamp is
   `rollout_v_clamp_mult` × that, so non-owned joints are clamped 5× looser than
   owned ones. Position and torque limits are both single-sourced now; this one is
-  not.
+  not. The velocity rows also carry a milder version of the clamp problem fixed
+  for positions: the clamp sits at 2× the limit, so the velocity box can only be
+  masked once the rollout exceeds twice its bound.
 - **`nmpc.yaml` still carries dead weights.** `Q_ori`, `Q_angvel` and `R_ori` are
   unused by the planar law (the θz channel reads `Q_pos`/`Q_vel`/`R`'s third
   entry). The commented-out reference block's `full_nonlinear` comment also still
   describes the SQP path as untuned and QP-failing.
-- Test with hard constraints 
-- Fallback logic - joint damping (push to zero velocity) 
 
 ### Settled by measurement — don't redo these
 
@@ -329,6 +372,35 @@ otherwise have to rediscover. None are regressions.
   loop: 443 µs/solve at `2`, against 1176 µs cold and 1221 µs primal-only, with
   identical tracking and torque in all three. The dual warm start is doing the
   work, not the primal one.
+- **The rollout clamps joint position to the MECHANICAL range, never to the
+  software margin.** This looks like an arbitrary choice and is not. The joint box
+  is written on `Δq = q − q0`, so clamping the rollout into the configured margin
+  puts the nominal trajectory inside the box by construction, and the
+  multiple-shooting defect `b_k` then hands the QP that teleport as achievable
+  dynamics. Measured with the clamp on the software margin: the QP planned
+  `Δq₁ = 0.70` where bounded torque reaches ~0.017 in one step, soft slack read
+  ~1e-13 with the arm 0.7 rad outside its limit, and hard constraints never
+  failed. Clamping to the mechanical range keeps the singularity protection the
+  clamp exists for — that range *is* the reachable configuration space — while
+  leaving the margin for the QP to enforce.
+- **Hard constraints work, are slightly cheaper, and are useless without the
+  guard.** With `qp.soft_joint_limits: false` and `soft_torque_limits: false`, the
+  full stack runs clean and the QP solves in 780–905 µs against 1142–1201 µs soft
+  — no slack variables to carry. Inside the software margin, hard and soft are
+  indistinguishable in tracking. Outside it, the three variants diverge sharply:
+  raw hard is a **total outage** (0% availability, 300/300 NaN — the historical
+  "fails every loop"), hard + `relax_box_to_contain_x0` is 100% available and
+  fastest but relaxes on 100% of ticks, so the constraint is inactive exactly when
+  it would matter, and soft degrades gracefully but slowly (70% availability,
+  ~8 ms/tick). Never enable hard without the guard. `DISABLED_ConstraintStudy` in
+  `test/` regenerates the table.
+- **Stage 0's soft-constraint mapping indexes from `nx`, not 0.** Stage 0's `nbx`
+  is the full state (the measurement pin), so its general/torque rows begin at
+  `nx`; every other stage's begin at `nbx_k`. Starting from 0 there softens the
+  first `ng` rows of the pin itself — the task error and its rate — with the
+  *torque* penalties, and leaves the stage-0 torque rows hard, the exact opposite
+  of what the dims declare. It was latent (nominal slack is ~1e-16 either way) and
+  invisible, because nothing reads stage-0 slack.
 
 ### Realtime readiness (Jetson)
 

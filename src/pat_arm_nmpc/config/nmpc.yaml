@@ -188,6 +188,29 @@
       torque_slack_linear: 1.0e2
       torque_slack_quadratic: 1.0e3
 
+      # Soft (penalised, above) vs hard (infeasible on violation) running
+      # constraints. Construction-time only - the QP dimensions are fixed when
+      # the node starts. The stage-0 measurement pin and the terminal velocity
+      # rows are hard regardless.
+      #
+      # Hard is NOT automatically safer. A soft box penalises being outside and
+      # therefore pulls the joint back; a hard box only forbids the plan from
+      # going there, and if the arm is ALREADY outside, the QP has no answer at
+      # all and the controller drops to safe-mode damping. Because the box is on
+      # Δq relative to the measured q0 and one step moves it by at most
+      # Ts*qdot + (Ts²/2)*H⁻¹Jᵀu, a joint even ~1e-4 rad outside its range is
+      # infeasible immediately - which is what relax_box_to_contain_x0 is for.
+      soft_joint_limits: false
+      # Hardening this changes the QP's PLAN, not the applied torque: the
+      # controller already clamps per joint before publishing.
+      soft_torque_limits: false
+      # Widen a hard box just enough to contain the current measurement, so an
+      # out-of-range joint is forbidden from getting worse rather than making the
+      # solve impossible. A ratchet, not a relaxation - and it provides no
+      # restoring force, unlike slack.
+      relax_box_to_contain_x0: true
+      relax_box_margin: 1.0e-3
+
 pat_arm_nmpc_left:
   ros__parameters:
     arm_side: "left"
@@ -195,8 +218,15 @@ pat_arm_nmpc_left:
     joint_names:  [joint2_L, joint3_L, joint5_L]
     owned_joints: [joint2_L, joint3_L, joint5_L]
     limits:
-      q_min:   [ 0.0,   -2.967, -1.22 ]   # [rad]  may only TIGHTEN the MJCF ranges
-      q_max:   [ 3.14,   0.0,    1.22 ]   # [rad]
+      # A SOFTWARE margin 0.05 rad (~2.9 deg) inside the MJCF ranges
+      # ([0, 3.14], [-2.967, 0], [-1.22, 1.22]). The margin is the point: set
+      # equal to the MJCF ranges these constrain nothing MuJoCo does not already
+      # enforce mechanically, so the QP's joint box has no work to do. Inside
+      # them, the box keeps the arm off its hard stops -- where the stop's
+      # constraint forces are something the prediction model has no term for.
+      # May only ever TIGHTEN the MJCF ranges; the intersection is taken.
+      q_min:   [ 0.05,  -2.917, -1.17 ]   # [rad]
+      q_max:   [ 3.09,  -0.05,   1.17 ]   # [rad]
       qd_max:  [ 2.0,    2.0,    1.50 ]   # [rad/s], symmetric
 
 pat_arm_nmpc_right:
@@ -206,6 +236,6 @@ pat_arm_nmpc_right:
     joint_names:  [joint2_R, joint3_R, joint5_R]
     owned_joints: [joint2_R, joint3_R, joint5_R]
     limits:
-      q_min:   [ 0.0,   -2.967, -1.22 ]
-      q_max:   [ 3.14,   0.0,    1.22 ]
+      q_min:   [ 0.05,  -2.917, -1.17 ]   # see the left arm's note above
+      q_max:   [ 3.09,  -0.05,   1.17 ]
       qd_max:  [ 2.0,    2.0,    1.50 ]

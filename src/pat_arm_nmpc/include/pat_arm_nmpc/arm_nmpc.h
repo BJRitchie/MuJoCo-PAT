@@ -84,6 +84,16 @@ struct NMPCParams {
     double torque_slack_linear    = 1e2;
     double torque_slack_quadratic = 1e3;
 
+    //! Soft (penalised) vs hard (infeasible-on-violation) running constraints,
+    //! and the guard that makes a hard box usable when the measurement is
+    //! already outside it. All construction-time. See the matching fields on
+    //! QuadProbSolverParams for the full rationale, including why hard is not
+    //! automatically safer.
+    bool   soft_joint_limits        = true;
+    bool   soft_torque_limits       = true;
+    bool   relax_box_to_contain_x0  = false;
+    double relax_box_margin         = 1e-3;
+
     double rollout_v_clamp_mult = 2.0;
 
     /*! SQP control trust region, as a fraction of the wrench the arm can
@@ -291,8 +301,9 @@ protected:
 
     /*! Fold the last solve's stage-1 slacks into max_box_slack_/max_tau_slack_.
      *  Stage 1 is where both soft row types coexist (box rows first, then
-     *  general/torque rows). */
-    void recordSlack(int nOwned);
+     *  general/torque rows); the split comes from the solver's own
+     *  nsbxAt/nsgAt, since which groups are soft is configurable. */
+    void recordSlack();
 
     // Print the timing info at the end of a control loop
     void printTimingInfo(
@@ -314,6 +325,21 @@ protected:
     // than name — built once in the constructor via jointIndexFromName() so
     // the per-tick control law can look bounds up by index directly instead
     // of re-hashing joint names every control tick.
+    // Two distinct position limits, and the distinction matters:
+    //
+    //   modelQlimsByIndex -- the MJCF's own joint ranges. MECHANICAL: MuJoCo
+    //     enforces these with constraint forces, so the plant cannot leave them.
+    //     This is what the rollout clamps to, because the rollout clamp exists to
+    //     keep the predicted trajectory inside the physically reachable
+    //     configuration space (an unreachable one loses Jacobian rank).
+    //   qlimsByIndex -- the above, tightened by the configured limits.q_min/q_max.
+    //     A SOFTWARE margin, which only the QP constraint enforces.
+    //
+    // Clamping the rollout to the software margin instead would satisfy the box
+    // by construction: the clamp would teleport the nominal trajectory inside the
+    // margin and the multiple-shooting defect would present that teleport to the
+    // QP as free dynamics, leaving the constraint with nothing to do.
+    std::vector<std::pair<double, double>> modelQlimsByIndex;
     std::vector<std::pair<double, double>> qlimsByIndex;
     std::vector<double>                    vlimsByIndex;
     std::vector<double>                    torqueLimsByIndex;

@@ -69,7 +69,8 @@ ArmNMPC::ArmNMPC(
         // Position ranges come from the MJCF, which is what MuJoCo actually
         // enforces during the rollout, so every joint gets a real range rather
         // than a placeholder -- including the ones this controller does not own.
-        qlimsByIndex = modelJointRanges();
+        modelQlimsByIndex = modelJointRanges();
+        qlimsByIndex      = modelQlimsByIndex;   // tightened by config just below
         vlimsByIndex.assign(n_joints_, 10.0);
         torqueLimsByIndex.assign(n_joints_, -1.0);   // sentinel: must all be filled below
         for (const auto& [jname, tau] : torque_lims) {
@@ -158,6 +159,23 @@ ArmNMPC::ArmNMPC(
     qp_params.ng = n_j;
     qp_params.general_slack_penalty_linear    = params_.torque_slack_linear;
     qp_params.general_slack_penalty_quadratic = params_.torque_slack_quadratic;
+
+    qp_params.soft_joint_limits       = params_.soft_joint_limits;
+    qp_params.soft_torque_limits      = params_.soft_torque_limits;
+    qp_params.relax_box_to_contain_x0 = params_.relax_box_to_contain_x0;
+    // Floor the guard's margin at one step's unavoidable drift, Ts*qd_max: a
+    // joint at rated speed moves that far in a single step whatever the control
+    // does, so a margin below it re-creates the infeasibility the guard exists to
+    // remove. The solver cannot work this out for itself — it knows neither Ts
+    // nor which rows are positions.
+    {
+        double qd_max_owned = 0.0;
+        for (int idx : ownedJointInds)
+            qd_max_owned = std::max(qd_max_owned, vlimsByIndex[idx]);
+        qp_params.relax_box_margin =
+            std::max(params_.relax_box_margin, params_.Ts * qd_max_owned);
+    }
+    qp_params.relax_box_margin        = params_.relax_box_margin;
 
     qp_params.idxbx_k.resize(2 * n_owned);
     for (int i = 0; i < n_owned; ++i) {
@@ -421,7 +439,7 @@ bool ArmNMPC::solveStageQP(
 
         if (ok) {
             qp_->getU(0, tau_task_out.data());
-            recordSlack(nOwned);
+            recordSlack();
         }
     }
     // A non-finite solution is a failed solve, not an exception: it means the
@@ -551,7 +569,7 @@ int ArmNMPC::lastQpStatus() const
     return qp_ ? qp_->lastStatus() : 0;
 }
 
-void ArmNMPC::recordSlack(int nOwned)
+void ArmNMPC::recordSlack()
 {
     const int ns = qp_->nsAt(1);
     if (ns <= 0) return;
@@ -561,16 +579,21 @@ void ArmNMPC::recordSlack(int nOwned)
     }
     qp_->getSlack(1, slack_lo_.data(), slack_hi_.data());
 
-    const int n_box = 2 * nOwned;
+    // Ask the solver how the buffer is laid out rather than assuming 2*nOwned box
+    // rows come first: which groups are soft is configurable, and in this model
+    // the box and general counts happen to be equal, so a wrong split would read
+    // torque slack and label it box slack without any size mismatch to catch it.
+    const int n_box = qp_->nsbxAt(1);
+    const int n_gen = qp_->nsgAt(1);
     if (n_box > 0) {
         max_box_slack_ = std::max({max_box_slack_,
                                     slack_lo_.head(n_box).maxCoeff(),
                                     slack_hi_.head(n_box).maxCoeff()});
     }
-    if (ns > n_box) {
+    if (n_gen > 0) {
         max_tau_slack_ = std::max({max_tau_slack_,
-                                    slack_lo_.tail(ns - n_box).maxCoeff(),
-                                    slack_hi_.tail(ns - n_box).maxCoeff()});
+                                    slack_lo_.segment(n_box, n_gen).maxCoeff(),
+                                    slack_hi_.segment(n_box, n_gen).maxCoeff()});
     }
 }
 
@@ -768,19 +791,25 @@ Eigen::VectorXd ArmNMPC::solveNonlinearMPC(
                     v_next[6 + i] = std::max(-lim, std::min(lim, v_next[6 + i]));
                 }
 
-                // Rollout position clamp: hard-clamp predicted joint position
-                // to qlimsByIndex too -- the velocity clamp alone still lets
-                // q_k walk to a physically extreme/degenerate configuration
-                // over the horizon (nothing else bounds q_k during the
-                // OPEN-LOOP rollout; qlimsByIndex is only a SOFT QP box
-                // constraint on the SOLUTION, stages 1..N, not a hard bound
-                // on the rollout's own predicted trajectory), producing a
-                // genuine kinematic (Jacobian rank-loss) singularity
-                // independent of velocity. Same transparency to the b_k
-                // defect math as the velocity clamp above.
+                // Rollout position clamp, to the MECHANICAL range only. The
+                // velocity clamp alone still lets q_k walk to a physically
+                // extreme configuration over the horizon (nothing else bounds
+                // q_k during the OPEN-LOOP rollout), producing a kinematic
+                // (Jacobian rank-loss) singularity independent of velocity.
+                //
+                // modelQlimsByIndex, NOT qlimsByIndex: clamping to the software
+                // margin would make the joint box constraint vacuous. The box is
+                // written on Δq = q_k − q0, so clamping the rollout into the
+                // margin puts the nominal trajectory inside the box by
+                // construction, and b_k then hands the QP that teleport as free
+                // dynamics -- the constraint could never bind. Clamping to the
+                // mechanical range keeps the singularity protection (that range
+                // IS the reachable configuration space) while leaving the margin
+                // for the QP to enforce, which is the whole point of having one.
                 for (int i = 0; i < n_j; ++i) {
-                    q_next[7 + i] = std::max(qlimsByIndex[i].first,
-                                              std::min(qlimsByIndex[i].second, q_next[7 + i]));
+                    q_next[7 + i] = std::max(modelQlimsByIndex[i].first,
+                                              std::min(modelQlimsByIndex[i].second,
+                                                        q_next[7 + i]));
                 }
 
                 q_k = q_next;
@@ -826,7 +855,7 @@ Eigen::VectorXd ArmNMPC::solveNonlinearMPC(
             // around, so the region tracks the arm's actual authority in this
             // configuration instead of a fixed wrench that stops binding the
             // moment either the configuration or the torque limits change.
-            recordSlack(nOwned);
+            recordSlack();
 
             const Eigen::VectorXd du_max =
                 params_.du_max_frac * reachableWrenchBound(J_task0);

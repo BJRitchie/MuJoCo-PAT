@@ -63,6 +63,25 @@ QuadProbSolver::QuadProbSolver( const QuadProbSolverParams& params )
     // so it's built with HPIPM's own direct setters.
     const int ng = params_.ng;
 
+    // Decide the soft-row layout ONCE, here, and let both the dims loop below
+    // and nsAt/nsbxAt/nsgAt read it. Deriving it twice is how a slack reader
+    // ends up slicing a buffer by a count the solver never used.
+    //
+    //   box rows     : soft at stages 1..N (stage 0's box IS the measurement
+    //                  pin -- never negotiable), and only when soft_joint_limits
+    //   general rows : soft at stages 0..N-1 (where a control decision exists),
+    //                  and only when soft_torque_limits
+    //
+    // Stage N's box count is nbx_k, deliberately NOT nbx_k + n_terminal: the
+    // terminal rows sit after idxbx_k's in idxbx_N_combined, and leaving them
+    // out of the soft count is what keeps them hard.
+    nsbx_per_stage_.assign(N + 1, 0);
+    nsg_per_stage_.assign(N + 1, 0);
+    for (int k = 0; k <= N; ++k) {
+        if (params_.soft_joint_limits && k > 0)  nsbx_per_stage_[k] = nbx_k;
+        if (params_.soft_torque_limits && k < N) nsg_per_stage_[k]  = ng;
+    }
+
     dims = ocp_qp_dims_create(N);
     for (int k = 0; k <= N; ++k) {
         // States and control inputs
@@ -92,8 +111,8 @@ QuadProbSolver::QuadProbSolver( const QuadProbSolverParams& params )
         // slack_penalty_linear/general_slack_penalty_linear's doc comments
         // for why. Stage 0's box rows stay hard (nsbx=0 there): it's the
         // measured initial condition, not a negotiable limit.
-        const int nsbx_k = (k == 0) ? 0 : nbx_k;
-        const int nsg_k  = ng_k;
+        const int nsbx_k = nsbx_per_stage_[k];
+        const int nsg_k  = nsg_per_stage_[k];
         d_ocp_qp_dim_set_nsbx(k, nsbx_k, dims);
         d_ocp_qp_dim_set_nsg(k, nsg_k, dims);
         d_ocp_qp_dim_set_ns(k, nsbx_k + nsg_k, dims);
@@ -165,58 +184,41 @@ QuadProbSolver::QuadProbSolver( const QuadProbSolverParams& params )
     // ranges have different soft-row compositions (see the dims loop
     // above), so each needs its own idxs/Zl/Zu/zl/zu built once and pushed
     // to its applicable stages:
-    //   stage 0      : general rows only (box is hard there)
-    //   stages 1..N-1: box rows then general rows, combined
-    //   stage N      : box rows only (no control there, so no general rows)
-    if (ng > 0) {
-        std::vector<int> idxs0(ng);
-        std::iota(idxs0.begin(), idxs0.end(), 0);
-        Eigen::VectorXd Zl0 = Eigen::VectorXd::Constant(ng, params_.general_slack_penalty_quadratic);
-        Eigen::VectorXd Zu0 = Eigen::VectorXd::Constant(ng, params_.general_slack_penalty_quadratic);
-        Eigen::VectorXd zl0 = Eigen::VectorXd::Constant(ng, params_.general_slack_penalty_linear);
-        Eigen::VectorXd zu0 = Eigen::VectorXd::Constant(ng, params_.general_slack_penalty_linear);
-        d_ocp_qp_set_idxs(0, idxs0.data(), qp_in);
-        d_ocp_qp_set_Zl(0, Zl0.data(), qp_in);
-        d_ocp_qp_set_Zu(0, Zu0.data(), qp_in);
-        d_ocp_qp_set_zl(0, zl0.data(), qp_in);
-        d_ocp_qp_set_zu(0, zu0.data(), qp_in);
-    }
+    // One loop over stages, composed from nsbx_per_stage_/nsg_per_stage_, so the
+    // soft rows wired here are by construction the ones the dims declared. The
+    // general-row offset is each stage's OWN nbx, which differs: nx at stage 0
+    // (the full-state pin), nbx_k in the middle, nbx_k + n_terminal at stage N.
+    // Getting that offset from a hardcoded 0 is how the stage-0 block used to
+    // soften the pin instead of the torque rows.
+    for (int k = 0; k <= N; ++k) {
+        const int nsbx = nsbx_per_stage_[k];
+        const int nsg  = nsg_per_stage_[k];
+        const int ns   = nsbx + nsg;
+        if (ns == 0) continue;          // HPIPM must not see a zero-length idxs
 
-    if (nbx_k > 0 || ng > 0) {
-        const int ns_mid = nbx_k + ng;
-        std::vector<int> idxs_mid(ns_mid);
-        std::iota(idxs_mid.begin(), idxs_mid.end(), 0);
-        Eigen::VectorXd Zl_mid(ns_mid), Zu_mid(ns_mid), zl_mid(ns_mid), zu_mid(ns_mid);
-        Zl_mid.head(nbx_k).setConstant(params_.slack_penalty_quadratic);
-        Zu_mid.head(nbx_k).setConstant(params_.slack_penalty_quadratic);
-        zl_mid.head(nbx_k).setConstant(params_.slack_penalty_linear);
-        zu_mid.head(nbx_k).setConstant(params_.slack_penalty_linear);
-        Zl_mid.tail(ng).setConstant(params_.general_slack_penalty_quadratic);
-        Zu_mid.tail(ng).setConstant(params_.general_slack_penalty_quadratic);
-        zl_mid.tail(ng).setConstant(params_.general_slack_penalty_linear);
-        zu_mid.tail(ng).setConstant(params_.general_slack_penalty_linear);
+        const int nbx_this_stage = (k == 0) ? nx : (k == N ? nbx_k + n_terminal : nbx_k);
 
-        for (int k = 1; k <= N - 1; ++k) {
-            d_ocp_qp_set_idxs(k, idxs_mid.data(), qp_in);
-            d_ocp_qp_set_Zl(k, Zl_mid.data(), qp_in);
-            d_ocp_qp_set_Zu(k, Zu_mid.data(), qp_in);
-            d_ocp_qp_set_zl(k, zl_mid.data(), qp_in);
-            d_ocp_qp_set_zu(k, zu_mid.data(), qp_in);
-        }
-    }
+        std::vector<int> idxs(ns);
+        // Soft box rows are the FIRST nsbx box positions -- at stage N that is
+        // idxbx_k's rows, leaving the terminal rows after them untouched.
+        std::iota(idxs.begin(), idxs.begin() + nsbx, 0);
+        std::iota(idxs.begin() + nsbx, idxs.end(), nbx_this_stage);
 
-    if (nbx_k > 0) {
-        std::vector<int> idxsN(nbx_k);
-        std::iota(idxsN.begin(), idxsN.end(), 0);
-        Eigen::VectorXd ZlN = Eigen::VectorXd::Constant(nbx_k, params_.slack_penalty_quadratic);
-        Eigen::VectorXd ZuN = Eigen::VectorXd::Constant(nbx_k, params_.slack_penalty_quadratic);
-        Eigen::VectorXd zlN = Eigen::VectorXd::Constant(nbx_k, params_.slack_penalty_linear);
-        Eigen::VectorXd zuN = Eigen::VectorXd::Constant(nbx_k, params_.slack_penalty_linear);
-        d_ocp_qp_set_idxs(N, idxsN.data(), qp_in);
-        d_ocp_qp_set_Zl(N, ZlN.data(), qp_in);
-        d_ocp_qp_set_Zu(N, ZuN.data(), qp_in);
-        d_ocp_qp_set_zl(N, zlN.data(), qp_in);
-        d_ocp_qp_set_zu(N, zuN.data(), qp_in);
+        Eigen::VectorXd Zl(ns), Zu(ns), zl(ns), zu(ns);
+        Zl.head(nsbx).setConstant(params_.slack_penalty_quadratic);
+        Zu.head(nsbx).setConstant(params_.slack_penalty_quadratic);
+        zl.head(nsbx).setConstant(params_.slack_penalty_linear);
+        zu.head(nsbx).setConstant(params_.slack_penalty_linear);
+        Zl.tail(nsg).setConstant(params_.general_slack_penalty_quadratic);
+        Zu.tail(nsg).setConstant(params_.general_slack_penalty_quadratic);
+        zl.tail(nsg).setConstant(params_.general_slack_penalty_linear);
+        zu.tail(nsg).setConstant(params_.general_slack_penalty_linear);
+
+        d_ocp_qp_set_idxs(k, idxs.data(), qp_in);
+        d_ocp_qp_set_Zl(k, Zl.data(), qp_in);
+        d_ocp_qp_set_Zu(k, Zu.data(), qp_in);
+        d_ocp_qp_set_zl(k, zl.data(), qp_in);
+        d_ocp_qp_set_zu(k, zu.data(), qp_in);
     }
 
     last_tau_task = Eigen::VectorXd::Zero(nu);
@@ -249,6 +251,22 @@ bool QuadProbSolver::solve(
     Eigen::VectorXd zero_vec = Eigen::VectorXd::Zero(nx);
     Eigen::VectorXd zero_u   = Eigen::VectorXd::Zero(nu);
 
+    // Optional guard: widen the box rows so they contain the pinned stage-0
+    // state. Applied once here, so every stage that consumes these bounds
+    // (1..N-1 below, and N further down) sees the same relaxed set.
+    // Non-const: HPIPM's setters take double* and do not promise to leave their
+    // inputs alone (same reason the callers pass freshly-built locals).
+    double* lbx_use = lbx_data;
+    double* ubx_use = ubx_data;
+    if (params_.relax_box_to_contain_x0 && nbx_k > 0) {
+        relaxBoxToContainX0(x0_current, lbx_data, ubx_data);
+        lbx_use = lbx_relaxed_.data();
+        ubx_use = ubx_relaxed_.data();
+    } else {
+        last_relax_count_ = 0;
+        last_relax_max_   = 0.0;
+    }
+
     for (int k = 0; k < N; ++k) {
         d_ocp_qp_set_A(k, A_data, qp_in);
         d_ocp_qp_set_B(k, B_data, qp_in);
@@ -260,8 +278,8 @@ bool QuadProbSolver::solve(
         d_ocp_qp_set_r(k, zero_u.data(), qp_in);
 
         if (k > 0 && nbx_k > 0) {
-            d_ocp_qp_set_lbx(k, lbx_data, qp_in);
-            d_ocp_qp_set_ubx(k, ubx_data, qp_in);
+            d_ocp_qp_set_lbx(k, lbx_use, qp_in);
+            d_ocp_qp_set_ubx(k, ubx_use, qp_in);
         }
         if (ng > 0) {
             // D (the linear map from control to the constrained quantity,
@@ -288,16 +306,16 @@ bool QuadProbSolver::solve(
     if (n_terminal > 0) {
         Eigen::VectorXd lbxN(nbx_k + n_terminal), ubxN(nbx_k + n_terminal);
         if (nbx_k > 0) {
-            lbxN.head(nbx_k) = Eigen::Map<Eigen::VectorXd>(lbx_data, nbx_k);
-            ubxN.head(nbx_k) = Eigen::Map<Eigen::VectorXd>(ubx_data, nbx_k);
+            lbxN.head(nbx_k) = Eigen::Map<const Eigen::VectorXd>(lbx_use, nbx_k);
+            ubxN.head(nbx_k) = Eigen::Map<const Eigen::VectorXd>(ubx_use, nbx_k);
         }
         lbxN.tail(n_terminal) = terminal_zero_bound_;
         ubxN.tail(n_terminal) = terminal_zero_bound_;
         d_ocp_qp_set_lbx(N, lbxN.data(), qp_in);
         d_ocp_qp_set_ubx(N, ubxN.data(), qp_in);
     } else if (nbx_k > 0) {
-        d_ocp_qp_set_lbx(N, lbx_data, qp_in);
-        d_ocp_qp_set_ubx(N, ubx_data, qp_in);
+        d_ocp_qp_set_lbx(N, lbx_use, qp_in);
+        d_ocp_qp_set_ubx(N, ubx_use, qp_in);
     }
 
     // Initial-condition pin: lbx == ubx == measured x0, over ALL nx rows
@@ -376,6 +394,22 @@ bool QuadProbSolver::solveMultiStage(
     Eigen::VectorXd zero_vec = Eigen::VectorXd::Zero(params_.nx);
     Eigen::VectorXd zero_u   = Eigen::VectorXd::Zero(params_.nu);
 
+    // Optional guard: widen the box rows so they contain the pinned stage-0
+    // state. Applied once here, so every stage that consumes these bounds
+    // (1..N-1 below, and N further down) sees the same relaxed set.
+    // Non-const: HPIPM's setters take double* and do not promise to leave their
+    // inputs alone (same reason the callers pass freshly-built locals).
+    double* lbx_use = lbx_data;
+    double* ubx_use = ubx_data;
+    if (params_.relax_box_to_contain_x0 && nbx_k > 0) {
+        relaxBoxToContainX0(x0_current, lbx_data, ubx_data);
+        lbx_use = lbx_relaxed_.data();
+        ubx_use = ubx_relaxed_.data();
+    } else {
+        last_relax_count_ = 0;
+        last_relax_max_   = 0.0;
+    }
+
     for (int k = 0; k < N; ++k) {
         if (A_k[k].rows() != params_.nx || A_k[k].cols() != params_.nx ||
             B_k[k].rows() != params_.nx || B_k[k].cols() != params_.nu ||
@@ -400,8 +434,8 @@ bool QuadProbSolver::solveMultiStage(
         d_ocp_qp_set_r(k, zero_u.data(), qp_in);
 
         if (k > 0 && nbx_k > 0) {
-            d_ocp_qp_set_lbx(k, lbx_data, qp_in);
-            d_ocp_qp_set_ubx(k, ubx_data, qp_in);
+            d_ocp_qp_set_lbx(k, lbx_use, qp_in);
+            d_ocp_qp_set_ubx(k, ubx_use, qp_in);
         }
         if (ng > 0) {
             d_ocp_qp_set_D(k, const_cast<double*>(D_k[k].data()), qp_in);
@@ -420,16 +454,16 @@ bool QuadProbSolver::solveMultiStage(
     if (n_terminal > 0) {
         Eigen::VectorXd lbxN(nbx_k + n_terminal), ubxN(nbx_k + n_terminal);
         if (nbx_k > 0) {
-            lbxN.head(nbx_k) = Eigen::Map<Eigen::VectorXd>(lbx_data, nbx_k);
-            ubxN.head(nbx_k) = Eigen::Map<Eigen::VectorXd>(ubx_data, nbx_k);
+            lbxN.head(nbx_k) = Eigen::Map<const Eigen::VectorXd>(lbx_use, nbx_k);
+            ubxN.head(nbx_k) = Eigen::Map<const Eigen::VectorXd>(ubx_use, nbx_k);
         }
         lbxN.tail(n_terminal) = terminal_zero_bound_;
         ubxN.tail(n_terminal) = terminal_zero_bound_;
         d_ocp_qp_set_lbx(N, lbxN.data(), qp_in);
         d_ocp_qp_set_ubx(N, ubxN.data(), qp_in);
     } else if (nbx_k > 0) {
-        d_ocp_qp_set_lbx(N, lbx_data, qp_in);
-        d_ocp_qp_set_ubx(N, ubx_data, qp_in);
+        d_ocp_qp_set_lbx(N, lbx_use, qp_in);
+        d_ocp_qp_set_ubx(N, ubx_use, qp_in);
     }
 
     // Initial-condition pin, same idiom as solve().
@@ -470,18 +504,58 @@ void QuadProbSolver::getX(int stage, double* x_out) const {
     d_ocp_qp_sol_get_x(stage, qp_out, x_out);
 }
 
-int QuadProbSolver::nsAt(int stage) const {
+void QuadProbSolver::relaxBoxToContainX0(
+    const double* x0, const double* lbx, const double* ubx)
+{
+    const int nbx_k = static_cast<int>(params_.idxbx_k.size());
+    lbx_relaxed_.resize(nbx_k);
+    ubx_relaxed_.resize(nbx_k);
+    last_relax_count_ = 0;
+    last_relax_max_   = 0.0;
+
+    const double m = params_.relax_box_margin;
+    for (int j = 0; j < nbx_k; ++j) {
+        const double x = x0[params_.idxbx_k[static_cast<size_t>(j)]];
+        double lo = lbx[j];
+        double hi = ubx[j];
+        // Widen only in the direction that excludes x0, so a row already
+        // containing the current state is left exactly as the caller built it.
+        if (x - m < lo) {
+            last_relax_max_ = std::max(last_relax_max_, lo - (x - m));
+            lo = x - m;
+            ++last_relax_count_;
+        }
+        if (x + m > hi) {
+            last_relax_max_ = std::max(last_relax_max_, (x + m) - hi);
+            hi = x + m;
+            ++last_relax_count_;
+        }
+        lbx_relaxed_[j] = lo;
+        ubx_relaxed_[j] = hi;
+    }
+}
+
+int QuadProbSolver::nsbxAt(int stage) const {
     if (stage < 0 || stage > params_.N) return 0;
-    const int nbx_k  = static_cast<int>(params_.idxbx_k.size());
-    const int nsbx_k = (stage == 0) ? 0 : nbx_k;             // box rows soft at stages 1..N
-    const int nsg_k  = (stage < params_.N) ? params_.ng : 0; // general rows soft at stages 0..N-1
-    return nsbx_k + nsg_k;
+    return nsbx_per_stage_[static_cast<size_t>(stage)];
+}
+
+int QuadProbSolver::nsgAt(int stage) const {
+    if (stage < 0 || stage > params_.N) return 0;
+    return nsg_per_stage_[static_cast<size_t>(stage)];
+}
+
+int QuadProbSolver::nsAt(int stage) const {
+    return nsbxAt(stage) + nsgAt(stage);
 }
 
 void QuadProbSolver::getSlack(int stage, double* sl_out, double* su_out) const {
     if (stage < 0 || stage > params_.N) {
         throw std::out_of_range("QuadProbSolver::getSlack: stage out of range [0, N]");
     }
+    // Nothing soft here means nothing to read, and HPIPM would write past a
+    // zero-length buffer the caller sized from nsAt().
+    if (nsAt(stage) == 0) return;
     d_ocp_qp_sol_get_sl(stage, qp_out, sl_out);
     d_ocp_qp_sol_get_su(stage, qp_out, su_out);
 }

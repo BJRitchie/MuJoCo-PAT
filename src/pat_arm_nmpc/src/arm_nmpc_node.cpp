@@ -184,6 +184,14 @@ pat_arm_nmpc::NMPCParams ArmNMPCNode::loadParams() {
         declare_parameter<double>("qp.torque_slack_linear", p.torque_slack_linear);
     p.torque_slack_quadratic =
         declare_parameter<double>("qp.torque_slack_quadratic", p.torque_slack_quadratic);
+    p.soft_joint_limits =
+        declare_parameter<bool>("qp.soft_joint_limits", p.soft_joint_limits);
+    p.soft_torque_limits =
+        declare_parameter<bool>("qp.soft_torque_limits", p.soft_torque_limits);
+    p.relax_box_to_contain_x0 =
+        declare_parameter<bool>("qp.relax_box_to_contain_x0", p.relax_box_to_contain_x0);
+    p.relax_box_margin =
+        declare_parameter<double>("qp.relax_box_margin", p.relax_box_margin);
 
     // Per-joint position/velocity limits: parallel arrays, entry i belongs to
     // joint_names_[i] — this node's OWN joints, the ones it box-constrains.
