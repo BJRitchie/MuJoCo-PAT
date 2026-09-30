@@ -5,5 +5,39 @@ pat_simulation:
     imu_noise_std: 0.005
     # Arm joints/actuators are opt-in — add entries here (and to the MJCF)
     # to add joints or a whole second arm; no source changes needed.
-    arm_joint_names:    ["arm_joint1", "arm_joint2", "arm_joint3"]
-    arm_actuator_names: ["arm_j1",     "arm_j2",     "arm_j3"]
+    # Dual planar Piper 3R arms (air_bearing_table.xacro). Lists are paired by
+    # position: arm_joint_names[i] <-> arm_actuator_names[i].
+    arm_joint_names:    ["joint2_L", "joint3_L", "joint5_L", "joint2_R", "joint3_R", "joint5_R"]
+    arm_actuator_names: ["motor2_L", "motor3_L", "motor5_L", "motor2_R", "motor3_R", "motor5_R"]
+    # [s] Zero the arm actuators if no torque_command arrives for this long.
+    # Without it the last command is held for the rest of the run, so a
+    # controller that dies mid-motion leaves a constant torque applied - which
+    # does not merely coast the arm, it keeps accelerating it once the joint
+    # reverses. A real motor driver's watchdog does the same thing, so this is
+    # hardware behaviour rather than a simulation artefact. <= 0 disables.
+    arm_torque_timeout: 0.1
+    # initial_arm_qpos: 6 angles (arm_joint_names order) applied once at
+    # startup instead of the MJCF's default all-zero pose. NOT just a
+    # tools/pinn_datagen/ convenience: with arm_contype=2 (air_bearing_table.xacro
+    # — arms now genuinely collide), the raw all-zero fold pose is not
+    # collision-free at the real (digital-twin-derived) arm mount point —
+    # every launch would start in a physically invalid state without this
+    # override. 35 deg on joint2 + -15 deg on joint3 (elbow), joint5
+    # unchanged, on each arm — re-verified collision-free (with margin;
+    # joint2=0deg is the actual boundary, i.e. the whole 0-35deg range is
+    # clear) after the arm mount was corrected to the digital twin's URDF
+    # position (~5cm lower than the prior platform.xml-derived mount).
+    # tools/pinn_datagen/ overrides this per-trial with its own randomized
+    # (and prefiltered-for-collision) configuration.
+    initial_arm_qpos: [0.6108652382, -0.2617993878, 0.0, 0.6108652382, -0.2617993878, 0.0]
+    # Air-bearing table drag, per planar DOF [x, y, yaw]. Modelled as joint
+    # damping (viscous, N*s/m or N*m*s/rad) plus frictionloss (dry/Coulomb,
+    # N or N*m) - the bodies never contact the table geom (separate collision
+    # group, gravity disabled), so this is the only drag they feel. Defaults
+    # match the values previously hardcoded in air_bearing_table.xacro.
+    # NOTE: pat_arm_nmpc's internal model has no such drag, so raising these
+    # shows up to the controller as unmodelled disturbance.
+    chaser_damping:      [0.05, 0.05, 0.02]
+    chaser_frictionloss: [0.0, 0.0, 0.0]
+    target_damping:      [0.01, 0.01, 0.005]
+    target_frictionloss: [0.0, 0.0, 0.0]

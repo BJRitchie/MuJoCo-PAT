@@ -16,3 +16,22 @@ __pycache__/
 *.bag
 *.db3
 outputs/
+
+# clangd: generated compile DB is a build artifact; .clangd config is checked in
+/compile_commands.json
+.cache/
+
+# docker: base compose + .env are committed; local machine tweaks (GPU, extra
+# mounts, ports) go in an override that is not.
+docker-compose.override.yml
+
+# tools/pinn_datagen/'s generated training data (data.h5/data.csv per
+# trajectory) and its per-trial scratch files (removed on exit anyway).
+/pinn_data/
+tools/pinn_datagen/.trial_*.yaml
+tools/pinn_datagen/.trial_*.npz
+*.zip
+
+# Miscellaneous 
+docs/realtime_deployment_research.md 
+MUJOCO_LOG.TXT

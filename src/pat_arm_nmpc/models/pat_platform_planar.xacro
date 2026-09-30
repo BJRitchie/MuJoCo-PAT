@@ -1,0 +1,36 @@
+<?xml version="1.0"?>
+<mujoco xmlns:xacro="http://www.ros.org/wiki/xacro" model="pat_platform_planar">
+  <!--
+    Internal dynamics model for pat_arm_nmpc's ArmTaskSpaceController / ArmNMPC.
+    NOT the simulator plant — MuJoCo is used here only as a rigid-body dynamics
+    library (mass matrix, generalized Jacobian, bias forces).
+
+    Real PAT servicer bus (49.22 kg, real inertia tensor; from platform.xml) on
+    a <freejoint>, plus the two shared planar Piper 3R arms. n_joints_ = 6
+    (joint{2,3,5}_{L,R}); ee sites ee_site_L / ee_site_R. The base <inertial>
+    matches pat_simulation's air_bearing_table plant so the floating-base
+    reaction dynamics agree. Gravity is force-zeroed by the controller ctor.
+  -->
+  <compiler angle="radian"/>
+  <option gravity="0 0 0"/>
+
+  <xacro:include filename="$(find pat_platform_description)/xacro/pat_platform_bus.xacro"/>
+
+  <worldbody>
+    <body name="servicer" pos="0 0 0">
+      <freejoint name="servicer_free"/>
+      <xacro:pat_platform_bus bus_contype="0" arm_contype="0"/>
+    </body>
+  </worldbody>
+
+  <!-- Ignored by the controller (it computes torques, never mj_step) — kept so
+       the model is also directly loadable/steppable for debugging. -->
+  <actuator>
+    <motor name="motor2_L" joint="joint2_L"/>
+    <motor name="motor3_L" joint="joint3_L"/>
+    <motor name="motor5_L" joint="joint5_L"/>
+    <motor name="motor2_R" joint="joint2_R"/>
+    <motor name="motor3_R" joint="joint3_R"/>
+    <motor name="motor5_R" joint="joint5_R"/>
+  </actuator>
+</mujoco>

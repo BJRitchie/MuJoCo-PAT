@@ -1,0 +1,233 @@
+<mujoco model="DASM_16DoF_Basilisk">
+  <compiler angle="radian" inertiafromgeom="false" balanceinertia="true"/>
+  <option gravity="0 0 0" timestep="0.001"><flag contact="disable"/></option>
+  <default><joint damping="0" frictionloss="0"/><geom contype="0" conaffinity="0" mass="0"/><site size="0.012" rgba="1 0.7 0 1"/></default>
+  <worldbody>
+    <body name="spacecraft_base">
+      <freejoint name="base_free"/>
+      <inertial pos="0 0 0" mass="49.22" fullinertia="1.5399 2.7177 2.0322 0.1251 0.00144 -0.0019"/>
+      <geom name="spacecraft_box" type="box" pos="0 0 0" size="0.3 0.25 0.1525" rgba="0.25 0.32 0.48 1"/>
+      <site name="vizproxy_spacecraft_box" pos="0 0 0" quat="1 0 0 0" size="0.0005" rgba="0 0 0 0" group="5"/>
+      <geom name="spacecraft_top_panel" type="box" pos="0 0 0.1545" size="0.255 0.205 0.002" rgba="0.10 0.15 0.24 1"/>
+      <site name="vizproxy_spacecraft_top_panel" pos="0 0 0.1545" quat="1 0 0 0" size="0.0005" rgba="0 0 0 0" group="5"/>
+      <site name="base_origin_site" pos="0 0 0" quat="1 0 0 0"/>
+      <geom name="base_axis_x" type="capsule" fromto="0 0 0 0.18 0 0" size="0.006" rgba="1 0 0 1"/>
+      <site name="vizproxy_base_axis_x" type="cylinder" fromto="0 0 0 0.18 0 0" size="0.0005" rgba="0 0 0 0" group="5"/>
+      <geom name="base_axis_y" type="capsule" fromto="0 0 0 0 0.18 0" size="0.006" rgba="0 1 0 1"/>
+      <site name="vizproxy_base_axis_y" type="cylinder" fromto="0 0 0 0 0.18 0" size="0.0005" rgba="0 0 0 0" group="5"/>
+      <geom name="base_axis_z" type="capsule" fromto="0 0 0 0 0 0.18" size="0.006" rgba="0 0 1 1"/>
+      <site name="vizproxy_base_axis_z" type="cylinder" fromto="0 0 0 0 0 0.18" size="0.0005" rgba="0 0 0 0" group="5"/>
+      <site name="thruster_01_site" pos="0 0.25 0.1525" quat="1 0 0 0" size="0.009" rgba="0.9 0.2 0.2 1"/>
+      <site name="thruster_02_site" pos="0 -0.25 -0.1525" quat="1 0 0 0" size="0.009" rgba="0.9 0.2 0.2 1"/>
+      <site name="thruster_03_site" pos="0 0.25 -0.1525" quat="1 0 0 0" size="0.009" rgba="0.9 0.2 0.2 1"/>
+      <site name="thruster_04_site" pos="0 -0.25 0.1525" quat="1 0 0 0" size="0.009" rgba="0.9 0.2 0.2 1"/>
+      <site name="thruster_05_site" pos="0.3 0 0.1525" quat="1 0 0 0" size="0.009" rgba="0.9 0.2 0.2 1"/>
+      <site name="thruster_06_site" pos="-0.3 0 -0.1525" quat="1 0 0 0" size="0.009" rgba="0.9 0.2 0.2 1"/>
+      <site name="thruster_07_site" pos="0.3 0 -0.1525" quat="1 0 0 0" size="0.009" rgba="0.9 0.2 0.2 1"/>
+      <site name="thruster_08_site" pos="-0.3 0 0.1525" quat="1 0 0 0" size="0.009" rgba="0.9 0.2 0.2 1"/>
+      <site name="thruster_09_site" pos="0.3 0.25 0" quat="1 0 0 0" size="0.009" rgba="0.9 0.2 0.2 1"/>
+      <site name="thruster_10_site" pos="-0.3 -0.25 0" quat="1 0 0 0" size="0.009" rgba="0.9 0.2 0.2 1"/>
+      <site name="thruster_11_site" pos="0.3 -0.25 0" quat="1 0 0 0" size="0.009" rgba="0.9 0.2 0.2 1"/>
+      <site name="thruster_12_site" pos="-0.3 0.25 0" quat="1 0 0 0" size="0.009" rgba="0.9 0.2 0.2 1"/>
+      <site name="rw_torque_site" pos="0 0 0" quat="1 0 0 0" size="0.006" rgba="0.8 0.8 0.1 1"/>
+      <geom name="rw_1_visual" type="sphere" pos="0.055 0 0" size="0.025" rgba="0.7 0.7 0.2 0.7"/>
+      <site name="vizproxy_rw_1_visual" pos="0.055 0 0" quat="1 0 0 0" size="0.0005" rgba="0 0 0 0" group="5"/>
+      <geom name="rw_2_visual" type="sphere" pos="0 0.055 0" size="0.025" rgba="0.7 0.7 0.2 0.7"/>
+      <site name="vizproxy_rw_2_visual" pos="0 0.055 0" quat="1 0 0 0" size="0.0005" rgba="0 0 0 0" group="5"/>
+      <geom name="rw_3_visual" type="sphere" pos="0 0 0.055" size="0.025" rgba="0.7 0.7 0.2 0.7"/>
+      <site name="vizproxy_rw_3_visual" pos="0 0 0.055" quat="1 0 0 0" size="0.0005" rgba="0 0 0 0" group="5"/>
+      <body name="arm1_base_link" pos="-0.245263588358068 0.188451518036017 -0.0899743170869363" quat="-7.31230107720312e-14 -7.31230107716731e-14 0.707106781184816 0.707106781188279">
+        <inertial pos="0 0 0" mass="1.02" fullinertia="0.00267433 0.00282612 0.00089624 -7.3e-07 -0.00017389 4e-07"/>
+        <geom name="arm1_mount_pedestal" type="cylinder" fromto="0.00473641164191482 -2.56829134630247e-05 -0.041451518036016 0.00473641164191482 -2.56829134630247e-05 0.081548481963984" size="0.048" rgba="0.2 0.23 0.28 1"/>
+        <site name="vizproxy_arm1_mount_pedestal" type="cylinder" fromto="0.00473641164191482 -2.56829134630247e-05 -0.041451518036016 0.00473641164191482 -2.56829134630247e-05 0.081548481963984" size="0.0005" rgba="0 0 0 0" group="5"/>
+        <geom name="arm1_mount_hub" type="sphere" pos="0.00473641164191482 -2.56829134630247e-05 -0.041451518036016" size="0.05" rgba="0.2 0.23 0.28 1"/>
+        <site name="vizproxy_arm1_mount_hub" pos="0.00473641164191482 -2.56829134630247e-05 -0.041451518036016" quat="1 0 0 0" size="0.0005" rgba="0 0 0 0" group="5"/>
+        <body name="arm1_link1" pos="0.00485791637597229 7.89492489975113e-05 0.0771625088683855" quat="1 0 0 0">
+          <joint name="arm1_joint1" type="hinge" pos="-0.000121504734057468 -0.000104632162460536 0.00438597309559853" axis="0 0 1" limited="true" range="-2.618 2.618" damping="0" frictionloss="0" armature="0.05"/>
+          <site name="arm1_joint1_frame_site" pos="-0.000121504734057468 -0.000104632162460536 0.00438597309559853"/>
+          <inertial pos="0 0 0" mass="0.71" fullinertia="0.00048916 0.00040472 0.00043982 -3.6e-07 -2.24e-06 -2.42e-06"/>
+          <geom name="arm1_joint1_housing" type="cylinder" fromto="-0.000121504734057468 -0.000104632162460536 -0.0296140269044015 -0.000121504734057468 -0.000104632162460536 0.0383859730955985" size="0.05" rgba="0.12 0.32 0.7 1"/>
+          <site name="vizproxy_arm1_joint1_housing" type="cylinder" fromto="-0.000121504734057468 -0.000104632162460536 -0.0296140269044015 -0.000121504734057468 -0.000104632162460536 0.0383859730955985" size="0.0005" rgba="0 0 0 0" group="5"/>
+          <body name="arm1_link2" pos="-0.198436300634688 0.00131800174760235 0.0204754923373496" quat="-0.0480084366585724 0.0480134430131485 0.705476100912518 0.705473862266274">
+            <joint name="arm1_joint2" type="hinge" pos="-0.198666145229743 0.010926924140076 -0.00142121714502687" axis="0 0 1" limited="true" range="0.0 3.40339204138894" damping="0" frictionloss="0" armature="0.05"/>
+            <site name="arm1_joint2_frame_site" pos="-0.198666145229743 0.010926924140076 -0.00142121714502687"/>
+            <inertial pos="0 0 0" mass="1.17" fullinertia="0.00116918 0.06785384 0.06774489 -0.00180037 0.00025146 -4.55e-06"/>
+            <geom name="arm1_link2_bar" type="capsule" fromto="-0.198666145229743 0.010926924140076 -0.00142121714502687 0.086363854770257 0.010926924140076 -0.00142121714502687" size="0.035" rgba="0.15 0.45 0.9 1"/>
+            <site name="vizproxy_arm1_link2_bar" type="cylinder" fromto="-0.198666145229743 0.010926924140076 -0.00142121714502687 0.086363854770257 0.010926924140076 -0.00142121714502687" size="0.0005" rgba="0 0 0 0" group="5"/>
+            <geom name="arm1_joint2_hub" type="sphere" pos="-0.198666145229743 0.010926924140076 -0.00142121714502687" size="0.05" rgba="0.12 0.32 0.7 1"/>
+            <site name="vizproxy_arm1_joint2_hub" pos="-0.198666145229743 0.010926924140076 -0.00142121714502687" quat="1 0 0 0" size="0.0005" rgba="0 0 0 0" group="5"/>
+            <geom name="arm1_joint3_hub" type="sphere" pos="0.086363854770257 0.010926924140076 -0.00142121714502687" size="0.05" rgba="0.12 0.32 0.7 1"/>
+            <site name="vizproxy_arm1_joint3_hub" pos="0.086363854770257 0.010926924140076 -0.00142121714502687" quat="1 0 0 0" size="0.0005" rgba="0 0 0 0" group="5"/>
+            <geom name="collision_arm1_link2" type="capsule" fromto="-0.198666145229743 0.010926924140076 -0.00142121714502687 0.086363854770257 0.010926924140076 -0.00142121714502687" size="0.035" rgba="0 0 0 0" group="4" contype="0" conaffinity="0" mass="0"/>
+            <geom name="collision_arm1_link2_base_trim" type="capsule" fromto="0.015106354770257 0.010926924140076 -0.00142121714502687 0.086363854770257 0.010926924140076 -0.00142121714502687" size="0.035" rgba="0 0 0 0" group="4" contype="0" conaffinity="0" mass="0"/>
+            <body name="arm1_link3" pos="0.086363854770257 0.010926924140076 -0.00142121714502687" quat="-0.623996220379733 0 0 0.781427358717244">
+              <joint name="arm1_joint3" type="hinge" pos="-0 -0 -0" axis="0 0 1" limited="true" range="-3.05432619099008 0.0" damping="0" frictionloss="0" armature="0.05"/>
+              <site name="arm1_joint3_frame_site" pos="-0 -0 -0"/>
+              <inertial pos="-0.0202737662122021 -0.133914995944595 -0.000458682652737356" mass="0.5" fullinertia="0.01361711 0.00045024 0.01380322 0.00165794 -4.8e-07 -4.5e-07"/>
+              <geom name="arm1_link3_bar" type="capsule" fromto="0 0 0 -0.021984 -0.25075 0" size="0.035" rgba="0.1 0.72 0.78 1.0"/>
+              <site name="vizproxy_arm1_link3_bar" type="cylinder" fromto="0 0 0 -0.021984 -0.25075 0" size="0.0005" rgba="0 0 0 0" group="5"/>
+              <geom name="arm1_joint3_root" type="sphere" pos="0 0 0" size="0.05" rgba="0.12 0.32 0.7 1"/>
+              <site name="vizproxy_arm1_joint3_root" pos="0 0 0" quat="1 0 0 0" size="0.0005" rgba="0 0 0 0" group="5"/>
+              <geom name="arm1_joint4_hub" type="sphere" pos="-0.021984 -0.25075 0" size="0.05" rgba="0.12 0.32 0.7 1"/>
+              <site name="vizproxy_arm1_joint4_hub" pos="-0.021984 -0.25075 0" quat="1 0 0 0" size="0.0005" rgba="0 0 0 0" group="5"/>
+              <geom name="collision_arm1_link3" type="capsule" fromto="0 0 0 -0.021984 -0.25075 0" size="0.035" rgba="0 0 0 0" group="4" contype="0" conaffinity="0" mass="0"/>
+              <body name="arm1_link4" pos="-0.021984 -0.25075 0" quat="0.707105482511236 0.707108079859474 0 0">
+                <joint name="arm1_joint4" type="hinge" pos="-0 -0 -0" axis="0 0 1" limited="true" range="-1.745 1.745" damping="0" frictionloss="0" armature="0.05"/>
+                <site name="arm1_joint4_frame_site" pos="-0 -0 -0"/>
+                <inertial pos="-9.66635791618542e-05 0.000876064475651083 -0.00496880904640868" mass="0.38" fullinertia="0.00018501 0.00018965 0.00015484 5.4e-07 1.2e-06 -8.41e-06"/>
+                <geom name="arm1_joint4_housing" type="cylinder" fromto="0 0 -0.03 0 0 0.03" size="0.05" rgba="0.12 0.32 0.7 1"/>
+                <site name="vizproxy_arm1_joint4_housing" type="cylinder" fromto="0 0 -0.03 0 0 0.03" size="0.0005" rgba="0 0 0 0" group="5"/>
+                <geom name="collision_arm1_joint4_housing" type="capsule" fromto="0 0 -0.03 0 0 0.03" size="0.05" rgba="0 0 0 0" group="4" contype="0" conaffinity="0" mass="0"/>
+                <body name="arm1_link5" pos="0 0 0" quat="-0.707105482511236 0.707108079859474 0 0">
+                  <joint name="arm1_joint5" type="hinge" pos="-0 -0 -0" axis="0 0 1" limited="true" range="-1.30899693899575 1.30899693899575" damping="0" frictionloss="0" armature="0.05"/>
+                  <site name="arm1_joint5_frame_site" pos="-0 -0 -0"/>
+                  <inertial pos="-4.10554118924211e-05 -0.0566486692356075 -0.0037205791677906" mass="0.383" fullinertia="0.00166169 0.0001851 0.00164321 6e-08 -7e-08 1.026e-05"/>
+                  <geom name="arm1_link5_bar" type="capsule" fromto="0 0 0 8.8259e-05 -0.091 0" size="0.027" rgba="0.95 0.68 0.16 1"/>
+                  <site name="vizproxy_arm1_link5_bar" type="cylinder" fromto="0 0 0 8.8259e-05 -0.091 0" size="0.0005" rgba="0 0 0 0" group="5"/>
+                  <geom name="arm1_joint5_hub" type="sphere" pos="0 0 0" size="0.04" rgba="0.95 0.48 0.12 1"/>
+                  <site name="vizproxy_arm1_joint5_hub" pos="0 0 0" quat="1 0 0 0" size="0.0005" rgba="0 0 0 0" group="5"/>
+                  <geom name="arm1_wrist_hub" type="sphere" pos="8.8259e-05 -0.091 0" size="0.0375" rgba="0.95 0.68 0.16 1"/>
+                  <site name="vizproxy_arm1_wrist_hub" pos="8.8259e-05 -0.091 0" quat="1 0 0 0" size="0.0005" rgba="0 0 0 0" group="5"/>
+                  <geom name="collision_arm1_link5" type="capsule" fromto="0 0 0 8.8259e-05 -0.091 0" size="0.027" rgba="0 0 0 0" group="4" contype="0" conaffinity="0" mass="0"/>
+                  <body name="arm1_link6" pos="-7.62930068919738e-11 -0.0890000000332921 9.06718426312869e-06" quat="0.707105482511236 0.707108079859474 0 0">
+                    <inertial pos="0 0 0" mass="0.007" fullinertia="5.73015540542155e-07 5.73015540542155e-07 1.06738869138926e-06 -1.98305403089247e-22 -7.2791893904596e-23 -3.4146026640245e-24"/>
+                    <geom name="arm1_wrist_adapter" type="cylinder" fromto="8.82590762930069e-05 -9.0598378529832e-06 -0.02 8.82590762930069e-05 -9.0598378529832e-06 0.024" size="0.027" rgba="0.95 0.68 0.16 1"/>
+                    <site name="vizproxy_arm1_wrist_adapter" type="cylinder" fromto="8.82590762930069e-05 -9.0598378529832e-06 -0.02 8.82590762930069e-05 -9.0598378529832e-06 0.024" size="0.0005" rgba="0 0 0 0" group="5"/>
+                    <geom name="collision_arm1_wrist_adapter" type="capsule" fromto="8.82590762930069e-05 -9.0598378529832e-06 -0.02 8.82590762930069e-05 -9.0598378529832e-06 0.024" size="0.027" rgba="0 0 0 0" group="4" contype="0" conaffinity="0" mass="0"/>
+                    <body name="arm1_gripper_base" pos="-9.55480859425841e-05 7.14434777048079e-05 0.0341436689908876" quat="1 0 0 0">
+                      <inertial pos="0 0 0" mass="0.45" fullinertia="0.00092934 0.00071447 0.00039442 3.4e-07 -7.38e-06 5e-08"/>
+                      <geom name="arm1_gripper_palm" type="cylinder" fromto="0.000183807162235591 -8.05033155577911e-05 -0.0321436689908876 0.000183807162235591 -8.05033155577911e-05 0.0758563310091124" size="0.033" rgba="0.55 0.58 0.64 1"/>
+                      <site name="vizproxy_arm1_gripper_palm" type="cylinder" fromto="0.000183807162235591 -8.05033155577911e-05 -0.0321436689908876 0.000183807162235591 -8.05033155577911e-05 0.0758563310091124" size="0.0005" rgba="0 0 0 0" group="5"/>
+                      <geom name="arm1_gripper_tip_hub" type="sphere" pos="0.000183807162235591 -8.05033155577911e-05 0.0758563310091124" size="0.033" rgba="0.55 0.58 0.64 1"/>
+                      <site name="vizproxy_arm1_gripper_tip_hub" pos="0.000183807162235591 -8.05033155577911e-05 0.0758563310091124" quat="1 0 0 0" size="0.0005" rgba="0 0 0 0" group="5"/>
+                      <geom name="collision_arm1_gripper_palm" type="capsule" fromto="0.000183807162235591 -8.05033155577911e-05 -0.0321436689908876 0.000183807162235591 -8.05033155577911e-05 0.0758563310091124" size="0.033" rgba="0 0 0 0" group="4" contype="0" conaffinity="0" mass="0"/>
+                      <site name="arm1_end_effector_site" pos="0.000183807162235591 -8.05033155577911e-05 0.103656331009112" size="0.018" rgba="1 0.5 0 1"/>
+                      <body name="arm1_link7" pos="0.000835039012655271 -0.00980291031140187 0.0544633083831866" quat="0.707105482511236 0.707108079859474 0 0">
+                        <inertial pos="0 0 0" mass="0.025" fullinertia="7.371e-05 7.81e-06 7.47e-05 -1.13e-06 2.1e-07 -1.372e-05"/>
+                        <geom name="arm1_link7_finger" type="capsule" fromto="-0.00065123185041968 0.0491929869131989 -0.00972258769184025 -0.00065123185041968 -0.0508070130868011 0.00827741230815975" size="0.012" rgba="0.78 0.8 0.84 1"/>
+                        <site name="vizproxy_arm1_link7_finger" type="cylinder" fromto="-0.00065123185041968 0.0491929869131989 -0.00972258769184025 -0.00065123185041968 -0.0508070130868011 0.00827741230815975" size="0.0005" rgba="0 0 0 0" group="5"/>
+                        <geom name="collision_arm1_finger7" type="capsule" fromto="-0.00065123185041968 0.0491929869131989 -0.00972258769184025 -0.00065123185041968 -0.0508070130868011 0.00827741230815975" size="0.012" rgba="0 0 0 0" group="4" contype="0" conaffinity="0" mass="0"/>
+                      </body>
+                      <body name="arm1_link8" pos="-0.00046735326337657 0.00964190846424023 0.0544633083831864" quat="2.59734346696461e-06 2.59735300755741e-06 0.707108079854703 0.707105482506466">
+                        <inertial pos="0 0 0" mass="0.025" fullinertia="7.371e-05 7.81e-06 7.47e-05 -1.13e-06 2.1e-07 -1.372e-05"/>
+                        <geom name="arm1_link8_finger" type="capsule" fromto="-0.000651231850419722 0.0491929869131991 -0.00972258769184024 -0.000651231850419722 -0.0508070130868009 0.00827741230815976" size="0.012" rgba="0.78 0.8 0.84 1"/>
+                        <site name="vizproxy_arm1_link8_finger" type="cylinder" fromto="-0.000651231850419722 0.0491929869131991 -0.00972258769184024 -0.000651231850419722 -0.0508070130868009 0.00827741230815976" size="0.0005" rgba="0 0 0 0" group="5"/>
+                        <geom name="collision_arm1_finger8" type="capsule" fromto="-0.000651231850419722 0.0491929869131991 -0.00972258769184024 -0.000651231850419722 -0.0508070130868009 0.00827741230815976" size="0.012" rgba="0 0 0 0" group="4" contype="0" conaffinity="0" mass="0"/>
+                      </body>
+                    </body>
+                  </body>
+                </body>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+      <body name="arm2_base_link" pos="-0.245263588358102 -0.188451518036015 -0.0900256829138623" quat="-7.31230107720312e-14 7.31230107716731e-14 -0.707106781184816 0.707106781188279">
+        <inertial pos="0 0 0" mass="1.02" fullinertia="0.00267433 0.00282612 0.00089624 -7.3e-07 -0.00017389 4e-07"/>
+        <geom name="arm2_mount_pedestal" type="cylinder" fromto="0.00473641164191482 -2.56829134630247e-05 -0.041451518036016 0.00473641164191482 -2.56829134630247e-05 0.081548481963984" size="0.048" rgba="0.2 0.23 0.28 1"/>
+        <site name="vizproxy_arm2_mount_pedestal" type="cylinder" fromto="0.00473641164191482 -2.56829134630247e-05 -0.041451518036016 0.00473641164191482 -2.56829134630247e-05 0.081548481963984" size="0.0005" rgba="0 0 0 0" group="5"/>
+        <geom name="arm2_mount_hub" type="sphere" pos="0.00473641164191482 -2.56829134630247e-05 -0.041451518036016" size="0.05" rgba="0.2 0.23 0.28 1"/>
+        <site name="vizproxy_arm2_mount_hub" pos="0.00473641164191482 -2.56829134630247e-05 -0.041451518036016" quat="1 0 0 0" size="0.0005" rgba="0 0 0 0" group="5"/>
+        <body name="arm2_link1" pos="0.00485791637597229 7.89492489975113e-05 0.0771625088683855" quat="1 0 0 0">
+          <joint name="arm2_joint1" type="hinge" pos="-0.000121504734057468 -0.000104632162460536 0.00438597309559853" axis="0 0 1" limited="true" range="-2.618 2.618" damping="0" frictionloss="0" armature="0.05"/>
+          <site name="arm2_joint1_frame_site" pos="-0.000121504734057468 -0.000104632162460536 0.00438597309559853"/>
+          <inertial pos="0 0 0" mass="0.71" fullinertia="0.00048916 0.00040472 0.00043982 -3.6e-07 -2.24e-06 -2.42e-06"/>
+          <geom name="arm2_joint1_housing" type="cylinder" fromto="-0.000121504734057468 -0.000104632162460536 -0.0296140269044015 -0.000121504734057468 -0.000104632162460536 0.0383859730955985" size="0.05" rgba="0.12 0.32 0.7 1"/>
+          <site name="vizproxy_arm2_joint1_housing" type="cylinder" fromto="-0.000121504734057468 -0.000104632162460536 -0.0296140269044015 -0.000121504734057468 -0.000104632162460536 0.0383859730955985" size="0.0005" rgba="0 0 0 0" group="5"/>
+          <body name="arm2_link2" pos="-0.198436300634688 0.00131800174760235 0.0204754923373496" quat="-0.0480084366585724 0.0480134430131485 0.705476100912518 0.705473862266274">
+            <joint name="arm2_joint2" type="hinge" pos="-0.198666145229743 0.010926924140076 -0.00142121714502687" axis="0 0 1" limited="true" range="0.0 3.40339204138894" damping="0" frictionloss="0" armature="0.05"/>
+            <site name="arm2_joint2_frame_site" pos="-0.198666145229743 0.010926924140076 -0.00142121714502687"/>
+            <inertial pos="0 0 0" mass="1.17" fullinertia="0.00116918 0.06785384 0.06774489 -0.00180037 0.00025146 -4.55e-06"/>
+            <geom name="arm2_link2_bar" type="capsule" fromto="-0.198666145229743 0.010926924140076 -0.00142121714502687 0.086363854770257 0.010926924140076 -0.00142121714502687" size="0.035" rgba="0.15 0.45 0.9 1"/>
+            <site name="vizproxy_arm2_link2_bar" type="cylinder" fromto="-0.198666145229743 0.010926924140076 -0.00142121714502687 0.086363854770257 0.010926924140076 -0.00142121714502687" size="0.0005" rgba="0 0 0 0" group="5"/>
+            <geom name="arm2_joint2_hub" type="sphere" pos="-0.198666145229743 0.010926924140076 -0.00142121714502687" size="0.05" rgba="0.12 0.32 0.7 1"/>
+            <site name="vizproxy_arm2_joint2_hub" pos="-0.198666145229743 0.010926924140076 -0.00142121714502687" quat="1 0 0 0" size="0.0005" rgba="0 0 0 0" group="5"/>
+            <geom name="arm2_joint3_hub" type="sphere" pos="0.086363854770257 0.010926924140076 -0.00142121714502687" size="0.05" rgba="0.12 0.32 0.7 1"/>
+            <site name="vizproxy_arm2_joint3_hub" pos="0.086363854770257 0.010926924140076 -0.00142121714502687" quat="1 0 0 0" size="0.0005" rgba="0 0 0 0" group="5"/>
+            <geom name="collision_arm2_link2" type="capsule" fromto="-0.198666145229743 0.010926924140076 -0.00142121714502687 0.086363854770257 0.010926924140076 -0.00142121714502687" size="0.035" rgba="0 0 0 0" group="4" contype="0" conaffinity="0" mass="0"/>
+            <geom name="collision_arm2_link2_base_trim" type="capsule" fromto="0.015106354770257 0.010926924140076 -0.00142121714502687 0.086363854770257 0.010926924140076 -0.00142121714502687" size="0.035" rgba="0 0 0 0" group="4" contype="0" conaffinity="0" mass="0"/>
+            <body name="arm2_link3" pos="0.086363854770257 0.010926924140076 -0.00142121714502687" quat="-0.623996220379733 0 0 0.781427358717244">
+              <joint name="arm2_joint3" type="hinge" pos="-0 -0 -0" axis="0 0 1" limited="true" range="-3.05432619099008 0.0" damping="0" frictionloss="0" armature="0.05"/>
+              <site name="arm2_joint3_frame_site" pos="-0 -0 -0"/>
+              <inertial pos="-0.0202737662122021 -0.133914995944595 -0.000458682652737356" mass="0.5" fullinertia="0.01361711 0.00045024 0.01380322 0.00165794 -4.8e-07 -4.5e-07"/>
+              <geom name="arm2_link3_bar" type="capsule" fromto="0 0 0 -0.021984 -0.25075 0" size="0.035" rgba="0.1 0.72 0.78 1.0"/>
+              <site name="vizproxy_arm2_link3_bar" type="cylinder" fromto="0 0 0 -0.021984 -0.25075 0" size="0.0005" rgba="0 0 0 0" group="5"/>
+              <geom name="arm2_joint3_root" type="sphere" pos="0 0 0" size="0.05" rgba="0.12 0.32 0.7 1"/>
+              <site name="vizproxy_arm2_joint3_root" pos="0 0 0" quat="1 0 0 0" size="0.0005" rgba="0 0 0 0" group="5"/>
+              <geom name="arm2_joint4_hub" type="sphere" pos="-0.021984 -0.25075 0" size="0.05" rgba="0.12 0.32 0.7 1"/>
+              <site name="vizproxy_arm2_joint4_hub" pos="-0.021984 -0.25075 0" quat="1 0 0 0" size="0.0005" rgba="0 0 0 0" group="5"/>
+              <geom name="collision_arm2_link3" type="capsule" fromto="0 0 0 -0.021984 -0.25075 0" size="0.035" rgba="0 0 0 0" group="4" contype="0" conaffinity="0" mass="0"/>
+              <body name="arm2_link4" pos="-0.021984 -0.25075 0" quat="0.707105482511236 0.707108079859474 0 0">
+                <joint name="arm2_joint4" type="hinge" pos="-0 -0 -0" axis="0 0 1" limited="true" range="-1.745 1.745" damping="0" frictionloss="0" armature="0.05"/>
+                <site name="arm2_joint4_frame_site" pos="-0 -0 -0"/>
+                <inertial pos="-9.66635791618542e-05 0.000876064475651083 -0.00496880904640868" mass="0.38" fullinertia="0.00018501 0.00018965 0.00015484 5.4e-07 1.2e-06 -8.41e-06"/>
+                <geom name="arm2_joint4_housing" type="cylinder" fromto="0 0 -0.03 0 0 0.03" size="0.05" rgba="0.12 0.32 0.7 1"/>
+                <site name="vizproxy_arm2_joint4_housing" type="cylinder" fromto="0 0 -0.03 0 0 0.03" size="0.0005" rgba="0 0 0 0" group="5"/>
+                <geom name="collision_arm2_joint4_housing" type="capsule" fromto="0 0 -0.03 0 0 0.03" size="0.05" rgba="0 0 0 0" group="4" contype="0" conaffinity="0" mass="0"/>
+                <body name="arm2_link5" pos="0 0 0" quat="-0.707105482511236 0.707108079859474 0 0">
+                  <joint name="arm2_joint5" type="hinge" pos="-0 -0 -0" axis="0 0 1" limited="true" range="-1.30899693899575 1.30899693899575" damping="0" frictionloss="0" armature="0.05"/>
+                  <site name="arm2_joint5_frame_site" pos="-0 -0 -0"/>
+                  <inertial pos="-4.10554118924211e-05 -0.0566486692356075 -0.0037205791677906" mass="0.383" fullinertia="0.00166169 0.0001851 0.00164321 6e-08 -7e-08 1.026e-05"/>
+                  <geom name="arm2_link5_bar" type="capsule" fromto="0 0 0 8.8259e-05 -0.091 0" size="0.027" rgba="0.95 0.68 0.16 1"/>
+                  <site name="vizproxy_arm2_link5_bar" type="cylinder" fromto="0 0 0 8.8259e-05 -0.091 0" size="0.0005" rgba="0 0 0 0" group="5"/>
+                  <geom name="arm2_joint5_hub" type="sphere" pos="0 0 0" size="0.04" rgba="0.95 0.48 0.12 1"/>
+                  <site name="vizproxy_arm2_joint5_hub" pos="0 0 0" quat="1 0 0 0" size="0.0005" rgba="0 0 0 0" group="5"/>
+                  <geom name="arm2_wrist_hub" type="sphere" pos="8.8259e-05 -0.091 0" size="0.0375" rgba="0.95 0.68 0.16 1"/>
+                  <site name="vizproxy_arm2_wrist_hub" pos="8.8259e-05 -0.091 0" quat="1 0 0 0" size="0.0005" rgba="0 0 0 0" group="5"/>
+                  <geom name="collision_arm2_link5" type="capsule" fromto="0 0 0 8.8259e-05 -0.091 0" size="0.027" rgba="0 0 0 0" group="4" contype="0" conaffinity="0" mass="0"/>
+                  <body name="arm2_link6" pos="-7.62930068919738e-11 -0.0890000000332921 9.06718426312869e-06" quat="0.707105482511236 0.707108079859474 0 0">
+                    <inertial pos="0 0 0" mass="0.007" fullinertia="5.73015540542155e-07 5.73015540542155e-07 1.06738869138926e-06 -1.98305403089247e-22 -7.2791893904596e-23 -3.4146026640245e-24"/>
+                    <geom name="arm2_wrist_adapter" type="cylinder" fromto="8.82590762930069e-05 -9.0598378529832e-06 -0.02 8.82590762930069e-05 -9.0598378529832e-06 0.024" size="0.027" rgba="0.95 0.68 0.16 1"/>
+                    <site name="vizproxy_arm2_wrist_adapter" type="cylinder" fromto="8.82590762930069e-05 -9.0598378529832e-06 -0.02 8.82590762930069e-05 -9.0598378529832e-06 0.024" size="0.0005" rgba="0 0 0 0" group="5"/>
+                    <geom name="collision_arm2_wrist_adapter" type="capsule" fromto="8.82590762930069e-05 -9.0598378529832e-06 -0.02 8.82590762930069e-05 -9.0598378529832e-06 0.024" size="0.027" rgba="0 0 0 0" group="4" contype="0" conaffinity="0" mass="0"/>
+                    <body name="arm2_gripper_base" pos="-9.55480859425841e-05 7.14434777048079e-05 0.0341436689908876" quat="1 0 0 0">
+                      <inertial pos="0 0 0" mass="0.45" fullinertia="0.00092934 0.00071447 0.00039442 3.4e-07 -7.38e-06 5e-08"/>
+                      <geom name="arm2_gripper_palm" type="cylinder" fromto="0.000183807162235591 -8.05033155577911e-05 -0.0321436689908876 0.000183807162235591 -8.05033155577911e-05 0.0758563310091124" size="0.033" rgba="0.55 0.58 0.64 1"/>
+                      <site name="vizproxy_arm2_gripper_palm" type="cylinder" fromto="0.000183807162235591 -8.05033155577911e-05 -0.0321436689908876 0.000183807162235591 -8.05033155577911e-05 0.0758563310091124" size="0.0005" rgba="0 0 0 0" group="5"/>
+                      <geom name="arm2_gripper_tip_hub" type="sphere" pos="0.000183807162235591 -8.05033155577911e-05 0.0758563310091124" size="0.033" rgba="0.55 0.58 0.64 1"/>
+                      <site name="vizproxy_arm2_gripper_tip_hub" pos="0.000183807162235591 -8.05033155577911e-05 0.0758563310091124" quat="1 0 0 0" size="0.0005" rgba="0 0 0 0" group="5"/>
+                      <geom name="collision_arm2_gripper_palm" type="capsule" fromto="0.000183807162235591 -8.05033155577911e-05 -0.0321436689908876 0.000183807162235591 -8.05033155577911e-05 0.0758563310091124" size="0.033" rgba="0 0 0 0" group="4" contype="0" conaffinity="0" mass="0"/>
+                      <site name="arm2_end_effector_site" pos="0.000183807162235591 -8.05033155577911e-05 0.103656331009112" size="0.018" rgba="1 0.5 0 1"/>
+                      <body name="arm2_link7" pos="0.000835039012655271 -0.00980291031140187 0.0544633083831866" quat="0.707105482511236 0.707108079859474 0 0">
+                        <inertial pos="0 0 0" mass="0.025" fullinertia="7.371e-05 7.81e-06 7.47e-05 -1.13e-06 2.1e-07 -1.372e-05"/>
+                        <geom name="arm2_link7_finger" type="capsule" fromto="-0.00065123185041968 0.0491929869131989 -0.00972258769184025 -0.00065123185041968 -0.0508070130868011 0.00827741230815975" size="0.012" rgba="0.78 0.8 0.84 1"/>
+                        <site name="vizproxy_arm2_link7_finger" type="cylinder" fromto="-0.00065123185041968 0.0491929869131989 -0.00972258769184025 -0.00065123185041968 -0.0508070130868011 0.00827741230815975" size="0.0005" rgba="0 0 0 0" group="5"/>
+                        <geom name="collision_arm2_finger7" type="capsule" fromto="-0.00065123185041968 0.0491929869131989 -0.00972258769184025 -0.00065123185041968 -0.0508070130868011 0.00827741230815975" size="0.012" rgba="0 0 0 0" group="4" contype="0" conaffinity="0" mass="0"/>
+                      </body>
+                      <body name="arm2_link8" pos="-0.00046735326337657 0.00964190846424023 0.0544633083831864" quat="2.59734346696461e-06 2.59735300755741e-06 0.707108079854703 0.707105482506466">
+                        <inertial pos="0 0 0" mass="0.025" fullinertia="7.371e-05 7.81e-06 7.47e-05 -1.13e-06 2.1e-07 -1.372e-05"/>
+                        <geom name="arm2_link8_finger" type="capsule" fromto="-0.000651231850419722 0.0491929869131991 -0.00972258769184024 -0.000651231850419722 -0.0508070130868009 0.00827741230815976" size="0.012" rgba="0.78 0.8 0.84 1"/>
+                        <site name="vizproxy_arm2_link8_finger" type="cylinder" fromto="-0.000651231850419722 0.0491929869131991 -0.00972258769184024 -0.000651231850419722 -0.0508070130868009 0.00827741230815976" size="0.0005" rgba="0 0 0 0" group="5"/>
+                        <geom name="collision_arm2_finger8" type="capsule" fromto="-0.000651231850419722 0.0491929869131991 -0.00972258769184024 -0.000651231850419722 -0.0508070130868009 0.00827741230815976" size="0.012" rgba="0 0 0 0" group="4" contype="0" conaffinity="0" mass="0"/>
+                      </body>
+                    </body>
+                  </body>
+                </body>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+    </body>
+  </worldbody>
+  <actuator>
+    <general name="rw_1_base_reaction" site="rw_torque_site" gear="0 0 0 1 0 0"/>
+    <general name="rw_2_base_reaction" site="rw_torque_site" gear="0 0 0 0 1 0"/>
+    <general name="rw_3_base_reaction" site="rw_torque_site" gear="0 0 0 0 0 1"/>
+    <general name="thruster_01_act" site="thruster_01_site" gear="1 0 0 0 0 0"/>
+    <general name="thruster_02_act" site="thruster_02_site" gear="1 0 0 0 0 0"/>
+    <general name="thruster_03_act" site="thruster_03_site" gear="-1 0 0 0 0 0"/>
+    <general name="thruster_04_act" site="thruster_04_site" gear="-1 0 0 0 0 0"/>
+    <general name="thruster_05_act" site="thruster_05_site" gear="0 1 0 0 0 0"/>
+    <general name="thruster_06_act" site="thruster_06_site" gear="0 1 0 0 0 0"/>
+    <general name="thruster_07_act" site="thruster_07_site" gear="0 -1 0 0 0 0"/>
+    <general name="thruster_08_act" site="thruster_08_site" gear="0 -1 0 0 0 0"/>
+    <general name="thruster_09_act" site="thruster_09_site" gear="0 0 1 0 0 0"/>
+    <general name="thruster_10_act" site="thruster_10_site" gear="0 0 1 0 0 0"/>
+    <general name="thruster_11_act" site="thruster_11_site" gear="0 0 -1 0 0 0"/>
+    <general name="thruster_12_act" site="thruster_12_site" gear="0 0 -1 0 0 0"/>
+    <general name="env_force_0" site="base_origin_site" gear="1 0 0 0 0 0"/>
+    <general name="env_force_1" site="base_origin_site" gear="0 1 0 0 0 0"/>
+    <general name="env_force_2" site="base_origin_site" gear="0 0 1 0 0 0"/>
+  </actuator>
+</mujoco>

@@ -1,0 +1,23 @@
+# clangd project config.
+#
+# clangd's bundled clang doesn't know where GCC/libstdc++ headers live. The
+# proper fix is launching clangd with --query-driver (see .vscode/settings.json
+# "clangd.arguments") so it asks g++ directly. The -isystem lines below are a
+# machine-specific fallback for when that isn't in effect: they are the
+# libstdc++ 11 dirs from `g++ -E -x c++ -v /dev/null`, DELIBERATELY excluding
+# /usr/lib/gcc/x86_64-linux-gnu/11/include — adding GCC's compiler-builtin
+# headers makes clang's parser clash on _mm_prefetch (it has its own).
+
+CompileFlags:
+  Compiler: /usr/bin/g++
+  Add:
+    - -std=c++17
+    - -isystem/usr/include/c++/11
+    - -isystem/usr/include/x86_64-linux-gnu/c++/11
+    - -isystem/usr/include/c++/11/backward
+    - -I/usr/include/eigen3
+    - -Isrc/pat_arm_nmpc/include
+    - -Isrc/pat_gnc/include
+    - -Isrc/pat_robotics/include
+    - -Isrc/pat_simulation/include
+    - -Isrc/pat_msgs/include
