@@ -728,8 +728,15 @@ NMPCParams liveParams()
 struct RunMetrics {
     double availability = 0.0;          // fraction of ticks that produced NMPC torque
     int    max_consecutive_damping = 0;
+    // CAUTION: max_pos_violation is a running max over a run that BEGINS at the
+    // violation, so it is pinned to the initial condition and reads ~the starting
+    // offset for any controller, including a perfect one. Use initial/final/
+    // recovered to ask whether the joint actually came back.
     double max_pos_violation = 0.0;     // [rad]   worst excursion past the config limits
     double pos_violation_integral = 0.0;// [rad s] distinguishes a transient from parking outside
+    double initial_pos_violation = 0.0; // [rad]   at the first tick
+    double final_pos_violation = 0.0;   // [rad]   at the last tick
+    double recovered = 0.0;             // [rad]   initial - final; >0 means it came back
     double max_vel_violation = 0.0;     // [rad/s]
     double mean_ee_err = 0.0;           // [m]
     double max_box_slack = 0.0;
@@ -819,11 +826,14 @@ RunMetrics runClosedLoop(NMPCParams params, const Scenario& sc, int ticks)
         worst_pos = std::max(0.0, worst_pos);
         m.max_pos_violation = std::max(m.max_pos_violation, worst_pos);
         m.pos_violation_integral += worst_pos * dt;
+        if (t == 0) m.initial_pos_violation = worst_pos;
+        m.final_pos_violation = worst_pos;
 
         const ArmNMPC::EePose now = c.currentEePose(s.q, s.v);
         err_sum += std::hypot(now.pos.x() - tx, now.pos.y() - ty);
     }
 
+    m.recovered         = m.initial_pos_violation - m.final_pos_violation;
     m.availability      = 1.0 - static_cast<double>(damping_ticks) / ticks;
     m.guard_relax_frac  = static_cast<double>(relax_ticks) / ticks;
     m.mean_ee_err       = err_sum / ticks;
@@ -1156,6 +1166,38 @@ TEST(HardConstraints, GuardKeepsAHardBoxFeasibleFromOutsideTheLimit)
     EXPECT_GT(m.guard_relax_frac, 0.0) << "the guard should have been needed here";
 }
 
+TEST(HardConstraints, GuardMarginIsFlooredAtOneStepOfDrift)
+{
+    // A joint at rated speed moves Ts*qd_max in one step whatever the control
+    // does, so a guard margin below that re-creates the infeasibility the guard
+    // exists to remove. ArmNMPC raises the configured value to that floor — and
+    // the raise was silently overwritten once, which nothing could observe.
+    NMPCParams p = liveParams();
+    p.relax_box_to_contain_x0 = true;
+    p.relax_box_margin        = 1e-9;      // far below the floor
+    ModelProbe c(kMjcf, p);
+
+    double qd_max_owned = 0.0;
+    for (int idx : c.ownedJointInds)
+        qd_max_owned = std::max(qd_max_owned, c.vlimsByIndex[idx]);
+    const double floor = p.Ts * qd_max_owned;
+
+    ASSERT_GT(floor, p.relax_box_margin) << "test is vacuous if the floor is lower";
+    EXPECT_NEAR(c.qp_->relaxMargin(), floor, 1e-12)
+        << "configured " << p.relax_box_margin << " should have been raised to "
+        << floor;
+}
+
+TEST(HardConstraints, GuardMarginHonoursALargerConfiguredValue)
+{
+    // The floor raises, never lowers: a deliberately generous margin must survive.
+    NMPCParams p = liveParams();
+    p.relax_box_to_contain_x0 = true;
+    p.relax_box_margin        = 0.5;
+    ModelProbe c(kMjcf, p);
+    EXPECT_NEAR(c.qp_->relaxMargin(), 0.5, 1e-12);
+}
+
 TEST(HardConstraints, GuardIsNotNeededWhenTheArmIsInsideItsLimits)
 {
     // The guard must not be silently load-bearing in normal operation: if it
@@ -1230,7 +1272,8 @@ TEST(DISABLED_ConstraintStudy, Ladder)
 {
     struct Cfg { const char* name; bool soft_box; bool soft_tau; bool guard; };
     const Cfg cfgs[] = {
-        {"soft        ", true,  true,  false},
+        {"soft/soft   ", true,  true,  false},
+        {"soft/hardtau", true,  false, false},   // soft box needs no guard
         {"hard-raw    ", false, false, false},
         {"hard-guarded", false, false, true },
         {"hardbox-only", false, true,  true },
@@ -1254,8 +1297,8 @@ TEST(DISABLED_ConstraintStudy, Ladder)
         printf("\n=== terminal_velocity_constraint = %s ===\n", term_vel ? "true" : "false");
         for (const auto& s : scs) {
             printf("\n  scenario: %s\n", s.name);
-            printf("    %-13s  avail  maxdamp  pos_viol  vel_viol  ee_err   "
-                   "box_slack  relax%%/max      tick_us(mean/max)  over%%  status\n", "config");
+            printf("    %-13s  avail  maxdamp  viol:init->final  recov   integral  "
+                   "ee_err   box_slack  relax%%   tick_us(mean/max)  over%%  status\n", "config");
             for (const auto& cf : cfgs) {
                 NMPCParams p = liveParams();
                 p.terminal_velocity_constraint = term_vel;
@@ -1267,11 +1310,12 @@ TEST(DISABLED_ConstraintStudy, Ladder)
                 std::string hist;
                 for (const auto& [st, n] : m.status_hist)
                     hist += std::to_string(st) + ":" + std::to_string(n) + " ";
-                printf("    %-13s %5.1f%%  %7d  %8.2e  %8.2e  %7.4f  %9.2e  "
-                       "%5.1f%%/%7.1e  %8.0f/%8.0f  %4.1f%%  %s\n",
+                printf("    %-13s %5.1f%%  %7d  %6.4f->%-6.4f  %+6.4f  %7.4f  "
+                       "%7.4f  %9.2e  %5.1f%%  %8.0f/%8.0f  %4.1f%%  %s\n",
                        cf.name, 100.0 * m.availability, m.max_consecutive_damping,
-                       m.max_pos_violation, m.max_vel_violation, m.mean_ee_err,
-                       m.max_box_slack, 100.0 * m.guard_relax_frac, m.guard_relax_max,
+                       m.initial_pos_violation, m.final_pos_violation, m.recovered,
+                       m.pos_violation_integral, m.mean_ee_err,
+                       m.max_box_slack, 100.0 * m.guard_relax_frac,
                        m.mean_tick_us, m.max_tick_us, 100.0 * m.frac_over_budget,
                        hist.c_str());
             }

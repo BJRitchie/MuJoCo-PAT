@@ -322,26 +322,16 @@ otherwise have to rediscover. None are regressions.
   ticks over budget, and produces a handful of NaN solves (~9 in 300). In nominal
   operation the slacks are inert (~1e-16), so this only bites off-nominal — which
   is when the deadline matters most. `peak slack` on the profile line is the
-  signal to watch. Worth a retune now that the constraint genuinely binds; the
-  earlier measurement that suggested 100× smaller weights were nearly free was
-  taken while the rollout clamp was still masking the constraint.
-- **A restoring joint-limit term is unbuilt, and its premise is unverified.** A
-  box forbids being outside a limit but supplies no gradient pulling a joint back
-  in, so a cost term with an inward gradient is an obvious candidate. But the
-  evidence that the box fails to recover is currently **not established** —
-  `runClosedLoop`'s `max_pos_violation` is a running max over a run that *begins*
-  at the violation, so it is pinned to the initial condition and reads ~0.699 for
-  any controller, including a perfect one. Three configurations with opposite
-  restoring properties all reporting 0.699 was the tell. Before building anything:
-  add `initial`/`final`/`recovered` to `RunMetrics` and read the
-  `pos_violation_integral` column that is already collected but never printed. If
-  the soft box does recover, the feature is an avoidance improvement, not a
-  recovery fix. Two things to know either way: `buildJointBoxBounds` sets
-  `lbx = q_min − q0`, which is an absolute persistent target and not a per-tick
-  relative one; and the owned arm has **no redundancy** (three owned joints against
-  a three-dimensional task, so the owned `J_task` block is 3×3 and invertible), so
-  any joint recovery must be paid for in EE error — roughly 0.2 m per 0.7 rad.
-  Design notes in the plan file if that investigation resumes.
+  signal to watch. That cost is buying something real — full recovery of the joint,
+  see below — so the retune question is how cheaply the same recovery can be had,
+  not whether to abandon it. Note the earlier measurement suggesting 100× smaller
+  weights were nearly free was taken while the rollout clamp was still masking the
+  constraint, so it needs redoing.
+- **The 200 Hz control rate is buying nothing.** State arrives at
+  `pub_rate_hz: 100` while `control_hz` is 200, so every other tick re-solves on a
+  measurement it has already used. Dropping to 100 Hz would double the per-tick
+  budget at no information cost. Relatedly, `Ts` is 25 ms against a 5 ms period, so
+  the first horizon step models 5× the interval the command is applied for.
 - **Joint velocity limits have no model source.** MJCF has no velocity range, so
   `qd_max` comes from the per-node `limits.qd_max` (2.0 rad/s) for owned joints and
   a hardcoded 10.0 rad/s default for the rest — and the rollout clamp is
@@ -383,17 +373,42 @@ otherwise have to rediscover. None are regressions.
   failed. Clamping to the mechanical range keeps the singularity protection the
   clamp exists for — that range *is* the reachable configuration space — while
   leaving the margin for the QP to enforce.
-- **Hard constraints work, are slightly cheaper, and are useless without the
-  guard.** With `qp.soft_joint_limits: false` and `soft_torque_limits: false`, the
-  full stack runs clean and the QP solves in 780–905 µs against 1142–1201 µs soft
-  — no slack variables to carry. Inside the software margin, hard and soft are
-  indistinguishable in tracking. Outside it, the three variants diverge sharply:
-  raw hard is a **total outage** (0% availability, 300/300 NaN — the historical
-  "fails every loop"), hard + `relax_box_to_contain_x0` is 100% available and
-  fastest but relaxes on 100% of ticks, so the constraint is inactive exactly when
-  it would matter, and soft degrades gracefully but slowly (70% availability,
-  ~8 ms/tick). Never enable hard without the guard. `DISABLED_ConstraintStudy` in
-  `test/` regenerates the table.
+- **Soft constraints are the default because they are the only variant that
+  recovers a joint, and that is measured.** With a joint parked 0.70 rad outside
+  its software limit for 300 ticks:
+
+  | config | recovers | time outside (rad·s) | availability | worst outage | NaN |
+  |---|---|---|---|---|---|
+  | soft box, soft torque | **0.699 → 0.000** | 0.33 | 70% | 10 ticks | 9 |
+  | soft box, hard torque | 0.699 → 0.000 | 0.37 | 55% | **68 ticks** | 15 |
+  | hard box + guard | 0.699 → 0.547 | 0.91 | 100% | 0 | 0 |
+  | hard box, no guard | 0.699 → 0.593 | 0.96 | 0% | 300 ticks | 300 |
+
+  The soft box's slack **is** the restoring mechanism: it brings the joint all the
+  way back. Hard + guard looks best on availability and speed but recovers only
+  22% of the excursion and spends 2.8× as long outside, because the guard relaxes
+  on 100% of ticks and the box stops constraining anything. Raw hard is a total
+  outage — the historical "fails every loop", reproduced.
+
+  **Hard torque is worse, not better.** It changes only the QP's plan (the applied
+  torque is clamped before publishing either way), and paired with a soft box it
+  forbids the large corrective torque the straining box is asking for: the worst
+  safe-mode outage grows from 10 ticks to 68, NaN solves from 9 to 15, and box
+  slack from 1.04 to 1.73. The "the plan should match what gets applied" argument
+  does not survive the measurement.
+
+  Inside the margin all four are indistinguishable in tracking (`ee_err` 0.0359),
+  and hard is ~25% faster — so the choice is entirely about off-nominal behaviour.
+  `DISABLED_ConstraintStudy.Ladder` in `test/` regenerates the table.
+- **A dedicated restoring cost term is not needed.** A box forbids being outside a
+  limit and a cost term with an inward gradient looked like the missing piece, but
+  the soft box already supplies one: `buildJointBoxBounds` sets
+  `lbx = q_min − q0`, an absolute persistent target rather than a per-tick relative
+  one, and the table above shows it recovering completely. Note also that the owned
+  arm has **no redundancy** — three owned joints against a three-dimensional task,
+  so the owned `J_task` block is 3×3 and invertible — meaning any joint recovery is
+  necessarily paid for in EE error, roughly 0.2 m per 0.7 rad. That cost is visible
+  in the table as soft's `ee_err` of 0.170 against hard+guard's 0.036.
 - **Stage 0's soft-constraint mapping indexes from `nx`, not 0.** Stage 0's `nbx`
   is the full state (the measurement pin), so its general/torque rows begin at
   `nx`; every other stage's begin at `nbx_k`. Starting from 0 there softens the

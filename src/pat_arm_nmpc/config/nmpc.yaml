@@ -116,41 +116,27 @@
     control_hz: 200.0
     model_joint_names: [joint2_L, joint3_L, joint5_L, joint2_R, joint3_R, joint5_R]
 
-    # Per-joint torque limit [N*m], parallel to model_joint_names. THE single
-    # place arm torque limits are set: a torque limit belongs to the actuator,
-    # not to whichever node drives that arm, and each node constrains every
-    # model joint (it rolls the whole model forward, both arms). Both nodes read
-    # this one array. Joint position ranges are NOT here -- they come from the
-    # MJCF, which is what MuJoCo actually enforces; limits.q_min/q_max below may
-    # only tighten them.
-    #
-    # NOTE: air_bearing_table.xacro's <motor ctrlrange> is +-10 (joint2/joint3)
-    # and +-5 (joint5), so the simulated actuators deliver far more than this.
-    # Whichever figure reflects the real Piper joints, the two should agree.
+    # [N*m] per model joint, parallel to model_joint_names. THE single place arm
+    # torque limits are set -- a limit belongs to the actuator, not to whichever
+    # node drives that arm, and each node constrains all model joints. Position
+    # ranges are NOT here: they come from the MJCF, which is what MuJoCo enforces.
+    # NOTE disagrees with air_bearing_table.xacro's <motor ctrlrange> (+-10 on
+    # joint2/3, +-5 on joint5); whichever matches the real Piper, make them agree.
     model_tau_max: [0.25, 0.25, 0.25, 0.25, 0.25, 0.25]
 
-    # Safe mode: when the QP fails or the numerics go non-finite, the controller
-    # stops tracking and commands pure joint damping (tau = -kd*qdot) so the arm
-    # slows to rest. Shared by both arms; each damps only its own joints.
+    # On a failed or non-finite solve, stop tracking and command pure joint
+    # damping (tau = -kd*qdot) until the solver recovers. Each arm damps only its
+    # own joints. kd = damping_frac * model_tau_max / limits.qd_max, so it tracks
+    # the torque limits and stays within damping_frac*tau_max at rated speed --
+    # note the torque limit, not this number, sets how fast the arm can stop.
     safe_mode:
-      # kd = damping_frac * model_tau_max / limits.qd_max, per joint. A fraction
-      # rather than an absolute gain, so it tracks the torque limits, and so
-      # |tau| stays within damping_frac*tau_max at rated speed. Note the torque
-      # limit sets how fast the arm can actually stop, not this number.
       damping_frac: 1.0
-      # Consecutive good solves needed to resume tracking. Hysteresis against
-      # failure chatter only - the handover is a step, not a ramp.
-      recovery_ticks: 10
+      recovery_ticks: 10   # good solves before resuming; hysteresis, not a ramp
 
-    # /chaser/odom's chaser_x/y are the chaser's slide-joint values relative
-    # to air_bearing_table.xacro's own <body name="chaser" pos="-0.5 0 ...">
-    # anchor, NOT true world-frame position -- this controller's own internal
-    # model has zero anchor offset (pat_platform_planar.xacro's freejoint
-    # body is at pos="0 0 0"), so this corrects odom's x at the read (see
-    # arm_nmpc_node.h's onOdom comment). Confirmed via pat_simulation's
-    # ee_setpoint marker: published ee_pose was off from the true MuJoCo site
-    # position by exactly (0.5, 0, ...), matching this anchor. y needs no
-    # correction (anchor y is 0), kept here for symmetry/future-proofing.
+    # /chaser/odom reports slide-joint values relative to air_bearing_table's
+    # <body name="chaser" pos="-0.5 0 ..."> anchor, not world position, while this
+    # controller's own model has zero anchor offset -- so correct odom's x at the
+    # read (see arm_nmpc_node.h's onOdom). y is 0, kept for symmetry.
     base_anchor_x: -0.5
     base_anchor_y:  0.0
 
@@ -162,10 +148,8 @@
       sqp_iters: 1
       Hg_damping: 0.0001           # DLS damping for H_g inversion
       rollout_v_clamp_mult: 2.0
-      # SQP trust region, as a fraction of the wrench the arm can actually
-      # produce at its current configuration (derived from model_tau_max and
-      # the Jacobian, so it needs no absolute N / N*m figure of its own).
-      # 1.0 = may swing across the full reachable range in one tick.
+      # SQP trust region as a fraction of the reachable wrench (derived from
+      # model_tau_max and the Jacobian, so it needs no absolute figure).
       du_max_frac: 1.0
       terminal_velocity_constraint: true
       terminal_cost_multiplier: 100.0
@@ -188,28 +172,16 @@
       torque_slack_linear: 1.0e2
       torque_slack_quadratic: 1.0e3
 
-      # Soft (penalised, above) vs hard (infeasible on violation) running
-      # constraints. Construction-time only - the QP dimensions are fixed when
-      # the node starts. The stage-0 measurement pin and the terminal velocity
-      # rows are hard regardless.
-      #
-      # Hard is NOT automatically safer. A soft box penalises being outside and
-      # therefore pulls the joint back; a hard box only forbids the plan from
-      # going there, and if the arm is ALREADY outside, the QP has no answer at
-      # all and the controller drops to safe-mode damping. Because the box is on
-      # Δq relative to the measured q0 and one step moves it by at most
-      # Ts*qdot + (Ts²/2)*H⁻¹Jᵀu, a joint even ~1e-4 rad outside its range is
-      # infeasible immediately - which is what relax_box_to_contain_x0 is for.
-      soft_joint_limits: false
-      # Hardening this changes the QP's PLAN, not the applied torque: the
-      # controller already clamps per joint before publishing.
-      soft_torque_limits: false
-      # Widen a hard box just enough to contain the current measurement, so an
-      # out-of-range joint is forbidden from getting worse rather than making the
-      # solve impossible. A ratchet, not a relaxation - and it provides no
-      # restoring force, unlike slack.
-      relax_box_to_contain_x0: true
-      relax_box_margin: 1.0e-3
+      # Soft (penalised, above) vs hard (infeasible on violation). All three are
+      # construction-time. Measured: soft recovers a joint parked 0.70 rad outside
+      # its limit completely; hard+guard recovers 0.15 and leaves the box inactive;
+      # hard torque lengthens the worst outage 10 -> 68 ticks. Keep all three as
+      # they are unless you have new numbers -- README "Settled by measurement",
+      # DISABLED_ConstraintStudy.Ladder regenerates them.
+      soft_joint_limits: true
+      soft_torque_limits: true
+      relax_box_to_contain_x0: false   # hard box only; with a soft box it weakens
+      relax_box_margin: 1.0e-3         #   the slack that does the restoring
 
 pat_arm_nmpc_left:
   ros__parameters:
@@ -218,13 +190,10 @@ pat_arm_nmpc_left:
     joint_names:  [joint2_L, joint3_L, joint5_L]
     owned_joints: [joint2_L, joint3_L, joint5_L]
     limits:
-      # A SOFTWARE margin 0.05 rad (~2.9 deg) inside the MJCF ranges
-      # ([0, 3.14], [-2.967, 0], [-1.22, 1.22]). The margin is the point: set
-      # equal to the MJCF ranges these constrain nothing MuJoCo does not already
-      # enforce mechanically, so the QP's joint box has no work to do. Inside
-      # them, the box keeps the arm off its hard stops -- where the stop's
-      # constraint forces are something the prediction model has no term for.
-      # May only ever TIGHTEN the MJCF ranges; the intersection is taken.
+      # A software margin 0.05 rad inside the MJCF ranges ([0, 3.14],
+      # [-2.967, 0], [-1.22, 1.22]); may only TIGHTEN them, the intersection is
+      # taken. The margin is the point -- set equal to the MJCF ranges the box
+      # constrains nothing MuJoCo does not already enforce mechanically.
       q_min:   [ 0.05,  -2.917, -1.17 ]   # [rad]
       q_max:   [ 3.09,  -0.05,   1.17 ]   # [rad]
       qd_max:  [ 2.0,    2.0,    1.50 ]   # [rad/s], symmetric

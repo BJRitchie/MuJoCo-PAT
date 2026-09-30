@@ -175,7 +175,6 @@ ArmNMPC::ArmNMPC(
         qp_params.relax_box_margin =
             std::max(params_.relax_box_margin, params_.Ts * qd_max_owned);
     }
-    qp_params.relax_box_margin        = params_.relax_box_margin;
 
     qp_params.idxbx_k.resize(2 * n_owned);
     for (int i = 0; i < n_owned; ++i) {

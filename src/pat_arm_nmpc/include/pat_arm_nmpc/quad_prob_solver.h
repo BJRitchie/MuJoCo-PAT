@@ -313,6 +313,12 @@ public:
     int    lastRelaxCount() const { return last_relax_count_; }
     double lastRelaxMax()   const { return last_relax_max_; }
 
+    /*! The margin actually in force, as the solver received it. Exposed because
+     *  the caller may floor the configured value (ArmNMPC raises it to at least
+     *  one step's drift, Ts*qd_max), and a floor that silently fails to apply is
+     *  invisible from outside otherwise — which is exactly how it was broken. */
+    double relaxMargin() const { return params_.relax_box_margin; }
+
 private:
     QuadProbSolverParams params_;
     ocp_qp_solver_plan_t plan;
