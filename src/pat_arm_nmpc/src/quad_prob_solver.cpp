@@ -339,12 +339,16 @@ bool QuadProbSolver::solve(
     // before giving up -- cold-starting reliably recovers (verified: zero
     // failures running entirely cold), and this keeps the fast path
     // (warm-started) for every normal tick.
+    resetIters();
     int qp_status = ocp_qp_solve(solver, qp_in, qp_out);
+    addIters();
     if (qp_status != 0 && params_.qp_warm_start != 0) {
         int cold = 0;
         ocp_qp_xcond_solver_opts_set(config, opts, "warm_start", &cold);
         qp_status = ocp_qp_solve(solver, qp_in, qp_out);
+        addIters();
         ocp_qp_xcond_solver_opts_set(config, opts, "warm_start", &params_.qp_warm_start);
+        last_retried_ = true;
     }
     last_status_ = qp_status;
 
@@ -471,12 +475,16 @@ bool QuadProbSolver::solveMultiStage(
     d_ocp_qp_set_ubx(0, x0_current, qp_in);
 
     // Solve, same warm-start-then-cold-retry-on-failure logic as solve().
+    resetIters();
     int qp_status = ocp_qp_solve(solver, qp_in, qp_out);
+    addIters();
     if (qp_status != 0 && params_.qp_warm_start != 0) {
         int cold = 0;
         ocp_qp_xcond_solver_opts_set(config, opts, "warm_start", &cold);
         qp_status = ocp_qp_solve(solver, qp_in, qp_out);
+        addIters();
         ocp_qp_xcond_solver_opts_set(config, opts, "warm_start", &params_.qp_warm_start);
+        last_retried_ = true;
     }
     last_status_ = qp_status;
 
@@ -488,6 +496,21 @@ bool QuadProbSolver::solveMultiStage(
     } else {
         return false;   // status is on lastStatus(); the caller decides how to report it
     }
+}
+
+void QuadProbSolver::resetIters() {
+    last_iters_      = -1;
+    last_qp_time_ms_ = 0.0;
+    last_retried_    = false;
+}
+
+void QuadProbSolver::addIters() {
+    // acados hangs a qp_info off qp_out's misc pointer and refills it on every
+    // ocp_qp_solve, so it has to be read before the next solve overwrites it.
+    const auto* info = static_cast<const qp_info*>(qp_out->misc);
+    if (info == nullptr) return;
+    last_iters_       = (last_iters_ < 0 ? 0 : last_iters_) + info->num_iter;
+    last_qp_time_ms_ += info->total_time * 1e3;
 }
 
 void QuadProbSolver::getU(int stage, double* u_out) const {

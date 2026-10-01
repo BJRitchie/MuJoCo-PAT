@@ -318,8 +318,10 @@ otherwise have to rediscover. None are regressions.
   `model_tau_max`.
 - **The soft-constraint penalties are expensive once the box is actually active.**
   With `joint_slack_*` at 1e3/1e4 and the arm parked outside a software limit, the
-  solve runs ~8 ms against the 5 ms period at `control_hz: 200`, spends 55% of
-  ticks over budget, and produces a handful of NaN solves (~9 in 300). In nominal
+  solve runs ~8 ms and produces a handful of NaN solves (~9 in 300). The
+  accompanying "55% of ticks over budget" was measured at `control_hz: 200` with
+  `warm_start: 2`; both have since changed, so the over-budget share needs
+  redoing against the 10 ms period. In nominal
   operation the slacks are inert (~1e-16), so this only bites off-nominal — which
   is when the deadline matters most. `peak slack` on the profile line is the
   signal to watch. That cost is buying something real — full recovery of the joint,
@@ -327,11 +329,16 @@ otherwise have to rediscover. None are regressions.
   not whether to abandon it. Note the earlier measurement suggesting 100× smaller
   weights were nearly free was taken while the rollout clamp was still masking the
   constraint, so it needs redoing.
-- **The 200 Hz control rate is buying nothing.** State arrives at
-  `pub_rate_hz: 100` while `control_hz` is 200, so every other tick re-solves on a
-  measurement it has already used. Dropping to 100 Hz would double the per-tick
-  budget at no information cost. Relatedly, `Ts` is 25 ms against a 5 ms period, so
-  the first horizon step models 5× the interval the command is applied for.
+- **Constraints are only imposed on the 25 ms horizon grid, not between its
+  nodes.** `Ts: 0.025` against a 10 ms control period is the ordinary
+  receding-horizon arrangement — a 1 s horizon at the control rate would need
+  N=100 — and re-solving faster than the grid is extra feedback, not a defect.
+  Two consequences are worth knowing: nothing bounds the joint states between grid
+  nodes (each tick re-imposes the box from the fresh measurement, which mitigates
+  but does not guarantee), and the solver sizes `u_0` as if it acted for 25 ms when
+  it is applied for 10, so the weights are tuned around an authority the arm does
+  not quite have. A non-uniform grid — first step at the control period, coarser
+  after — is the fix if either turns out to matter; neither has been measured.
 - **Joint velocity limits have no model source.** MJCF has no velocity range, so
   `qd_max` comes from the per-node `limits.qd_max` (2.0 rad/s) for owned joints and
   a hardcoded 10.0 rad/s default for the rest — and the rollout clamp is
@@ -420,24 +427,52 @@ otherwise have to rediscover. None are regressions.
 ### Realtime readiness (Jetson)
 
 `docs/realtime_deployment_research.md` holds the full research brief.
+**`tools/nmpc_timing/README.md` is how to run these measurements yourself** — a
+trial runner, a log summariser, how to read the report line, and the ways a trial
+gets silently invalidated.
 
-- **The control loop allocates on the heap every tick.** Each SQP iteration
-  builds six horizon-length `std::vector<Eigen::MatrixXd/VectorXd>` plus per-node
-  temporaries — estimated at several hundred `malloc`/`free` per tick, order 1e5/s
-  at `control_hz: 200`. Invisible on a general-purpose kernel; an unbounded
-  latency violation under `PREEMPT_RT`. The fix is a preallocated workspace with
-  `Eigen::Map` views over it.
+Each node logs a timing report once a second (`reportDiagnostics`), covering
+period jitter, callback wall *and* thread-CPU time, deadline misses, per-phase
+durations with maxima and a histogram, QP iterations and HPIPM's own solve time.
+Everything is per report window, not cumulative, so a spike does not get averaged
+away. Measured on the dev box over 290 s runs of `full_stack_nmpc
+with_targets:=true` at `N: 40`, both arms. The current defaults are the last row:
+
+| `warm_start` | `control_hz` | tick mean | tick max | p95 | over deadline | `qp_iter` max | retries | periods skipped | worst miss run |
+|---|---|---|---|---|---|---|---|---|---|
+| 2 primal+dual | 200 | 2.4 ms | **141 ms** | 79 ms | 4.57% | **125** | 223 | 3758 | 47 |
+| 0 cold | 200 | 3.5 ms | 23 ms | 13 ms | 12.99% | 26 | 0 | 328 | 97 |
+| 1 primal only | 200 | 3.1 ms | 34 ms | 10 ms | 4.12% | 53 | 0 | 51 | 10 |
+| **1 primal only** | **100** | 3.2 ms | **23 ms** | **10 ms** | **0.06%** | 48 | 0 | **1** | **5** |
+
+No run entered safe mode and tracking error is identical across all four, so both
+settings are free on control quality. `WarmStart.*` and
+`DISABLED_WarmStartStudy.Ladder` reproduce the comparison on a deterministic
+closed loop.
+
+- **Carrying the dual iterate across a setpoint step was the worst case.** It
+  makes the warm start a bad guess, HPIPM runs to `qp_max_iter` at ~0.9 ms per
+  iteration, and the cold-start retry then solves the same QP again — 141 ms
+  against a 5 ms period, 1–2x per setpoint change. Primal-only warm starting
+  removes it; solve time is linear in iterations, so an iteration cap is a real
+  worst-case bound once the solver stops reaching it.
+- **It is compute, not scheduling.** Thread CPU time tracks wall time to within
+  0.1% even through the spikes, and HPIPM's own reported time accounts for all but
+  ~60 us of the solve. A realtime kernel cannot help here; a bounded solver can.
+- **Nominal is comfortable; the tail is not.** 2 iterations and ~0.85 ms of QP in
+  a 3.2 ms tick, 20–40 us of period jitter. The remaining 23 ms outlier is the
+  only thing between this and a 10 ms deadline guarantee.
+- **The control loop allocates 3031 times per tick** — ~3e5/s per arm, two arms.
+  Invisible on a general-purpose kernel; an unbounded latency violation under
+  `PREEMPT_RT`. The fix is a preallocated workspace with `Eigen::Map` views over
+  it. `RealtimeProfile.ControlTickAllocationCountIsBounded` measures it and holds
+  the line.
+- **~1 ms of every nominal tick is redundant work.** Per rollout node,
+  `dynamicsAt` computes the same mass matrix into three separate 12x12 copies and
+  factorises the same 6x6 block three times, and `pinvDLS` builds a fresh 6x6
+  `JacobiSVD` to invert a symmetric positive-definite matrix. 41 nodes a tick.
 - **`std::cerr` on the QP-failure path**, which fires every tick precisely when
   the solver is already struggling. Not realtime-safe.
-- **Off-nominal solves blow the 5 ms period even though nominal ones are
-  comfortable.** At `N: 40` a nominal tick costs ~0.4–0.9 ms of QP solve. A
-  setpoint well outside the workspace pushes it to ~4 ms, and a strained soft
-  joint box to ~8.3 ms (see the slack item above). The budget is exceeded exactly
-  in the cases a deadline guarantee is for.
-- **Profiling reports means only.** `ScopedTimer` accumulates a sum and a count;
-  the profile line now also carries peak soft-constraint slack, but there is still
-  no max, percentile, wakeup jitter or deadline-miss counter — the numbers that
-  decide whether a realtime deadline holds.
 - **No realtime scheduling anywhere.** Default `rclcpp` executor, default-priority
   DDS threads, no `SCHED_FIFO`, no `mlockall`, no core pinning. The dev container
   also lacks `CAP_SYS_NICE`, so it cannot currently request an RT policy at all.

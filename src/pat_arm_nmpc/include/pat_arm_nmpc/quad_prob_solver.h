@@ -305,6 +305,20 @@ public:
      *  rate — and stderr bypasses ROS logging entirely. */
     int lastStatus() const { return last_status_; }
 
+    /*! Interior-point iterations and the time HPIPM itself reports, summed over
+     *  every ocp_qp_solve this tick — so a cold-start retry's first, failed solve
+     *  is included rather than overwritten by the second. That makes the time
+     *  directly comparable with a caller's own stopwatch around the solve call:
+     *  the difference is the per-stage data marshalling, which no acados timer
+     *  covers. -1 iterations if acados reported no info. */
+    int    lastQpIters()   const { return last_iters_; }
+    double lastQpTimeMs()  const { return last_qp_time_ms_; }
+
+    /*! Whether the most recent solve needed the cold-start retry, which solves the
+     *  same QP a second time. Worth separating from the iteration count: a retry
+     *  doubles the solve without changing how hard either half was. */
+    bool lastRetried() const { return last_retried_; }
+
     /*! How many box rows the relax_box_to_contain_x0 guard had to widen on the
      *  most recent solve, and by how much at worst. Worth watching: if the guard
      *  fires on nearly every row of nearly every tick, a "hard" box has quietly
@@ -344,6 +358,15 @@ private:
 
     Eigen::VectorXd last_tau_task;
     int             last_status_ = 0;
+
+    //! Clear the per-tick metrics, then add one ocp_qp_solve's worth from acados'
+    //! qp_info. addIters() runs after every solve including the failures: a solve
+    //! that ran long before failing is exactly the one worth accounting for.
+    void resetIters();
+    void addIters();
+    int    last_iters_       = -1;
+    double last_qp_time_ms_  = 0.0;
+    bool   last_retried_     = false;
 
     // Which rows are soft, per stage, decided once in the constructor and read
     // back by nsAt/nsbxAt/nsgAt. Single source of truth: the constructor wires

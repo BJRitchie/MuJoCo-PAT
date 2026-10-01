@@ -15,6 +15,9 @@ hold their start pose).
 joint_states/torque_command by name, publishes each side's EE distance from
 its setpoint - see /chaser/telemetry/*).
 
+`params_file:=/path/to/nmpc.yaml` swaps the NMPC tuning set, forwarded to
+arm_nmpc.launch.py. Defaults to pat_arm_nmpc's installed config/nmpc.yaml.
+
 `plotjuggler:=true` additionally launches PlotJuggler itself with the saved
 layout (`src/pat_telemetry/config/telemetry.xml`) preloaded - a separate flag
 from `telemetry` since the GUI is a viewing convenience, not something every
@@ -32,8 +35,16 @@ from launch_ros.substitutions import FindPackageShare
 
 def generate_launch_description() -> LaunchDescription:
     use_sim_time = {"use_sim_time": LaunchConfiguration("use_sim_time")}.items()
+    nmpc_args = {"use_sim_time": LaunchConfiguration("use_sim_time"),
+                 "params_file": LaunchConfiguration("params_file")}.items()
+    # Repeats arm_nmpc.launch.py's own default rather than forwarding an empty
+    # string: launch_arguments is fixed when the description is built, so there is
+    # no way to omit the argument conditionally on its value.
+    nmpc_params = PathJoinSubstitution(
+        [FindPackageShare("pat_arm_nmpc"), "config", "nmpc.yaml"])
     return LaunchDescription([
         DeclareLaunchArgument("use_sim_time", default_value="true"),
+        DeclareLaunchArgument("params_file", default_value=nmpc_params),
         DeclareLaunchArgument("with_gnc", default_value="false"),
         DeclareLaunchArgument("with_targets", default_value="false"),
         DeclareLaunchArgument("telemetry", default_value="false"),
@@ -50,7 +61,7 @@ def generate_launch_description() -> LaunchDescription:
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(PathJoinSubstitution(
                 [FindPackageShare("pat_arm_nmpc"), "launch", "arm_nmpc.launch.py"])),
-            launch_arguments=use_sim_time),
+            launch_arguments=nmpc_args),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(PathJoinSubstitution(
                 [FindPackageShare("pat_arm_nmpc"), "launch", "ee_targets.launch.py"])),

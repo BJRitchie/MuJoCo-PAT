@@ -15,6 +15,7 @@
 #include <Eigen/Dense>
 #include <chrono>
 #include <cmath>
+#include <cstddef>
 #include <cstdio>
 #include <map>
 #include <string>
@@ -22,8 +23,54 @@
 
 #include "pat_arm_nmpc/arm_nmpc.h"
 
+// --- Heap-allocation counter ---------------------------------------------- //
+// Interposes glibc's malloc family so a test can count the heap operations of a
+// single control tick. Defined in the test executable, so calls from libstdc++,
+// Eigen, MuJoCo and acados/BLASFEO all land here: each reaches malloc through
+// the PLT, which resolves against the executable first. Counting malloc rather
+// than operator new is deliberate -- operator new is implemented on top of
+// malloc, and acados/BLASFEO call malloc directly.
+//
+// glibc-specific (__libc_* are its internal entry points) and deliberately not
+// counting posix_memalign/aligned_alloc, which have no stable __libc_ pair. On
+// x86-64 glibc, Eigen's aligned allocator is plain malloc (malloc already
+// returns 16-byte-aligned blocks), so the hot path is covered.
+extern "C" {
+void* __libc_malloc(std::size_t);
+void* __libc_calloc(std::size_t, std::size_t);
+void* __libc_realloc(void*, std::size_t);
+}
+
+namespace pat_rt_alloc {
+// Zero-initialised statics with no dynamic initialiser: allocations happen
+// during static init, before any constructor here could have run.
+volatile bool counting = false;
+long          count    = 0;
+}  // namespace pat_rt_alloc
+
+extern "C" void* malloc(std::size_t n) {
+    if (pat_rt_alloc::counting) ++pat_rt_alloc::count;
+    return __libc_malloc(n);
+}
+extern "C" void* calloc(std::size_t n, std::size_t sz) {
+    if (pat_rt_alloc::counting) ++pat_rt_alloc::count;
+    return __libc_calloc(n, sz);
+}
+extern "C" void* realloc(void* p, std::size_t n) {
+    if (pat_rt_alloc::counting) ++pat_rt_alloc::count;
+    return __libc_realloc(p, n);
+}
+
 namespace pat_arm_nmpc {
 namespace {
+
+/*! Counts allocations for as long as it is in scope. Read `n` after it closes:
+ *  gtest's own assertion machinery allocates. */
+struct AllocScope {
+    AllocScope() { pat_rt_alloc::count = 0; pat_rt_alloc::counting = true; }
+    ~AllocScope() { pat_rt_alloc::counting = false; }
+    long n() const { return pat_rt_alloc::count; }
+};
 
 // Re-exports the protected model-construction seams so a test can build A/B at
 // a known state rather than inferring them from closed-loop behaviour.
@@ -40,14 +87,26 @@ public:
     using ArmNMPC::vlimsByIndex;
     using ArmNMPC::evalTaskSpace;
     using ArmNMPC::ownedJointInds;
-    using ArmNMPC::n_qpsolve_;
+    using ArmNMPC::qpsolve;
     using ArmNMPC::lastQpStatus;
     using ArmNMPC::mode;
     using ArmNMPC::params_;
     using ArmNMPC::qlimsByIndex;
     using ArmNMPC::qp_;
     using ArmNMPC::reachableWrenchBound;
-    using ArmNMPC::t_qpsolve_us_;
+    using ArmNMPC::resetProfile;
+    // Timing members, so a test can check the profile covers the tick.
+    using ArmNMPC::build_model;
+    using ArmNMPC::defect;
+    using ArmNMPC::finalize;
+    using ArmNMPC::pinv;
+    using ArmNMPC::qp_iters;
+    using ArmNMPC::qp_retries;
+    using ArmNMPC::qp_time_ms;
+    using ArmNMPC::rollout_dynamics;
+    using ArmNMPC::rollout_integrate;
+    using ArmNMPC::tick;
+    using ArmNMPC::trust_region;
     using ArmTaskSpaceController::dynamicsAt;
     using ArmTaskSpaceController::integrateStep;
     using ArmTaskSpaceController::modelJointRanges;
@@ -745,12 +804,21 @@ struct RunMetrics {
     double mean_tick_us = 0.0;
     double max_tick_us = 0.0;
     double frac_over_budget = 0.0;      // ticks exceeding one control period
+    double qp_iter_mean = 0.0;
+    double qp_iter_max = 0.0;
+    long   qp_retries = 0;              // solves that needed the cold-start retry
     std::map<int, int> status_hist;     // HPIPM status -> count
 };
 
 struct Scenario {
     double setpoint_offset = 0.06;      // [m] per axis, from the measured start pose
     double q_min_override  = 0.0;       // >0 raises joint_lims[0].q_min, parking it outside
+    // Optional mid-run setpoint jump, reproducing what ee_target_publisher does
+    // live: the arm settles, then the target moves. That transition is where the
+    // warm-start iterate stops being a good guess, so a study of warm-start
+    // behaviour has to contain one -- a single fixed setpoint never sees it.
+    int    step_at_tick  = 0;           // 0 disables
+    double step_offset   = 0.0;         // [m] per axis, added to the original target
 };
 
 RunMetrics runClosedLoop(NMPCParams params, const Scenario& sc, int ticks)
@@ -762,8 +830,8 @@ RunMetrics runClosedLoop(NMPCParams params, const Scenario& sc, int ticks)
     State s = referenceState(c.n_joints_);
 
     const ArmNMPC::EePose start = c.currentEePose(s.q, s.v);
-    const double tx = start.pos.x() + sc.setpoint_offset;
-    const double ty = start.pos.y() + sc.setpoint_offset;
+    double tx = start.pos.x() + sc.setpoint_offset;
+    double ty = start.pos.y() + sc.setpoint_offset;
     c.setDesiredPos(tx, ty, start.pos.z());
     c.setDesiredOrient(start.quat(0), start.quat(1), start.quat(2), start.quat(3));
 
@@ -773,6 +841,11 @@ RunMetrics runClosedLoop(NMPCParams params, const Scenario& sc, int ticks)
     double err_sum = 0.0, t_sum = 0.0;
 
     for (int t = 0; t < ticks; ++t) {
+        if (sc.step_at_tick > 0 && t == sc.step_at_tick) {
+            tx += sc.step_offset;
+            ty += sc.step_offset;
+            c.setDesiredPos(tx, ty, start.pos.z());
+        }
         const auto t0 = std::chrono::high_resolution_clock::now();
         const Eigen::VectorXd tau_all = c.computeControl(s.q, s.v);
         const double tick_us =
@@ -833,6 +906,9 @@ RunMetrics runClosedLoop(NMPCParams params, const Scenario& sc, int ticks)
         err_sum += std::hypot(now.pos.x() - tx, now.pos.y() - ty);
     }
 
+    m.qp_iter_mean      = c.qp_iters.mean();
+    m.qp_iter_max       = c.qp_iters.max;
+    m.qp_retries        = c.qp_retries;
     m.recovered         = m.initial_pos_violation - m.final_pos_violation;
     m.availability      = 1.0 - static_cast<double>(damping_ticks) / ticks;
     m.guard_relax_frac  = static_cast<double>(relax_ticks) / ticks;
@@ -1228,6 +1304,212 @@ TEST(HardConstraints, HardTorqueDoesNotChangeTheNominalCommand)
     EXPECT_GT(mh.availability, 0.99) << "hard torque rows cost availability";
     EXPECT_NEAR(mh.mean_ee_err, ms.mean_ee_err, 0.25 * ms.mean_ee_err + 1e-4)
         << "soft " << ms.mean_ee_err << " vs hard " << mh.mean_ee_err;
+}
+
+// --- Realtime profile ----------------------------------------------------- //
+
+/*! The per-tick heap traffic of the live configuration, as a bound rather than
+ *  an exact figure: it depends on the Eigen and acados builds, so pinning it
+ *  exactly would flake. The bound is there to catch an order-of-magnitude
+ *  regression while the hot path is made allocation-free; tighten it as that
+ *  work lands, until the target is zero. */
+TEST(RealtimeProfile, ControlTickAllocationCountIsBounded)
+{
+    constexpr long kTicks       = 10;
+    constexpr long kMaxPerTick  = 6000;
+
+    ModelProbe c(kMjcf, liveParams());
+    const State s = referenceState(c.n_joints_);
+    c.setDesiredPos(0.30, 0.25, 0.0);
+    c.setDesiredOrient(1.0, 0.0, 0.0, 0.0);
+
+    // Warm up first: the first tick also pays one-off costs (lazily sized
+    // workspaces, acados' first solve) that are not per-tick traffic.
+    for (int i = 0; i < 3; ++i) c.computeControl(s.q, s.v);
+
+    long allocs = 0;
+    {
+        AllocScope scope;
+        for (long i = 0; i < kTicks; ++i) c.computeControl(s.q, s.v);
+        allocs = scope.n();
+    }
+
+    const double per_tick = static_cast<double>(allocs) / kTicks;
+    std::printf("[alloc] %.0f heap allocations per control tick\n", per_tick);
+    EXPECT_GT(allocs, 0) << "counter did not observe any allocation -- the "
+                            "malloc interposer is not being reached";
+    EXPECT_LT(per_tick, kMaxPerTick);
+}
+
+/*! The profiler has to report a worst case, not just a mean, and has to forget
+ *  it on reset -- a cumulative max would make every later window report the
+ *  first spike it ever saw. */
+TEST(RealtimeProfile, ReportCarriesAMaxAndAHistogramAndResets)
+{
+    ModelProbe c(kMjcf, liveParams());
+    const State s = referenceState(c.n_joints_);
+    c.setDesiredPos(0.30, 0.25, 0.0);
+    // A budget no tick can plausibly exceed, so the miss count is a fixed
+    // expectation rather than a measurement of the machine running the test.
+    c.setTickBudgetUs(60e6);
+    for (int i = 0; i < 5; ++i) c.computeControl(s.q, s.v);
+
+    const std::string rep = c.profileReport();
+    EXPECT_NE(rep.find("over 5 ticks"), std::string::npos) << rep;
+    EXPECT_NE(rep.find("max="), std::string::npos) << rep;
+    EXPECT_NE(rep.find("hist(tick)"), std::string::npos) << rep;
+    EXPECT_NE(rep.find("over_period=0/5"), std::string::npos) << rep;
+    EXPECT_NE(rep.find("qpsolve("), std::string::npos) << rep;
+    EXPECT_NE(rep.find("unattributed="), std::string::npos) << rep;
+
+    EXPECT_GT(c.tick.max_us, 0.0);
+    c.resetProfile();
+    EXPECT_EQ(c.tick.count, 0);
+    EXPECT_EQ(c.tick.max_us, 0.0);
+    EXPECT_EQ(c.qpsolve.count, 0);
+    EXPECT_EQ(c.tick.budget_us, 60e6) << "reset dropped the configured deadline";
+}
+
+/*! A tick over the budget must be counted exactly. The histogram cannot answer
+ *  this: its bins are coarser than any period of interest and the last one is
+ *  open-ended, so a budget above 5 ms has no bin boundary to read. */
+TEST(RealtimeProfile, DeadlineMissesAreCountedAgainstTheBudget)
+{
+    ModelProbe c(kMjcf, liveParams());
+    const State s = referenceState(c.n_joints_);
+    c.setDesiredPos(0.30, 0.25, 0.0);
+    c.setTickBudgetUs(1e-3);       // below any achievable tick: all ticks miss
+    for (int i = 0; i < 4; ++i) c.computeControl(s.q, s.v);
+
+    EXPECT_EQ(c.tick.over, 4);
+    EXPECT_NE(c.profileReport().find("over_period=4/4"), std::string::npos);
+
+    c.setTickBudgetUs(0.0);        // not a deadline: nothing counted, no column
+    c.resetProfile();
+    c.computeControl(s.q, s.v);
+    EXPECT_EQ(c.tick.over, 0);
+    EXPECT_EQ(c.profileReport().find("over_period"), std::string::npos);
+}
+
+/*! The iteration count is the link between a slow tick and its cause, so it has
+ *  to come back from the solver rather than stay at the "no info" sentinel. */
+TEST(RealtimeProfile, QpIterationsAreReported)
+{
+    ModelProbe c(kMjcf, liveParams());
+    const State s = referenceState(c.n_joints_);
+    c.setDesiredPos(0.30, 0.25, 0.0);
+    for (int i = 0; i < 5; ++i) c.computeControl(s.q, s.v);
+
+    EXPECT_EQ(c.qp_iters.count, 5) << "one tally per tick";
+    EXPECT_GT(c.qp_iters.mean(), 0.0);
+    EXPECT_EQ(c.qp_retries, 0) << "the nominal path should not need a cold retry";
+    // Without a retry the tick holds exactly one solve, so the cap applies to it.
+    EXPECT_LE(c.qp_iters.max, liveParams().qp_max_iter);
+    // HPIPM's own time cannot exceed the stopwatch around the call that produced it.
+    EXPECT_GT(c.qp_time_ms.max, 0.0);
+    EXPECT_LE(c.qp_time_ms.max * 1e3, c.qpsolve.max_us);
+    EXPECT_NE(c.profileReport().find("qp_iter/tick mean="), std::string::npos);
+
+    c.resetProfile();
+    EXPECT_EQ(c.qp_iters.count, 0);
+    EXPECT_EQ(c.qp_time_ms.count, 0);
+    EXPECT_EQ(c.profileReport().find("qp_iter"), std::string::npos)
+        << "an empty tally should not print a column";
+}
+
+/*! Every phase the report lists must actually be timed on the active path --
+ *  an untimed phase shows up as unattributed time and the profile cannot then
+ *  point at the cost. */
+TEST(RealtimeProfile, TheSqpPathAttributesMostOfItsTick)
+{
+    ModelProbe c(kMjcf, liveParams());
+    const State s = referenceState(c.n_joints_);
+    c.setDesiredPos(0.30, 0.25, 0.0);
+    for (int i = 0; i < 10; ++i) c.computeControl(s.q, s.v);
+
+    const PhaseStat* required[] = {&c.rollout_dynamics, &c.rollout_integrate,
+                                   &c.pinv, &c.build_model, &c.defect,
+                                   &c.qpsolve, &c.trust_region, &c.finalize};
+    double attributed = 0.0;
+    for (const PhaseStat* p : required) {
+        EXPECT_GT(p->count, 0) << "a phase the report lists is never timed";
+        attributed += p->sum_us;
+    }
+    EXPECT_GT(attributed, 0.6 * c.tick.sum_us)
+        << "attributed " << attributed << " of " << c.tick.sum_us << " us";
+}
+
+// --- Warm start vs cold start --------------------------------------------- //
+
+/*! The scenario that separates the two: settle, then jump the target. A single
+ *  fixed setpoint never invalidates the warm-start iterate, so it cannot show the
+ *  behaviour this is about. */
+Scenario warmStartScenario()
+{
+    Scenario sc;
+    sc.setpoint_offset = 0.06;
+    sc.step_at_tick    = 150;
+    sc.step_offset     = 0.12;
+    return sc;
+}
+
+/*! Cold-starting every solve trades mean cost for a bounded worst case.
+ *
+ *  Warm-starting is cheaper per tick while the previous iterate stays a good
+ *  guess, but a target jump invalidates it and HPIPM then runs to the iteration
+ *  cap before the cold-start retry rescues it -- a tick an order of magnitude over
+ *  the period. Cold-starting pays more iterations every tick and never approaches
+ *  the cap. For a deadline the second shape is the useful one, so the invariant
+ *  worth holding is that cold stays far clear of the cap. */
+TEST(WarmStart, ColdStartingStaysWellClearOfTheIterationCap)
+{
+    NMPCParams p = liveParams();
+    p.qp_warm_start = 0;
+    const RunMetrics m = runClosedLoop(p, warmStartScenario(), 400);
+
+    EXPECT_EQ(m.qp_retries, 0) << "warm_start=0 disables the retry path entirely";
+    EXPECT_GT(m.availability, 0.99) << "cold starts should not cost availability";
+    EXPECT_LT(m.qp_iter_max, 0.5 * p.qp_max_iter)
+        << "cold solves ran to " << m.qp_iter_max << " of a " << p.qp_max_iter
+        << " cap; the cap is supposed to be slack, not a bound being reached";
+}
+
+/*! Warm-starting's cost is concentrated in the ticks right after a target jump,
+ *  which is what makes a mean-only profile miss it. */
+TEST(WarmStart, WarmStartingCostsMoreInTheWorstTickThanCold)
+{
+    NMPCParams warm = liveParams();   // qp_warm_start defaults to 2
+    NMPCParams cold = liveParams();
+    cold.qp_warm_start = 0;
+
+    const RunMetrics mw = runClosedLoop(warm, warmStartScenario(), 400);
+    const RunMetrics mc = runClosedLoop(cold, warmStartScenario(), 400);
+
+    EXPECT_LT(mc.qp_iter_max, mw.qp_iter_max)
+        << "warm " << mw.qp_iter_max << " vs cold " << mc.qp_iter_max;
+    EXPECT_GT(mc.qp_iter_mean, mw.qp_iter_mean)
+        << "cold is expected to pay more iterations on the average tick";
+    // Both must still control the arm; a bounded tail is worthless if it tracks worse.
+    EXPECT_NEAR(mc.mean_ee_err, mw.mean_ee_err, 0.25 * mw.mean_ee_err + 1e-4)
+        << "warm " << mw.mean_ee_err << " vs cold " << mc.mean_ee_err;
+}
+
+TEST(DISABLED_WarmStartStudy, Ladder)
+{
+    // Diagnostic: the whole warm-start ladder on one scenario, for choosing a
+    // mode and an iteration cap from measured numbers.
+    std::printf("%-5s %9s %9s %9s %8s %8s %7s %8s %9s\n",
+                "mode", "tick_mean", "tick_max", "over_bud", "it_mean",
+                "it_max", "retries", "avail", "ee_err");
+    for (int ws : {2, 1, 0}) {
+        NMPCParams p = liveParams();
+        p.qp_warm_start = ws;
+        const RunMetrics m = runClosedLoop(p, warmStartScenario(), 400);
+        std::printf("%-5d %9.0f %9.0f %9.3f %8.2f %8.0f %7ld %8.3f %9.5f\n",
+                    ws, m.mean_tick_us, m.max_tick_us, m.frac_over_budget,
+                    m.qp_iter_mean, m.qp_iter_max, m.qp_retries,
+                    m.availability, m.mean_ee_err);
+    }
 }
 
 TEST(DISABLED_ConstraintStudy, BoxIsActuallyEnforced)

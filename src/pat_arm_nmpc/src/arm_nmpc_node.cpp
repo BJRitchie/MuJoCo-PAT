@@ -93,6 +93,10 @@ ArmNMPCNode::ArmNMPCNode() : Node("pat_arm_nmpc") {
         "/chaser/arm/" + arm_side_ + "/ee_pose", 10);
     ctrl_tmr_ = create_wall_timer(std::chrono::duration<double>(1.0 / ctrl_hz),
                                   std::bind(&ArmNMPCNode::controlLoop, this));
+    period_us_ = 1e6 / ctrl_hz;
+    controller_->setTickBudgetUs(period_us_);
+    diag_tmr_  = create_wall_timer(std::chrono::seconds(1),
+                                   std::bind(&ArmNMPCNode::reportDiagnostics, this));
 
     RCLCPP_INFO(get_logger(),
                 "pat_arm_nmpc[%s]: model N=%d, owned=%zu, ee_site=%s, N=%d Ts=%.3f ctrl=%.0f Hz",
@@ -294,7 +298,17 @@ void ArmNMPCNode::onEeSetpoint(geometry_msgs::msg::PoseStamped::SharedPtr msg) {
     has_setpoint_ = true;
 }
 
+double ArmNMPCNode::threadCpuUs() {
+    timespec ts{};
+    clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ts);
+    return static_cast<double>(ts.tv_sec) * 1e6 + static_cast<double>(ts.tv_nsec) * 1e-3;
+}
+
 void ArmNMPCNode::controlLoop() {
+    const auto wake    = std::chrono::steady_clock::now();
+    const double cpu_0 = threadCpuUs();
+    recordWake(wake);
+
     std::lock_guard<std::mutex> lk(mu_);
     if (!has_state_ || !has_odom_) {
         // Throttled: this fires every tick until both arrive, which at
@@ -397,6 +411,67 @@ void ArmNMPCNode::controlLoop() {
     for (size_t k = 0; k < joint_names_.size(); ++k)
         cmd.effort[k] = tau(static_cast<Eigen::Index>(owned_model_idx_[k]));
     torque_pub_->publish(cmd);
+
+    // Time the whole callback, not just computeControl: state assembly, both
+    // publishes and the torque copy are all on the control thread and all count
+    // against the period. Recorded here rather than in a ScopedTimer because the
+    // deadline accounting needs the value.
+    const double body_us = std::chrono::duration<double, std::micro>(
+        std::chrono::steady_clock::now() - wake).count();
+    loop_.add(body_us);
+    cpu_.add(threadCpuUs() - cpu_0);
+    if (period_us_ > 0.0 && body_us > period_us_) {
+        ++deadline_misses_;
+        ++consecutive_misses_;
+        worst_consecutive_misses_ =
+            std::max(worst_consecutive_misses_, consecutive_misses_);
+    } else {
+        consecutive_misses_ = 0;
+    }
+}
+
+void ArmNMPCNode::recordWake(std::chrono::steady_clock::time_point wake) {
+    if (!have_last_wake_) {
+        last_wake_      = wake;
+        have_last_wake_ = true;
+        return;
+    }
+    const double dt_us =
+        std::chrono::duration<double, std::micro>(wake - last_wake_).count();
+    last_wake_ = wake;
+    if (period_us_ <= 0.0) return;
+
+    jitter_.add(std::abs(dt_us - period_us_));
+    // Round down, so an interval inside one period counts as nothing skipped.
+    const long periods = static_cast<long>(dt_us / period_us_);
+    if (periods > 1) skipped_periods_ += periods - 1;
+}
+
+void ArmNMPCNode::reportDiagnostics() {
+    std::lock_guard<std::mutex> lk(mu_);
+    if (loop_.count == 0) return;   // no tick completed in this window
+
+    RCLCPP_INFO(get_logger(),
+        "pat_arm_nmpc[%s] %ld ticks @ %.0f us | period jitter mean %.0f max %.0f us | "
+        "callback wall mean %.0f max %.0f / cpu mean %.0f max %.0f us | "
+        "deadline misses %ld (longest run %ld) | skipped periods %ld\n%s",
+        arm_side_.c_str(), loop_.count, period_us_,
+        jitter_.mean(), jitter_.max_us,
+        loop_.mean(), loop_.max_us, cpu_.mean(), cpu_.max_us,
+        deadline_misses_, worst_consecutive_misses_, skipped_periods_,
+        controller_->profileReport().c_str());
+
+    // Every statistic is per report window. Cumulative means hide a late spike:
+    // one 20 ms tick in an hour of 2 ms ticks moves the mean by nothing, and the
+    // spike is the whole point.
+    jitter_.reset();
+    loop_.reset();
+    cpu_.reset();
+    deadline_misses_          = 0;
+    consecutive_misses_       = 0;
+    worst_consecutive_misses_ = 0;
+    skipped_periods_          = 0;
+    controller_->resetProfile();
 }
 
 int main(int argc, char** argv) {

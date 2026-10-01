@@ -218,7 +218,9 @@ node assembles the free-base MuJoCo `q`/`v` from `/chaser/odom` + all joints of
 - Arm joints always use `<motor>` (raw torque), never `<position>`/`<general>`
   with an implicit PD gain — the controller owns the loop; a servo would fight it
 - Gravity disabled: `gravity="0 0 0"` in `<option>` — do not re-enable
-- Physics dt = 2 ms (500 Hz). GNC control = 10 Hz, arm NMPC = 50 Hz. Publishing = 100 Hz.
+- Physics dt = 2 ms (500 Hz). GNC control = 10 Hz, arm NMPC = 100 Hz (`control_hz`,
+  matched to publishing so it never re-solves on a state it already used).
+  Publishing = 100 Hz.
 
 ## State conventions
 

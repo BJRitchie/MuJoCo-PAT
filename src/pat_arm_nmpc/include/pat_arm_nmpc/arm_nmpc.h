@@ -181,6 +181,21 @@ public:
      *  report when it logs a transition into safe mode. */
     int lastQpStatus() const;
 
+    /*! The control period in microseconds, so a tick that overruns it is counted
+     *  as it happens. Set once at construction; survives resetProfile(). */
+    void setTickBudgetUs(double us) { tick.budget_us = us; }
+
+    /*! Human-readable timing breakdown: per phase, the mean, the max and the
+     *  histogram, plus deadline misses against the tick budget and peak
+     *  soft-constraint slack. Builds a string, so call it from a diagnostics
+     *  timer and never from the control tick. */
+    std::string profileReport() const;
+
+    /*! Zero every phase statistic and the slack peaks. Call right after reporting:
+     *  the statistics are per-interval, not cumulative, because a running average
+     *  over a whole session stops responding to the spike that matters. */
+    void resetProfile();
+
 protected:
     /*! Thin guard around controlLawImpl: any exception escaping the control
      *  computation becomes safe mode instead of terminating the process. Wrapped
@@ -251,7 +266,7 @@ protected:
                        Eigen::VectorXd& lbx_j, Eigen::VectorXd& ubx_j,
                        Eigen::MatrixXd& D, Eigen::VectorXd& lg,
                        Eigen::VectorXd& ug, Eigen::VectorXd& x_aug,
-                       int nOwned, Eigen::MatrixXd& Q_N,
+                       Eigen::MatrixXd& Q_N,
                        Eigen::VectorXd& tau_task_out);
 
     /*! tau_joints = J^T*tau_task + Cv_joints, clamped to torqueLimsByIndex. */
@@ -305,10 +320,10 @@ protected:
      *  nsbxAt/nsgAt, since which groups are soft is configurable. */
     void recordSlack();
 
-    // Print the timing info at the end of a control loop
-    void printTimingInfo(
-        const std::chrono::time_point<std::chrono::high_resolution_clock> start,
-        int modulo = 100);
+    //! Fold this tick's total into `tick`. Accumulation only — no I/O, so nothing
+    //! on the control path can block writing to a pipe. Reporting is the caller's
+    //! job, via profileReport() from a lower-rate context.
+    void recordTick(std::chrono::steady_clock::time_point start);
 
     NMPCParams params_;
     int        ee_site_id_ = -1;
@@ -366,22 +381,38 @@ protected:
     // reinitializes it to zero. Unused when fullNonlinear is false.
     std::vector<Eigen::VectorXd> u_bar_;
 
-    // Variables for investigating timing break-down. dynamics_us_/jdotqdot_us_
-    // are only ever incremented by the LINEARIZED path (computeGeneralizedInertiaInv
-    // / the explicit jdotQdot(6) call in each controlLaw*) -- solveNonlinearMPC()
-    // never touches them, so their n_ counters stay 0 (and the printed average
-    // divides by zero) whenever fullNonlinear=true. The nonlinear rollout's
-    // own dynamics evaluation (dynamicsAt(), which bundles what the linearized
-    // path does as two separate calls -- getDynamics-equivalent AND jdotQdot6
-    // -- into one mj_forward pass, specifically to avoid redundant scratch
-    // round-trips) and its rollout propagation (integrateStep(), with no
-    // linearized-path counterpart at all) get their OWN dedicated timers
-    // instead of being force-mapped onto dynamics_us_/jdotqdot_us_, since
-    // they're genuinely not the same granularity of work.
-    double t_dynamics_us_ = 0, t_lambda_us_ = 0, t_jdotqdot_us_ = 0, t_qpsolve_us_ = 0, t_total_us_ = 0;
-    long   n_dynamics_ = 0, n_lambda_ = 0, n_jdotqdot_ = 0, n_qpsolve_ = 0, n_total_ = 0;
-    double t_rollout_dynamics_us_ = 0, t_rollout_integrate_us_ = 0;
-    long   n_rollout_dynamics_ = 0, n_rollout_integrate_ = 0;
+    // Timing breakdown. `tick` is the whole control law; the rest are phases
+    // within it, so `tick.sum_us` minus the phases is unattributed remainder --
+    // keep that small, or the profile cannot point at the cost.
+    //
+    // Which phases are populated depends on the path. dynamics/jdotqdot belong to
+    // the LINEARIZED path only (fullNonlinear=false); the SQP path evaluates
+    // dynamics once per rollout node through dynamicsAt(), which bundles the same
+    // work into one mj_forward pass, so it reports under rollout_dynamics instead.
+    // A phase with count==0 is simply not on the active path.
+    PhaseStat tick;               //!< whole controlLawImpl
+    PhaseStat dynamics;           //!< linearized path: getDynamics + H_g inverse
+    PhaseStat jdotqdot;           //!< linearized path: jdotQdot6
+    PhaseStat lambda;             //!< Lambda_inv product
+    PhaseStat qpsolve;            //!< solve() / solveMultiStage()
+    PhaseStat rollout_dynamics;   //!< SQP path: dynamicsAt per node
+    PhaseStat rollout_integrate;  //!< SQP path: integrateStep per node
+    PhaseStat pinv;               //!< pinvDLS (the per-node SVD)
+    PhaseStat build_model;        //!< buildAugmentedModel per node
+    PhaseStat defect;             //!< the b_k defect loop
+    PhaseStat trust_region;       //!< du_max clamp loop + reachableWrenchBound
+    PhaseStat finalize;           //!< finalizeJointTorques
+
+    //! Interior-point iterations per solve. HPIPM's solve time is very nearly
+    //! linear in this, so it is what distinguishes "the arithmetic is slow" from
+    //! "this QP was hard" -- and only the second is fixable by a cap.
+    Tally qp_iters;
+    //! HPIPM's own reported time for the same solve. Paired with qpsolve's measured
+    //! duration it localises a slow solve: close together puts the cost inside
+    //! ocp_qp_solve, far apart puts it in the per-stage data marshalling around it.
+    Tally qp_time_ms;
+    long  qp_retries = 0;         //!< solves that needed the cold-start retry
+    void  recordQpIters();
 
     // Worst soft-constraint slack since the last profile report -- box (joint
     // position/velocity) and general (torque) rows kept apart, since they carry

@@ -6,10 +6,6 @@
 
 namespace pat_arm_nmpc {
 
-namespace {
-double avgOrNan(double t, long n) { return n > 0 ? t / static_cast<double>(n) : 0.0; }
-}  // namespace
-
 ArmNMPC::ArmNMPC(
     const std::string& mjcf_path, const NMPCParams& params) 
     : ArmTaskSpaceController(mjcf_path)
@@ -236,7 +232,7 @@ Eigen::VectorXd ArmNMPC::controlLawImpl(
     const Eigen::VectorXd& q, const Eigen::VectorXd& v)
 {
     // Record start time of control loop
-    auto start = std::chrono::high_resolution_clock::now();
+    const auto start = std::chrono::steady_clock::now();
 
     const int n_j = n_joints_;
     const int nx  = 7 + 2 * n_j;   // 2*d+1 + 2*n_j, d=3
@@ -263,7 +259,7 @@ Eigen::VectorXd ArmNMPC::controlLawImpl(
         Eigen::Vector4d  quat_ee = eeOrientation(ee_site_id_);   // [w,x,y,z]
         Eigen::MatrixXd  J_g6;
         {
-            ScopedTimer t(t_lambda_us_, n_lambda_);
+            ScopedTimer t(lambda);
             J_g6 = gjm6(ee_site_id_);   // 6 x n_joints_: rows [0:3) lin, [3:6) ang
         }
         Eigen::MatrixXd J_g(3, n_j);
@@ -298,7 +294,7 @@ Eigen::VectorXd ArmNMPC::controlLawImpl(
 
         Eigen::Matrix<double, 6, 1> jdot_qdot6;
         {
-            ScopedTimer t(t_jdotqdot_us_, n_jdotqdot_);
+            ScopedTimer t(jdotqdot);
             jdot_qdot6 = jdotQdot6(ee_site_id_);
         }
         Eigen::Vector3d bias;
@@ -318,7 +314,6 @@ Eigen::VectorXd ArmNMPC::controlLawImpl(
 
         Eigen::VectorXd lbx_j, ubx_j;
         buildJointBoxBounds(q0, lbx_j, ubx_j);
-        const int nOwned = static_cast<int>(ownedJointInds.size());
 
         Eigen::MatrixXd D;
         Eigen::VectorXd lg, ug;
@@ -326,16 +321,16 @@ Eigen::VectorXd ArmNMPC::controlLawImpl(
 
         Eigen::VectorXd tau_task;
         if (!solveStageQP(A, B, Q, R, lbx_j, ubx_j, D, lg, ug,
-                          x_aug, nOwned, Q_N, tau_task)) {
+                          x_aug, Q_N, tau_task)) {
             enterDamping();
             ++safe_mode_ticks_;
-            printTimingInfo(start);
+            recordTick(start);
             return dampingTorque(v);
         }
         if (mode_ == ControlMode::Damping) {
             ++safe_mode_ticks_;
             if (++consecutive_ok_ < params_.safe_mode_recovery_ticks) {
-                printTimingInfo(start);
+                recordTick(start);
                 return dampingTorque(v);
             }
             mode_ = ControlMode::Nominal;   // recovered; fall through to tracking
@@ -344,7 +339,7 @@ Eigen::VectorXd ArmNMPC::controlLawImpl(
         out = finalizeJointTorques(J_g, tau_task, Cv_joints);
     }
 
-    printTimingInfo(start);
+    recordTick(start);
     return out;
 }
 
@@ -361,12 +356,12 @@ Eigen::MatrixXd ArmNMPC::computeGeneralizedInertiaInv(
     Eigen::MatrixXd H_g(n_joints_, n_joints_);
     Cv_joints.resize(n_joints_);
     {
-        ScopedTimer t(t_dynamics_us_, n_dynamics_);
+        ScopedTimer t(dynamics);
         getDynamics(H_g, Cv_joints);
     }
     Eigen::MatrixXd H_g_inv;
     {
-        ScopedTimer t(t_dynamics_us_, n_dynamics_);
+        ScopedTimer t(dynamics);
         H_g_inv = pinvDLS(H_g, params_.Hg_damping, params_.ee_site_name + " H_g");
     }
     return H_g_inv;
@@ -400,7 +395,7 @@ Eigen::MatrixXd ArmNMPC::computeLambdaInv(
 {
     Eigen::MatrixXd Lambda_inv;
     {
-        ScopedTimer t(t_lambda_us_, n_lambda_);
+        ScopedTimer t(lambda);
         Lambda_inv = (J * H_g_inv * J.transpose()).eval();
     }
     checkNaN(Lambda_inv.hasNaN(), "Lambda_inv");
@@ -412,7 +407,7 @@ bool ArmNMPC::solveStageQP(
     Eigen::MatrixXd& Q, Eigen::MatrixXd& R,
     Eigen::VectorXd& lbx_j, Eigen::VectorXd& ubx_j,
     Eigen::MatrixXd& D, Eigen::VectorXd& lg, Eigen::VectorXd& ug,
-    Eigen::VectorXd& x_aug, int nOwned, Eigen::MatrixXd& Q_N,
+    Eigen::VectorXd& x_aug, Eigen::MatrixXd& Q_N,
     Eigen::VectorXd& tau_task_out)
 {
     const int nx = static_cast<int>(A.rows());
@@ -421,7 +416,7 @@ bool ArmNMPC::solveStageQP(
     tau_task_out.resize(nu);
     bool ok = false;
     {
-        ScopedTimer t(t_qpsolve_us_, n_qpsolve_);
+        ScopedTimer t(qpsolve);
 
         // Native HPIPM affine offset b stays zero every stage -- the frozen
         // acceleration bias is carried through A's constant channel instead
@@ -441,6 +436,7 @@ bool ArmNMPC::solveStageQP(
             recordSlack();
         }
     }
+    recordQpIters();
     // A non-finite solution is a failed solve, not an exception: it means the
     // same thing to the caller as a nonzero solver status.
     return ok && tau_task_out.allFinite();
@@ -568,6 +564,17 @@ int ArmNMPC::lastQpStatus() const
     return qp_ ? qp_->lastStatus() : 0;
 }
 
+void ArmNMPC::recordQpIters()
+{
+    if (!qp_) return;
+    const int it = qp_->lastQpIters();
+    if (it >= 0) {
+        qp_iters.add(static_cast<double>(it));
+        qp_time_ms.add(qp_->lastQpTimeMs());
+    }
+    if (qp_->lastRetried()) ++qp_retries;
+}
+
 void ArmNMPC::recordSlack()
 {
     const int ns = qp_->nsAt(1);
@@ -596,28 +603,77 @@ void ArmNMPC::recordSlack()
     }
 }
 
-void ArmNMPC::printTimingInfo(
-    const std::chrono::time_point<std::chrono::high_resolution_clock> start,
-    int modulo)
+void ArmNMPC::recordTick(std::chrono::steady_clock::time_point start)
 {
-    auto stop = std::chrono::high_resolution_clock::now();
-    t_total_us_ += std::chrono::duration<double, std::micro>(stop - start).count();
-    ++n_total_;
-    if (modulo > 0 && n_total_ % modulo == 0) {
-        std::cout << "[ArmNMPC profile] avg over " << n_total_ << " calls (us):"
-            << "  dynamics=" << (n_dynamics_ > 0 ? std::to_string(avgOrNan(t_dynamics_us_, n_dynamics_)) : "n/a")
-            << "  jdotqdot=" << (n_jdotqdot_ > 0 ? std::to_string(avgOrNan(t_jdotqdot_us_, n_jdotqdot_)) : "n/a")
-            << "  lambda="   << avgOrNan(t_lambda_us_,  n_lambda_)
-            << "  qpsolve="  << avgOrNan(t_qpsolve_us_, n_qpsolve_)
-            << "  TOTAL="    << avgOrNan(t_total_us_,   n_total_)
-            << "  | peak slack: box=" << max_box_slack_
-            << " torque="             << max_tau_slack_
-            << "\n";
-        // Peaks are per-report, not cumulative: a strain that has passed should
-        // stop being reported.
-        max_box_slack_ = 0.0;
-        max_tau_slack_ = 0.0;
+    const auto stop = std::chrono::steady_clock::now();
+    tick.add(std::chrono::duration<double, std::micro>(stop - start).count());
+}
+
+std::string ArmNMPC::profileReport() const
+{
+    // Phases in execution order, so the report reads as a breakdown rather than a
+    // bag of numbers. Both paths are listed; the inactive one shows count 0.
+    const std::pair<const char*, const PhaseStat*> phases[] = {
+        {"dynamics",   &dynamics},   {"jdotqdot",     &jdotqdot},
+        {"roll_dyn",   &rollout_dynamics}, {"roll_intg", &rollout_integrate},
+        {"pinv",       &pinv},       {"lambda",       &lambda},
+        {"buildmodel", &build_model},{"defect",       &defect},
+        {"qpsolve",    &qpsolve},    {"trust",        &trust_region},
+        {"finalize",   &finalize},
+    };
+
+    std::ostringstream os;
+    os.setf(std::ios::fixed);
+    os.precision(1);
+    os << "profile over " << tick.count << " ticks (us)";
+    if (tick.count > 0) {
+        os << "  TICK mean=" << tick.mean() << " max=" << tick.max_us;
+        if (tick.budget_us > 0.0)
+            os << " over_period=" << tick.over << "/" << tick.count;
+        os << "\n  hist(tick) ";
+        for (int i = 0; i < PhaseStat::kBins; ++i) {
+            if (i + 1 == PhaseStat::kBins) os << ">5000:";
+            else                           os << "<=" << PhaseStat::kEdgeUs[i] << ":";
+            os << tick.bins[i] << " ";
+        }
     }
+    os << "\n  phases ";
+    double attributed = 0.0;
+    for (const auto& [name, p] : phases) {
+        if (p->count == 0) continue;
+        attributed += p->sum_us;
+        os << name << "(n=" << p->count << " mean=" << p->mean()
+           << " max=" << p->max_us << ") ";
+    }
+    // The gap is the honest measure of how much of the tick is still unexplained.
+    if (tick.count > 0) {
+        os << "\n  unattributed=" << (tick.sum_us - attributed) / tick.count
+           << " us/tick";
+    }
+    if (qp_iters.count > 0) {
+        // Summed over the tick's solves, so a retry can push this past the cap --
+        // which is the signature worth seeing: the warm solve burned the whole cap
+        // and the cold retry converged in the remainder.
+        os << "\n  qp_iter/tick mean=" << qp_iters.mean() << " max=" << qp_iters.max
+           << " (cap " << params_.qp_max_iter << "/solve)"
+           << "  hpipm_us mean=" << qp_time_ms.mean() * 1e3
+           << " max=" << qp_time_ms.max * 1e3
+           << "  retries=" << qp_retries;
+    }
+    os << "  | peak slack: box=" << max_box_slack_ << " torque=" << max_tau_slack_;
+    return os.str();
+}
+
+void ArmNMPC::resetProfile()
+{
+    tick.reset();       dynamics.reset();          jdotqdot.reset();
+    lambda.reset();     qpsolve.reset();           rollout_dynamics.reset();
+    rollout_integrate.reset();                     pinv.reset();
+    build_model.reset(); defect.reset();           trust_region.reset();
+    finalize.reset();   qp_iters.reset();          qp_time_ms.reset();
+    qp_retries = 0;
+    max_box_slack_ = 0.0;
+    max_tau_slack_ = 0.0;
 }
 
 // === Full-nonlinear (multiple-shooting SQP) path ================================
@@ -682,7 +738,6 @@ Eigen::VectorXd ArmNMPC::solveNonlinearMPC(
     const int N   = params_.N;
     const int n_j = n_joints_;
     const double Ts = params_.Ts;
-    const int nOwned = static_cast<int>(ownedJointInds.size());
     const int nt  = 2 * d + 1;
     const int nx  = nt + 2 * n_j;
 
@@ -713,7 +768,7 @@ Eigen::VectorXd ArmNMPC::solveNonlinearMPC(
             // live computation exactly, so no special-casing is needed here.
             NodeDynamics nd;
             {
-                ScopedTimer t(t_rollout_dynamics_us_, n_rollout_dynamics_);
+                ScopedTimer t(rollout_dynamics);
                 nd = dynamicsAt(q_k, v_k, ee_site_id_);
             }
             NodeTaskSpace ts = evalTaskSpace(q_k, v_k, nd.ee_pos, nd.ee_quat, nd.J_g6, nd.jdot_qdot6);
@@ -732,14 +787,24 @@ Eigen::VectorXd ArmNMPC::solveNonlinearMPC(
             }
 
             if (k < N) {
-                Eigen::MatrixXd H_g_inv = pinvDLS(
-                    nd.H_g, params_.Hg_damping,
-                    params_.ee_site_name + " H_g (nonlinear rollout node " + std::to_string(k) + ")");
+                // A full 6x6 SVD per rollout node, so ~N per tick -- previously
+                // untimed, and a prime suspect for the tick cost.
+                Eigen::MatrixXd H_g_inv;
+                {
+                    ScopedTimer t_pinv(pinv);
+                    H_g_inv = pinvDLS(
+                        nd.H_g, params_.Hg_damping,
+                        params_.ee_site_name + " H_g (nonlinear rollout node " +
+                            std::to_string(k) + ")");
+                }
                 Eigen::MatrixXd Lambda_inv = computeLambdaInv(ts.J_task, H_g_inv);
                 Eigen::MatrixXd H_g_inv_Jt = H_g_inv * ts.J_task.transpose();
 
                 Eigen::MatrixXd A_node, B_node;
-                buildAugmentedModel(Lambda_inv, ts.bias, H_g_inv_Jt, A_node, B_node);
+                {
+                    ScopedTimer t_bm(build_model);
+                    buildAugmentedModel(Lambda_inv, ts.bias, H_g_inv_Jt, A_node, B_node);
+                }
                 A_k[k] = A_node;
                 B_k[k] = B_node;
 
@@ -770,7 +835,7 @@ Eigen::VectorXd ArmNMPC::solveNonlinearMPC(
                 }
                 Eigen::VectorXd q_next, v_next;
                 {
-                    ScopedTimer t(t_rollout_integrate_us_, n_rollout_integrate_);
+                    ScopedTimer t(rollout_integrate);
                     integrateStep(q_k, v_k, tau_joints_k, Ts, q_next, v_next);
                 }
 
@@ -818,19 +883,23 @@ Eigen::VectorXd ArmNMPC::solveNonlinearMPC(
 
         // Direct-multiple-shooting linearization defect at every node:
         // b_k = x_{k+1}_bar - A_k*x_k_bar - B_k*u_bar_[k].
-        for (int k = 0; k < N; ++k) {
-            b_k[k] = x_aug_nodes[k + 1] - A_k[k] * x_aug_nodes[k] - B_k[k] * u_bar_[k];
+        {
+            ScopedTimer t_def(defect);
+            for (int k = 0; k < N; ++k) {
+                b_k[k] = x_aug_nodes[k + 1] - A_k[k] * x_aug_nodes[k] - B_k[k] * u_bar_[k];
+            }
         }
 
         bool ok;
         {
-            ScopedTimer t(t_qpsolve_us_, n_qpsolve_);
+            ScopedTimer t(qpsolve);
             ok = qp_->solveMultiStage(
                 A_k, B_k, b_k, Q.data(), R.data(),
                 lbx_j.data(), ubx_j.data(),
                 D_k, lg_k, ug_k, x_aug_nodes[0].data(),
                 Q_N.data());
         }
+        recordQpIters();
         // A solver that reports success but returns non-finite controls is a
         // failed solve: letting it into u_bar_ poisons every later rollout.
         if (ok) {
@@ -856,12 +925,15 @@ Eigen::VectorXd ArmNMPC::solveNonlinearMPC(
             // moment either the configuration or the torque limits change.
             recordSlack();
 
-            const Eigen::VectorXd du_max =
-                params_.du_max_frac * reachableWrenchBound(J_task0);
-            for (int k = 0; k < N; ++k) {
-                Eigen::VectorXd uk(d);
-                qp_->getU(k, uk.data());
-                u_bar_[k] = u_bar_[k] + (uk - u_bar_[k]).cwiseMax(-du_max).cwiseMin(du_max);
+            {
+                ScopedTimer t_tr(trust_region);
+                const Eigen::VectorXd du_max =
+                    params_.du_max_frac * reachableWrenchBound(J_task0);
+                for (int k = 0; k < N; ++k) {
+                    Eigen::VectorXd uk(d);
+                    qp_->getU(k, uk.data());
+                    u_bar_[k] = u_bar_[k] + (uk - u_bar_[k]).cwiseMax(-du_max).cwiseMin(du_max);
+                }
             }
             tau_task_result = u_bar_[0];
         } else {
@@ -905,6 +977,7 @@ Eigen::VectorXd ArmNMPC::solveNonlinearMPC(
         mode_ = ControlMode::Nominal;
     }
 
+    ScopedTimer t_fin(finalize);
     return finalizeJointTorques(J_task0, tau_task_result, Cv_joints0);
 }
 

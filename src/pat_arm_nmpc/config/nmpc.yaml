@@ -113,7 +113,10 @@
 /**: # <--- wildcard: all nodes (that load this file) share these parameters 
   ros__parameters:
     mjcf_path: ""
-    control_hz: 200.0
+    # Matched to pat_simulation's pub_rate_hz (100): solving faster than the state
+    # arrives re-solves on an estimate already used. Doubling the period to 10 ms
+    # takes over-deadline ticks from 4.12% to 0.06% at no cost in tracking.
+    control_hz: 100.0
     model_joint_names: [joint2_L, joint3_L, joint5_L, joint2_R, joint3_R, joint5_R]
 
     # [N*m] per model joint, parallel to model_joint_names. THE single place arm
@@ -166,7 +169,11 @@
       max_iter: 100
       tol: 1.0e-5
       reg_prim: 1.0e-6
-      warm_start: 2                    # 0 cold, 1 primal, 2 primal+dual
+      # 0 cold, 1 primal, 2 primal+dual. Primal-only: carrying the DUAL iterate
+      # across a setpoint step makes it a bad guess, and HPIPM then runs to
+      # max_iter (~0.9 ms/iteration) before the cold-start retry rescues it -- a
+      # 141 ms worst-case tick, vs 34 ms here. See the README's warm-start table.
+      warm_start: 1
       joint_slack_linear: 1.0e3
       joint_slack_quadratic: 1.0e4
       torque_slack_linear: 1.0e2

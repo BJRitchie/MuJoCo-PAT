@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <chrono>
 #include <cstddef>
 #include <memory>
 #include <mutex>
@@ -89,5 +90,48 @@ private:
     rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr torque_pub_;
     rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr ee_pose_pub_;  // measured EE pose (world)
     rclcpp::TimerBase::SharedPtr ctrl_tmr_;
+
+    // --- Loop-level timing -------------------------------------------------
+    // Measured on steady_clock, never the ROS clock: launch files default
+    // use_sim_time:=true and nothing publishes /clock, so get_clock()->now() is
+    // frozen at zero and unusable for any elapsed-time measurement.
+    //
+    // The controller times its own internal phases; these are the numbers only
+    // the node can see -- when the tick actually woke relative to when it should
+    // have, how long the whole callback took, and whether it fit the period.
+    double period_us_{0.0};
+    std::chrono::steady_clock::time_point last_wake_{};
+    bool   have_last_wake_{false};
+    //! Jitter as the error in the interval between consecutive wakes, |dt -
+    //! period|, not as the offset from an ideal schedule laid down at startup:
+    //! rclcpp's wall timer re-anchors when it fires late, so a schedule offset
+    //! acquired during the slow first ticks would persist for the whole run and
+    //! be reported forever as jitter it is not. The interval is also what the
+    //! control law actually experiences, and what cyclictest measures.
+    pat_arm_nmpc::PhaseStat jitter_;
+    pat_arm_nmpc::PhaseStat loop_;        //!< whole controlLoop callback, wall us
+    //! The same callback in thread CPU time. Paired with loop_ this separates the
+    //! two causes of a long tick that wall time alone conflates: cpu ~= wall means
+    //! the work really took that long, cpu << wall means the thread was off the
+    //! CPU. Which one dominates decides whether the fix is a faster solver or a
+    //! realtime scheduling policy.
+    pat_arm_nmpc::PhaseStat cpu_;
+    static double threadCpuUs();
+    long   deadline_misses_{0};
+    long   consecutive_misses_{0};
+    long   worst_consecutive_misses_{0};
+    //! Periods lost to wakes that never happened: an interval of n periods means
+    //! the controller ran open-loop for n-1 of them.
+    long   skipped_periods_{0};
+
+    //! Record the interval since the previous wake. Called first in controlLoop,
+    //! so the startup ticks that return early still count.
+    void recordWake(std::chrono::steady_clock::time_point wake);
+
+    //! Low-rate timer that logs the timing report. Deliberately a separate
+    //! callback: the control tick must not do formatted I/O.
+    rclcpp::TimerBase::SharedPtr diag_tmr_;
+    void reportDiagnostics();
+
     std::mutex mu_;
 };
