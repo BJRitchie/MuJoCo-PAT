@@ -215,12 +215,25 @@ protected:
     // base class), and the model-fidelity tests drive them directly through a
     // subclass rather than inferring A/B from closed-loop behaviour.
 
-    /*! Runs getDynamics() and DLS-inverts H_g (timed under t_dynamics_us_). */
-    Eigen::MatrixXd computeGeneralizedInertiaInv(Eigen::VectorXd& Cv_joints);
+    /*! The only two things the prediction model needs H_g^-1 for:
+     *    H_g_inv_Jt = H_g^-1 J^T      (n_joints x d)
+     *    Lambda_inv = J H_g_inv_Jt    (d x d)
+     *  Both come from ONE Cholesky of H_g and a solve against J^T -- H_g is the
+     *  Schur complement of the base block in a positive-definite mass matrix, so
+     *  it is positive definite (NmpcDynamics asserts it) and no pseudo-inverse is
+     *  called for. If the factorisation is rejected the model is degenerate, and
+     *  this falls back to the damped SVD inverse and counts it under
+     *  spdFallbacks(). NaN-checked.
+     *
+     *  Note Lambda_inv is J H_g^-1 J^T, which IS singular at a kinematic
+     *  singularity -- that is a property of J, not of H_g, and is not what the
+     *  Cholesky here can or should guard. */
+    void computeInertiaProducts(const Eigen::MatrixXd& H_g, const Eigen::MatrixXd& J,
+                                Eigen::MatrixXd& H_g_inv_Jt,
+                                Eigen::MatrixXd& Lambda_inv);
 
-    /*! Lambda_inv = J*H_g_inv*J^T (timed under t_lambda_us_), NaN-checked. */
-    Eigen::MatrixXd computeLambdaInv(const Eigen::MatrixXd& J,
-                                      const Eigen::MatrixXd& H_g_inv);
+    /*! getDynamics() into H_g/Cv_joints, timed under `dynamics`. */
+    void computeGeneralizedInertia(Eigen::MatrixXd& H_g, Eigen::VectorXd& Cv_joints);
 
     /*! Builds the full augmented (task + Δq/qdot) A/B prediction matrices,
      *  sized off J_task's/Lambda_inv's dimension d (task dim == nu).
@@ -397,7 +410,7 @@ protected:
     PhaseStat qpsolve;            //!< solve() / solveMultiStage()
     PhaseStat rollout_dynamics;   //!< SQP path: dynamicsAt per node
     PhaseStat rollout_integrate;  //!< SQP path: integrateStep per node
-    PhaseStat pinv;               //!< pinvDLS (the per-node SVD)
+    PhaseStat pinv;               //!< the per-node H_g Cholesky + solve for H_g^-1 J^T
     PhaseStat build_model;        //!< buildAugmentedModel per node
     PhaseStat defect;             //!< the b_k defect loop
     PhaseStat trust_region;       //!< du_max clamp loop + reachableWrenchBound
@@ -413,6 +426,11 @@ protected:
     Tally qp_time_ms;
     long  qp_retries = 0;         //!< solves that needed the cold-start retry
     void  recordQpIters();
+
+    //! Times the H_g Cholesky was rejected and the damped SVD stood in. Expected
+    //! to stay 0: a non-zero count means the model's inertia is degenerate, not
+    //! that the arm reached an awkward pose.
+    long  spd_fallbacks_ = 0;
 
     // Worst soft-constraint slack since the last profile report -- box (joint
     // position/velocity) and general (torque) rows kept apart, since they carry

@@ -150,21 +150,44 @@ Eigen::Vector4d ArmTaskSpaceController::eeOrientation(int site_id, mjData* data)
     return Eigen::Vector4d(quat[0], quat[1], quat[2], quat[3]);
 }
 
-void ArmTaskSpaceController::getDynamics(
-    Eigen::MatrixXd& H_g, Eigen::VectorXd& Cv_joints, mjData* data) const
+void ArmTaskSpaceController::computeBaseElim(mjData* data, BaseElim& be) const
 {
     mjData* d = data ? data : mj_->data;
     const int nv = mj_->model->nv;
-    Eigen::MatrixXd M(nv, nv);
-    mj_fullM(mj_->model, M.data(), d->qM);
 
-    Eigen::MatrixXd H_bb = M.topLeftCorner(6, 6);
-    Eigen::MatrixXd H_bm = M.topRightCorner(6, n_joints_);
-    Eigen::MatrixXd H_mm = M.bottomRightCorner(n_joints_, n_joints_);
+    be.M.resize(nv, nv);
+    mj_fullM(mj_->model, be.M.data(), d->qM);       // already dense + symmetric
+    be.H_bm = be.M.topRightCorner(6, n_joints_);
+    be.H_bb_ldlt.compute(be.M.topLeftCorner(6, 6));
+}
+
+void ArmTaskSpaceController::computeSiteJacobian(
+    int site_id, mjData* data, BaseElim& be) const
+{
+    mjData* d = data ? data : mj_->data;
+    const int nv = mj_->model->nv;
+    be.jacp.resize(3, nv);
+    be.jacr.resize(3, nv);
+    mj_jacSite(mj_->model, d, be.jacp.data(), be.jacr.data(), site_id);
+}
+
+void ArmTaskSpaceController::getDynamics(
+    Eigen::MatrixXd& H_g, Eigen::VectorXd& Cv_joints, mjData* data) const
+{
+    BaseElim be;
+    computeBaseElim(data, be);
+    getDynamics(H_g, Cv_joints, data, be);
+}
+
+void ArmTaskSpaceController::getDynamics(
+    Eigen::MatrixXd& H_g, Eigen::VectorXd& Cv_joints, mjData* data,
+    const BaseElim& be) const
+{
+    mjData* d = data ? data : mj_->data;
 
     // Generalised inertia:  H_g = H_mm − H_bm^T H_bb^{−1} H_bm
-    const auto H_bb_ldlt = H_bb.ldlt();
-    H_g = H_mm - H_bm.transpose() * H_bb_ldlt.solve(H_bm);
+    H_g = be.M.bottomRightCorner(n_joints_, n_joints_)
+          - be.H_bm.transpose() * be.H_bb_ldlt.solve(be.H_bm);
 
     // Generalised bias, same base elimination as H_g (unactuated base):
     //   Cv_g = c_m − H_bm^T H_bb^{−1} c_b
@@ -178,7 +201,7 @@ void ArmTaskSpaceController::getDynamics(
     for (int i = 0; i < n_joints_; ++i) {
         Cv_joints[i] = d->qfrc_bias[6 + i];
     }
-    Cv_joints -= H_bm.transpose() * H_bb_ldlt.solve(c_b);
+    Cv_joints -= be.H_bm.transpose() * be.H_bb_ldlt.solve(c_b);
 }
 
 Eigen::Matrix3Xd ArmTaskSpaceController::gjm(int site_id, mjData* data) const
@@ -204,28 +227,24 @@ Eigen::Matrix3Xd ArmTaskSpaceController::gjm(int site_id, mjData* data) const
 
 Eigen::MatrixXd ArmTaskSpaceController::gjm6(int site_id, mjData* data) const
 {
-    mjData* d = data ? data : mj_->data;
-    const int nv = mj_->model->nv;
-    // Same row-major layout requirement as gjm() above.
-    Eigen::Matrix<double, 3, Eigen::Dynamic, Eigen::RowMajor> jacp(3, nv);
-    Eigen::Matrix<double, 3, Eigen::Dynamic, Eigen::RowMajor> jacr(3, nv);
-    mj_jacSite(mj_->model, d, jacp.data(), jacr.data(), site_id);
+    BaseElim be;
+    computeBaseElim(data, be);
+    computeSiteJacobian(site_id, data, be);
+    return gjm6(be);
+}
 
-    Eigen::MatrixXd J_full(6, nv);
-    J_full.topRows(3)    = jacp;
-    J_full.bottomRows(3) = jacr;
-
-    Eigen::MatrixXd J_b = J_full.leftCols(6);
-    Eigen::MatrixXd J_m = J_full.rightCols(n_joints_);
-
-    Eigen::MatrixXd M(nv, nv);
-    mj_fullM(mj_->model, M.data(), d->qM);
+Eigen::MatrixXd ArmTaskSpaceController::gjm6(const BaseElim& be) const
+{
+    Eigen::MatrixXd J_full(6, mj_->model->nv);
+    J_full.topRows(3)    = be.jacp;
+    J_full.bottomRows(3) = be.jacr;
 
     // Same base-coupling correction as gjm(), applied to both the
     // translational and rotational rows at once — the correction
     // J_b H_bb^-1 H_bm is linear per-row, so stacking jacp/jacr first and
     // correcting once is equivalent to correcting each block separately.
-    return J_m - J_b * M.topLeftCorner(6, 6).ldlt().solve(M.topRightCorner(6, n_joints_));
+    return J_full.rightCols(n_joints_)
+           - J_full.leftCols(6) * be.H_bb_ldlt.solve(be.H_bm);
 }
 
 Eigen::Vector3d ArmTaskSpaceController::jdotQdot(int site_id, mjData* data) const
@@ -262,6 +281,15 @@ Eigen::Vector3d ArmTaskSpaceController::jdotQdot(int site_id, mjData* data) cons
 
 Eigen::Matrix<double, 6, 1> ArmTaskSpaceController::jdotQdot6(int site_id, mjData* data) const
 {
+    BaseElim be;
+    computeBaseElim(data, be);
+    computeSiteJacobian(site_id, data, be);
+    return jdotQdot6(site_id, data, be);
+}
+
+Eigen::Matrix<double, 6, 1> ArmTaskSpaceController::jdotQdot6(
+    int site_id, mjData* data, const BaseElim& be) const
+{
     mjData* d = data ? data : mj_->data;
     const int nv = mj_->model->nv;
     Eigen::Matrix<double, 3, Eigen::Dynamic, Eigen::RowMajor> jacp_dot(3, nv);
@@ -272,25 +300,17 @@ Eigen::Matrix<double, 6, 1> ArmTaskSpaceController::jdotQdot6(int site_id, mjDat
     Eigen::VectorXd qvel(nv);
     for (int i = 0; i < nv; ++i) qvel[i] = d->qvel[i];
 
-    Eigen::Vector3d bias_lin = jacp_dot * qvel;
-    Eigen::Vector3d bias_ang = jacr_dot * qvel;
-
-    Eigen::Matrix<double, 3, Eigen::Dynamic, Eigen::RowMajor> jacp(3, nv), jacr(3, nv);
-    mj_jacSite(mj_->model, d, jacp.data(), jacr.data(), site_id);
     Eigen::MatrixXd J_0(6, 6);
-    J_0.topRows(3)    = jacp.leftCols(6);
-    J_0.bottomRows(3) = jacr.leftCols(6);
-
-    Eigen::MatrixXd M(nv, nv);
-    mj_fullM(mj_->model, M.data(), d->qM);
+    J_0.topRows(3)    = be.jacp.leftCols(6);
+    J_0.bottomRows(3) = be.jacr.leftCols(6);
 
     Eigen::VectorXd Cv_base(6);
     for (int i = 0; i < 6; ++i) Cv_base[i] = d->qfrc_bias[i];
 
     Eigen::Matrix<double, 6, 1> bias;
-    bias << bias_lin, bias_ang;
+    bias << jacp_dot * qvel, jacr_dot * qvel;
 
-    return bias - J_0 * M.topLeftCorner(6, 6).ldlt().solve(Cv_base);
+    return bias - J_0 * be.H_bb_ldlt.solve(Cv_base);
 }
 
 NodeDynamics ArmTaskSpaceController::dynamicsAt(
@@ -306,12 +326,18 @@ NodeDynamics ArmTaskSpaceController::dynamicsAt(
     for (int i = 0; i < mj_->model->nv; ++i) d->qvel[i] = v[i];
     mj_forward(mj_->model, d);
 
+    // One mass matrix, one base factorisation and one site Jacobian for all three
+    // reductions. be_scratch_ is a member so the rollout's ~N calls per tick reuse
+    // its buffers instead of reallocating them at every node.
+    computeBaseElim(d, be_scratch_);
+    computeSiteJacobian(site_id, d, be_scratch_);
+
     NodeDynamics nd;
     nd.ee_pos  = eePosition(site_id, d);
     nd.ee_quat = eeOrientation(site_id, d);
-    getDynamics(nd.H_g, nd.Cv_joints, d);
-    nd.J_g6       = gjm6(site_id, d);
-    nd.jdot_qdot6 = jdotQdot6(site_id, d);
+    getDynamics(nd.H_g, nd.Cv_joints, d, be_scratch_);
+    nd.J_g6       = gjm6(be_scratch_);
+    nd.jdot_qdot6 = jdotQdot6(site_id, d, be_scratch_);
     return nd;
 }
 
@@ -366,8 +392,28 @@ Eigen::Vector3d ArmTaskSpaceController::sat(const Eigen::Vector3d& x)
     return x.cwiseMax(-1.0).cwiseMin(1.0);
 }
 
+bool ArmTaskSpaceController::solveSpd(
+    const Eigen::MatrixXd& A, const Eigen::MatrixXd& B, Eigen::MatrixXd& X)
+{
+    // Via LLT, not LDLT. 
+    // Both are Cholesky factorisations -- they rewrite a symmetric A as a product
+    // of triangular factors, after which solving A X = B is two triangular
+    // substitutions instead of an inverse:
+    //   LLT  gives A = L L^T, and exists ONLY if A is positive definite, so the
+    //        factorisation failing is itself the positive-definiteness test.
+    //   LDLT gives A = L D L^T with a diagonal D, which also covers semidefinite
+    //        and indefinite A -- it succeeds on matrices LLT rejects.
+    // LDLT is the more forgiving of the two, which is exactly why it is wrong
+    // here: it would factorise a degenerate inertia without complaint and hide
+    // the condition the caller is asking about.
+    const Eigen::LLT<Eigen::MatrixXd> llt(A);
+    if (llt.info() != Eigen::Success) return false;
+    X = llt.solve(B);
+    return true;
+}
+
 Eigen::MatrixXd ArmTaskSpaceController::pinvDLS(
-    const Eigen::MatrixXd& A, double damping, const std::string& name)
+    const Eigen::MatrixXd& A, double damping)
 {
     // Thin, not Full: for a non-square A (m x n) the thin factors are
     // U: m x k, V: n x k, sigma: k  with k = min(m,n), so
@@ -377,19 +423,10 @@ Eigen::MatrixXd ArmTaskSpaceController::pinvDLS(
     // (which is how it slipped through the Basilisk build).
     Eigen::JacobiSVD<Eigen::MatrixXd> svd(A, Eigen::ComputeThinU | Eigen::ComputeThinV);
 
-    double max_sv = svd.singularValues()(0);
-    double min_sv = svd.singularValues()(svd.singularValues().size() - 1);
-
     // Damped least-squares (Tikhonov-regularized) pseudoinverse:
     // s / (s^2 + lambda^2) instead of 1/s — bounded even as s -> 0.
     Eigen::VectorXd sv_inv = svd.singularValues().unaryExpr(
         [damping](double s) { return s / (s*s + damping*damping); });
-
-    double cond = max_sv / std::max(min_sv, 1e-12);
-    if (cond > 1e4 && !name.empty()) {
-        std::cout << "[WARN] " << name << " ill-conditioned, cond=" << cond
-                   << ", sv=" << svd.singularValues().transpose() << "\n";
-    }
 
     return svd.matrixV() * sv_inv.asDiagonal() * svd.matrixU().transpose();
 }

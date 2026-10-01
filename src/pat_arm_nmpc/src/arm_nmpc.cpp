@@ -289,8 +289,10 @@ Eigen::VectorXd ArmNMPC::controlLawImpl(
         edot << v_d - v_ee.head<2>(), w_d - v_ee(2);
 
         Eigen::VectorXd Cv_joints;
-        Eigen::MatrixXd H_g_inv = computeGeneralizedInertiaInv(Cv_joints);
-        Eigen::MatrixXd Lambda_inv = computeLambdaInv(J_g, H_g_inv);
+        Eigen::MatrixXd H_g;
+        computeGeneralizedInertia(H_g, Cv_joints);
+        Eigen::MatrixXd H_g_inv_Jt, Lambda_inv;
+        computeInertiaProducts(H_g, J_g, H_g_inv_Jt, Lambda_inv);
 
         Eigen::Matrix<double, 6, 1> jdot_qdot6;
         {
@@ -301,7 +303,7 @@ Eigen::VectorXd ArmNMPC::controlLawImpl(
         bias << a_d - jdot_qdot6.head<2>(), aw_d - jdot_qdot6(5);
 
         Eigen::MatrixXd A, B;
-        buildAugmentedModel(Lambda_inv, bias, H_g_inv * J_g.transpose(), A, B);
+        buildAugmentedModel(Lambda_inv, bias, H_g_inv_Jt, A, B);
 
         Eigen::VectorXd q0 = q.tail(n_j);   // current measured joint angles
 
@@ -350,21 +352,45 @@ Eigen::VectorXd ArmNMPC::controlLawImpl(
 // each step trivial to share. See armConstrainedNMPController.h for the doc
 // comment on each.
 
-Eigen::MatrixXd ArmNMPC::computeGeneralizedInertiaInv(
-    Eigen::VectorXd& Cv_joints)
+void ArmNMPC::computeGeneralizedInertia(
+    Eigen::MatrixXd& H_g, Eigen::VectorXd& Cv_joints)
 {
-    Eigen::MatrixXd H_g(n_joints_, n_joints_);
+    H_g.resize(n_joints_, n_joints_);
     Cv_joints.resize(n_joints_);
+    ScopedTimer t(dynamics);
+    getDynamics(H_g, Cv_joints);
+}
+
+void ArmNMPC::computeInertiaProducts(
+    const Eigen::MatrixXd& H_g, const Eigen::MatrixXd& J,
+    Eigen::MatrixXd& H_g_inv_Jt, Eigen::MatrixXd& Lambda_inv)
+{
     {
-        ScopedTimer t(dynamics);
-        getDynamics(H_g, Cv_joints);
+        ScopedTimer t(pinv);
+        // The damped-least-squares inverse of an SPD H_g, exactly, without an SVD.
+        // For H_g = Q S Q^T the DLS inverse is Q diag(s/(s^2+d^2)) Q^T, which is
+        // identically (H_g^2 + d^2 I)^-1 H_g, so the product actually wanted is
+        //   X = (H_g^2 + d^2 I)^-1 (H_g J^T)
+        // -- one Cholesky and a d-column solve in place of a 6x6 SVD.
+        //
+        // The damping is kept rather than dropped even though H_g is positive
+        // definite and a plain solve would be well posed: it also regularises the
+        // model the QP sees, and removing it costs 83% on the worst tick (worst
+        // solve 14 -> 24 iterations on the warm-start scenario) for no gain in
+        // tracking.
+        const double lambda_sq = params_.Hg_damping * params_.Hg_damping;
+        Eigen::MatrixXd G = H_g * H_g;
+        G.diagonal().array() += lambda_sq;
+        if (!solveSpd(G, H_g * J.transpose(), H_g_inv_Jt)) {
+            ++spd_fallbacks_;
+            H_g_inv_Jt = pinvDLS(H_g, params_.Hg_damping) * J.transpose();
+        }
     }
-    Eigen::MatrixXd H_g_inv;
     {
-        ScopedTimer t(dynamics);
-        H_g_inv = pinvDLS(H_g, params_.Hg_damping, params_.ee_site_name + " H_g");
+        ScopedTimer t(lambda);
+        Lambda_inv.noalias() = J * H_g_inv_Jt;
     }
-    return H_g_inv;
+    checkNaN(Lambda_inv.hasNaN(), "Lambda_inv");
 }
 
 Eigen::VectorXd ArmNMPC::reachableWrenchBound(const Eigen::MatrixXd& J_task) const
@@ -388,18 +414,6 @@ Eigen::VectorXd ArmNMPC::reachableWrenchBound(const Eigen::MatrixXd& J_task) con
         bound(j) = std::min(lim, kMaxBound);
     }
     return bound;
-}
-
-Eigen::MatrixXd ArmNMPC::computeLambdaInv(
-    const Eigen::MatrixXd& J, const Eigen::MatrixXd& H_g_inv)
-{
-    Eigen::MatrixXd Lambda_inv;
-    {
-        ScopedTimer t(lambda);
-        Lambda_inv = (J * H_g_inv * J.transpose()).eval();
-    }
-    checkNaN(Lambda_inv.hasNaN(), "Lambda_inv");
-    return Lambda_inv;
 }
 
 bool ArmNMPC::solveStageQP(
@@ -660,6 +674,9 @@ std::string ArmNMPC::profileReport() const
            << " max=" << qp_time_ms.max * 1e3
            << "  retries=" << qp_retries;
     }
+    // Only printed when non-zero: it should never happen, so a permanent "=0"
+    // column would just be noise on every report.
+    if (spd_fallbacks_ > 0) os << "  H_g NOT PD on " << spd_fallbacks_ << " solves";
     os << "  | peak slack: box=" << max_box_slack_ << " torque=" << max_tau_slack_;
     return os.str();
 }
@@ -671,7 +688,8 @@ void ArmNMPC::resetProfile()
     rollout_integrate.reset();                     pinv.reset();
     build_model.reset(); defect.reset();           trust_region.reset();
     finalize.reset();   qp_iters.reset();          qp_time_ms.reset();
-    qp_retries = 0;
+    qp_retries     = 0;
+    spd_fallbacks_ = 0;
     max_box_slack_ = 0.0;
     max_tau_slack_ = 0.0;
 }
@@ -787,18 +805,8 @@ Eigen::VectorXd ArmNMPC::solveNonlinearMPC(
             }
 
             if (k < N) {
-                // A full 6x6 SVD per rollout node, so ~N per tick -- previously
-                // untimed, and a prime suspect for the tick cost.
-                Eigen::MatrixXd H_g_inv;
-                {
-                    ScopedTimer t_pinv(pinv);
-                    H_g_inv = pinvDLS(
-                        nd.H_g, params_.Hg_damping,
-                        params_.ee_site_name + " H_g (nonlinear rollout node " +
-                            std::to_string(k) + ")");
-                }
-                Eigen::MatrixXd Lambda_inv = computeLambdaInv(ts.J_task, H_g_inv);
-                Eigen::MatrixXd H_g_inv_Jt = H_g_inv * ts.J_task.transpose();
+                Eigen::MatrixXd H_g_inv_Jt, Lambda_inv;
+                computeInertiaProducts(nd.H_g, ts.J_task, H_g_inv_Jt, Lambda_inv);
 
                 Eigen::MatrixXd A_node, B_node;
                 {

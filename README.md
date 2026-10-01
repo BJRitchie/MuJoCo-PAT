@@ -445,32 +445,43 @@ with_targets:=true` at `N: 40`, both arms. The current defaults are the last row
 | 1 primal only | 200 | 3.1 ms | 34 ms | 10 ms | 4.12% | 53 | 0 | 51 | 10 |
 | **1 primal only** | **100** | 3.2 ms | **23 ms** | **10 ms** | **0.06%** | 48 | 0 | **1** | **5** |
 
-No run entered safe mode and tracking error is identical across all four, so both
-settings are free on control quality. `WarmStart.*` and
-`DISABLED_WarmStartStudy.Ladder` reproduce the comparison on a deterministic
-closed loop.
+Tracking error is identical across all four, so both settings are free on control
+quality. `WarmStart.*` and `DISABLED_WarmStartStudy.Ladder` reproduce the
+comparison on a deterministic closed loop.
 
-- **Carrying the dual iterate across a setpoint step was the worst case.** It
-  makes the warm start a bad guess, HPIPM runs to `qp_max_iter` at ~0.9 ms per
+- **Carrying the dual iterate across a setpoint step is the common worst case.**
+  It makes the warm start a bad guess, HPIPM runs to `qp_max_iter` at ~0.9 ms per
   iteration, and the cold-start retry then solves the same QP again — 141 ms
-  against a 5 ms period, 1–2x per setpoint change. Primal-only warm starting
-  removes it; solve time is linear in iterations, so an iteration cap is a real
-  worst-case bound once the solver stops reaching it.
+  against a 5 ms period, 1–2x per setpoint change. Primal-only warm starting makes
+  that **rare rather than routine**: 223 retries per 290 s becomes 0–1.
+- **It does not make it impossible, and the tail reaches total solver failure.**
+  The `qp_iter` maxima above (48, 53) are single samples; further runs of the same
+  waypoint loop at the default settings have reached 85, and one reached **200 —
+  both the warm solve and its cold retry burning the whole 100-iteration cap**,
+  for a 93 ms tick, HPIPM status 2 (minimum step), and the only safe-mode entry
+  observed in any run (11 ticks damped, then clean recovery). Roughly one event
+  per 500 report windows, so a single run can easily miss it. Consequences:
+  `qp_max_iter` cannot be tightened into a worst-case bound while the solver still
+  reaches it; the cold retry is not a reliable rescue; and the joint-damping safe
+  mode is load-bearing, not decoration. Bounding this properly is the RTI
+  preparation/feedback split plus a tiered miss policy, not a warm-start mode.
 - **It is compute, not scheduling.** Thread CPU time tracks wall time to within
   0.1% even through the spikes, and HPIPM's own reported time accounts for all but
   ~60 us of the solve. A realtime kernel cannot help here; a bounded solver can.
 - **Nominal is comfortable; the tail is not.** 2 iterations and ~0.85 ms of QP in
   a 3.2 ms tick, 20–40 us of period jitter. The remaining 23 ms outlier is the
   only thing between this and a 10 ms deadline guarantee.
-- **The control loop allocates 3031 times per tick** — ~3e5/s per arm, two arms.
+- **The control loop allocates 1850 times per tick** — ~1.9e5/s per arm, two arms.
   Invisible on a general-purpose kernel; an unbounded latency violation under
   `PREEMPT_RT`. The fix is a preallocated workspace with `Eigen::Map` views over
   it. `RealtimeProfile.ControlTickAllocationCountIsBounded` measures it and holds
   the line.
-- **~1 ms of every nominal tick is redundant work.** Per rollout node,
-  `dynamicsAt` computes the same mass matrix into three separate 12x12 copies and
-  factorises the same 6x6 block three times, and `pinvDLS` builds a fresh 6x6
-  `JacobiSVD` to invert a symmetric positive-definite matrix. 41 nodes a tick.
+- **The QP solve is now the tick.** ~0.5 ms of a ~0.9 ms harness tick, and it is
+  untouched by anything above: `qp_iter` and the applied torque are bit-identical
+  across every change so far. Reducing it needs either a cheaper solve
+  (`HPIPM_TARGET` is `GENERIC` while BLASFEO is target-tuned, and nothing sets
+  `-march`/`-mtune`, so Eigen and the workspace compile for baseline x86-64
+  without AVX/FMA) or fewer stages.
 - **`std::cerr` on the QP-failure path**, which fires every tick precisely when
   the solver is already struggling. Not realtime-safe.
 - **No realtime scheduling anywhere.** Default `rclcpp` executor, default-priority

@@ -209,6 +209,28 @@ protected:
      *  (MuJoCo convention), read from site_xmat. */
     Eigen::Vector4d  eeOrientation(int site_id, mjData* data = nullptr) const;
 
+    /*! The work that getDynamics(), gjm6() and jdotQdot6() all need and all used
+     *  to redo: the mass matrix, the factorisation of its base block, and the site
+     *  Jacobian. Every one of those three reductions is of the form
+     *  X_m - X_b H_bb^-1 H_bm, so computed once per state it serves all three --
+     *  three mj_fullM calls, three identical H_bb factorisations and two
+     *  mj_jacSite calls become one of each. */
+    struct BaseElim {
+        Eigen::MatrixXd M;                      //!< nv x nv, dense symmetric
+        Eigen::MatrixXd H_bm;                   //!< M.topRightCorner(6, n_joints_)
+        Eigen::LDLT<Eigen::MatrixXd> H_bb_ldlt; //!< of M.topLeftCorner(6, 6)
+        //! mj_jacSite fills these as ROW-major 3 x nv buffers; declaring them
+        //! column-major silently reinterprets the strides whenever nv != 3.
+        Eigen::Matrix<double, 3, Eigen::Dynamic, Eigen::RowMajor> jacp, jacr;
+    };
+
+    /*! Fill be.M / be.H_bm / be.H_bb_ldlt from `data` at its current qpos. */
+    void computeBaseElim(mjData* data, BaseElim& be) const;
+
+    /*! Fill be.jacp / be.jacr for one site. Separate from computeBaseElim because
+     *  getDynamics needs the mass matrix and no Jacobian. */
+    void computeSiteJacobian(int site_id, mjData* data, BaseElim& be) const;
+
     /*! Generalised Jacobian  J_g = J_m − J_b H_bb⁻¹ H_bm  (3 × n_joints_). */
     Eigen::Matrix3Xd gjm(int site_id, mjData* data = nullptr) const;
 
@@ -223,6 +245,16 @@ protected:
      *  H_g qddot + Cv_joints = tau holds for the unactuated floating base). */
     void getDynamics(Eigen::MatrixXd& H_g, Eigen::VectorXd& Cv_joints,
                       mjData* data = nullptr) const;
+
+    // The same three, reusing a BaseElim the caller already built. The
+    // no-BaseElim overloads above build one and delegate here, so there is a
+    // single implementation of each reduction. Each takes only what it still
+    // needs beyond `be`: the Jacobian is in `be`, the bias and velocity are not.
+    Eigen::MatrixXd gjm6(const BaseElim& be) const;
+    void getDynamics(Eigen::MatrixXd& H_g, Eigen::VectorXd& Cv_joints,
+                     mjData* data, const BaseElim& be) const;
+    Eigen::Matrix<double, 6, 1> jdotQdot6(int site_id, mjData* data,
+                                          const BaseElim& be) const;
 
     /*! GJM-corrected bias acceleration  h′ = J̇q̇  in world frame [m/s²]. */
     Eigen::Vector3d  jdotQdot(int site_id, mjData* data = nullptr) const;
@@ -267,10 +299,25 @@ protected:
 
     static Eigen::Vector3d sat(const Eigen::Vector3d& x);
 
-    /*! Damped Least-Squares (Tikhonov) Pseudo-Inverse. When "name" is set, will 
-        log warnings when matrix is ill-conditioned */ 
-    static Eigen::MatrixXd pinvDLS(
-        const Eigen::MatrixXd& A, double damping, const std::string& name = "");
+    /*! Solve A X = B by Cholesky, for a symmetric positive-definite A.
+     *
+     *  Returns false, leaving X untouched, if A is not positive definite -- which
+     *  for a generalised inertia means the model is degenerate (a massless link),
+     *  not that the arm is near a kinematic singularity. A singular Jacobian shows
+     *  up in Lambda, not here.
+     *
+     *  Prefer this to inverting: it is a factorisation and a triangular solve
+     *  rather than a full inverse plus a product, it never squares the condition
+     *  number, and the caller never needs the inverse itself -- every use of
+     *  H_g^-1 in this package is a product with something. */
+    static bool solveSpd(const Eigen::MatrixXd& A, const Eigen::MatrixXd& B,
+                         Eigen::MatrixXd& X);
+
+    /*! Damped-least-squares (Tikhonov) pseudo-inverse via SVD: each singular value
+     *  is scaled by s/(s^2 + damping^2), so the result stays bounded as s -> 0.
+     *  The fallback for a matrix solveSpd rejects, and the reference the tests
+     *  check that solve against. */
+    static Eigen::MatrixXd pinvDLS(const Eigen::MatrixXd& A, double damping);
 
     /*! Log a BSK_ERROR and throw if hasNaN is true. */
     void checkNaN(bool hasNaN, const char* label);
@@ -282,6 +329,9 @@ protected:
     // lifetime -- never recreated per call/node/tick. Shares mj_->model,
     // does not own it.
     mutable std::unique_ptr<MjScratchData> mj_scratch_;
+    //! dynamicsAt()'s BaseElim, held rather than created per call for the same
+    //! reason as mj_scratch_: the rollout calls it ~N times a tick.
+    mutable BaseElim be_scratch_;
     int      n_joints_ = 0;          //!< arm DOF from URDF (nv − 6)
     uint64_t prevTime_ = 0;
 

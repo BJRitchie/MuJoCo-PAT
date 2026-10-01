@@ -112,6 +112,7 @@ public:
     using ArmTaskSpaceController::modelJointRanges;
     using ArmTaskSpaceController::n_joints_;
     using ArmTaskSpaceController::pinvDLS;
+    using ArmTaskSpaceController::solveSpd;
 };
 
 constexpr const char* kMjcf = PAT_NMPC_TEST_MJCF;
@@ -202,7 +203,7 @@ TEST(NmpcDynamics, GeneralizedInertiaInverseIsNotOverDamped)
     Eigen::JacobiSVD<Eigen::MatrixXd> svd(nd.H_g);
     const double min_sv = svd.singularValues()(svd.singularValues().size() - 1);
 
-    const Eigen::MatrixXd damped = c.pinvDLS(nd.H_g, c.params_.Hg_damping, "");
+    const Eigen::MatrixXd damped = c.pinvDLS(nd.H_g, c.params_.Hg_damping);
     const Eigen::MatrixXd exact =
         nd.H_g.ldlt().solve(Eigen::MatrixXd::Identity(c.n_joints_, c.n_joints_));
 
@@ -238,6 +239,28 @@ TEST(NmpcDynamics, GeneralizedBiasIsNonZeroWhenMoving)
 }
 
 // --- Joint limits ---------------------------------------------------------
+
+/*! The model build gets H_g's damped inverse from a Cholesky of H_g^2 + d^2 I
+ *  rather than an SVD. That is an identity for symmetric H_g, not an
+ *  approximation, and this pins it: if the two ever diverge, the prediction model
+ *  has silently changed. */
+TEST(NmpcDynamics, CholeskyDampedInverseMatchesTheSvdOne)
+{
+    ModelProbe c(kMjcf, leftArmParams());
+    const State s = referenceState(c.n_joints_);
+    const NodeDynamics nd = c.dynamicsAt(s.q, s.v, c.ee_site_id_);
+    const double lambda = c.params_.Hg_damping;
+
+    const Eigen::MatrixXd via_svd = c.pinvDLS(nd.H_g, lambda);
+
+    Eigen::MatrixXd G = nd.H_g * nd.H_g;
+    G.diagonal().array() += lambda * lambda;
+    Eigen::MatrixXd via_chol;
+    ASSERT_TRUE(c.solveSpd(G, nd.H_g, via_chol));
+
+    EXPECT_LT((via_chol - via_svd).norm() / via_svd.norm(), 1e-9)
+        << "chol:\n" << via_chol << "\nsvd:\n" << via_svd;
+}
 
 TEST(NmpcLimits, EveryModelJointGetsItsMjcfRange)
 {
@@ -345,7 +368,7 @@ TEST(NmpcIntegrator, JointPositionUpdateUsesMidIntervalVelocity)
     const ModelProbe::NodeTaskSpace ts =
         c.evalTaskSpace(s.q, s.v, nd.ee_pos, nd.ee_quat, nd.J_g6, nd.jdot_qdot6);
 
-    const Eigen::MatrixXd H_g_inv = c.pinvDLS(nd.H_g, c.params_.Hg_damping, "");
+    const Eigen::MatrixXd H_g_inv = c.pinvDLS(nd.H_g, c.params_.Hg_damping);
     const Eigen::Vector3d u(0.08, -0.05, 0.01);          // task wrench [N, N, N*m]
     const Eigen::VectorXd tau_j = ts.J_task.transpose() * u + nd.Cv_joints;
 
@@ -395,7 +418,7 @@ OneStepComparison compareOneStep(ModelProbe& c, const Eigen::Vector3d& u)
     const ModelProbe::NodeTaskSpace ts0 =
         c.evalTaskSpace(s.q, s.v, nd0.ee_pos, nd0.ee_quat, nd0.J_g6, nd0.jdot_qdot6);
 
-    const Eigen::MatrixXd H_g_inv = c.pinvDLS(nd0.H_g, c.params_.Hg_damping, "");
+    const Eigen::MatrixXd H_g_inv = c.pinvDLS(nd0.H_g, c.params_.Hg_damping);
     const Eigen::MatrixXd H_g_inv_Jt = H_g_inv * ts0.J_task.transpose();
     const Eigen::MatrixXd Lambda_inv = ts0.J_task * H_g_inv_Jt;
 
@@ -1316,7 +1339,10 @@ TEST(HardConstraints, HardTorqueDoesNotChangeTheNominalCommand)
 TEST(RealtimeProfile, ControlTickAllocationCountIsBounded)
 {
     constexpr long kTicks       = 10;
-    constexpr long kMaxPerTick  = 6000;
+    // Measured ~1850. The ceiling is loose enough not to flake on an Eigen or
+    // acados rebuild and tight enough to catch a reintroduced per-node
+    // allocation; lower it as the hot path is cleaned up, the target being zero.
+    constexpr long kMaxPerTick  = 2500;
 
     ModelProbe c(kMjcf, liveParams());
     const State s = referenceState(c.n_joints_);
@@ -1492,6 +1518,35 @@ TEST(WarmStart, WarmStartingCostsMoreInTheWorstTickThanCold)
     // Both must still control the arm; a bounded tail is worthless if it tracks worse.
     EXPECT_NEAR(mc.mean_ee_err, mw.mean_ee_err, 0.25 * mw.mean_ee_err + 1e-4)
         << "warm " << mw.mean_ee_err << " vs cold " << mc.mean_ee_err;
+}
+
+/*! Where the tick actually goes, as the per-phase breakdown. The instrument for
+ *  judging a cost change: run it before and after, one change at a time. Harness
+ *  ticks are faster than live ones (one arm, no ROS), so compare only against
+ *  another run of this same test. */
+TEST(DISABLED_PhaseStudy, Breakdown)
+{
+    ModelProbe c(kMjcf, liveParams());
+    c.setTickBudgetUs(10000.0);          // the live 100 Hz period
+    const State s = referenceState(c.n_joints_);
+    const ArmNMPC::EePose start = c.currentEePose(s.q, s.v);
+    c.setDesiredPos(start.pos.x() + 0.06, start.pos.y() + 0.06, start.pos.z());
+    c.setDesiredOrient(start.quat(0), start.quat(1), start.quat(2), start.quat(3));
+
+    for (int i = 0; i < 5; ++i) c.computeControl(s.q, s.v);   // warm up
+    c.resetProfile();
+
+    State st = s;
+    for (int t = 0; t < 400; ++t) {
+        const Eigen::VectorXd tau_all = c.computeControl(st.q, st.v);
+        Eigen::VectorXd tau = Eigen::VectorXd::Zero(c.n_joints_);
+        for (int idx : c.ownedJointInds) tau[idx] = tau_all[idx];
+        Eigen::VectorXd q1, v1;
+        c.integrateStep(st.q, st.v, tau, 1.0 / 100.0, q1, v1);
+        st.q = q1;
+        st.v = v1;
+    }
+    std::printf("%s\n", c.profileReport().c_str());
 }
 
 TEST(DISABLED_WarmStartStudy, Ladder)
