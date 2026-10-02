@@ -333,6 +333,17 @@ otherwise have to rediscover. None are regressions.
   nodes.** `Ts: 0.025` against a 10 ms control period is the ordinary
   receding-horizon arrangement — a 1 s horizon at the control rate would need
   N=100 — and re-solving faster than the grid is extra feedback, not a defect.
+  `Ts` being a non-integer multiple of the period costs almost nothing in itself;
+  the one place it shows is Tier 1, where a stage is then held for 3,2,3,2 ticks
+  instead of uniformly, which is a few ms of irregularity inside a ≤50 ms replay.
+  What *was* wrong is separate: the warm-start shift advanced `u_bar_` by a whole
+  stage per tick, i.e. 25 ms of plan per 10 ms of real time, so every tick
+  linearised around a trajectory 15 ms of plan ahead of the arm. It now advances
+  by `control_period / Ts` with linear interpolation. Measured, paired: `it_mean`
+  7.41 → 7.42, `it_max` 14 unchanged, tick time indistinguishable, mean EE error
+  0.09585 → 0.09574. Correct, and worth ~0.1%. It does **not** rescue
+  `warm_start: 2`, which still reaches 106 iterations with the shift corrected —
+  the dual iterate is the problem, not the shift rate.
   Two consequences are worth knowing: nothing bounds the joint states between grid
   nodes (each tick re-imposes the box from the fresh measurement, which mitigates
   but does not guarantee), and the solver sizes `u_0` as if it acted for 25 ms when
@@ -454,6 +465,24 @@ comparison on a deterministic closed loop.
   iteration, and the cold-start retry then solves the same QP again — 141 ms
   against a 5 ms period, 1–2x per setpoint change. Primal-only warm starting makes
   that **rare rather than routine**: 223 retries per 290 s becomes 0–1.
+- **A failed solve no longer abandons the task.** The response is now graded
+  (`safe_mode.*`): Tier 1 replays the last accepted plan, time-shifted; Tier 2 is
+  the joint damping that already existed; Tier 3 latches damping so a solver that
+  never recovers cannot flap between damping and tracking. Tier 1 exists because
+  the solver computes N stages and applies only the first, so one bad solve leaves
+  39 usable controls on the table — and on a free-floating base replaying the plan
+  beats holding a torque, which keeps pushing the shared bus with nothing scheduled
+  to undo it. Only the stale task *wrench* is reused; the Jacobian and the `Cv`
+  feedforward are re-derived at the current measurement.
+
+  Measured with `qp.max_iter` deliberately crippled to 14 (nominal needs ~8, hard
+  ticks ~26) to provoke failures, per arm over 50 s: **104 Tier 1 entries, 209
+  replay ticks, 35 damped ticks, 0 latches**, and the typical episode is a single
+  replay tick. The previous policy entered damping on every failure and held it for
+  `recovery_ticks`, so the same 104 episodes would have cost **at least 1040**
+  damped ticks. Tier 1 recovers with no hysteresis — one good solve ends it —
+  because replay was still tracking, so the handover is between two task-space
+  commands rather than up from damping.
 - **It does not make it impossible, and the tail reaches total solver failure.**
   The `qp_iter` maxima above (48, 53) are single samples; further runs of the same
   waypoint loop at the default settings have reached 85, and one reached **200 —
@@ -462,9 +491,10 @@ comparison on a deterministic closed loop.
   observed in any run (11 ticks damped, then clean recovery). Roughly one event
   per 500 report windows, so a single run can easily miss it. Consequences:
   `qp_max_iter` cannot be tightened into a worst-case bound while the solver still
-  reaches it; the cold retry is not a reliable rescue; and the joint-damping safe
-  mode is load-bearing, not decoration. Bounding this properly is the RTI
-  preparation/feedback split plus a tiered miss policy, not a warm-start mode.
+  reaches it, and the cold retry is not a reliable rescue. The tiered response above
+  is what now covers it: that event would be absorbed by Tier 1 rather than costing
+  11 damped ticks. What remains unbounded is the 93 ms itself -- the tiers make a
+  failure cheap, they do not make the solve finish on time.
 - **It is compute, not scheduling.** Thread CPU time tracks wall time to within
   0.1% even through the spikes, and HPIPM's own reported time accounts for all but
   ~60 us of the solve. A realtime kernel cannot help here; a bounded solver can.
@@ -476,17 +506,86 @@ comparison on a deterministic closed loop.
   `PREEMPT_RT`. The fix is a preallocated workspace with `Eigen::Map` views over
   it. `RealtimeProfile.ControlTickAllocationCountIsBounded` measures it and holds
   the line.
-- **The QP solve is now the tick.** ~0.5 ms of a ~0.9 ms harness tick, and it is
-  untouched by anything above: `qp_iter` and the applied torque are bit-identical
-  across every change so far. Reducing it needs either a cheaper solve
-  (`HPIPM_TARGET` is `GENERIC` while BLASFEO is target-tuned, and nothing sets
-  `-march`/`-mtune`, so Eigen and the workspace compile for baseline x86-64
-  without AVX/FMA) or fewer stages.
-- **`std::cerr` on the QP-failure path**, which fires every tick precisely when
-  the solver is already struggling. Not realtime-safe.
+- **The QP solve is the tick**, and the first thing that actually moved it was
+  shrinking the state rather than speeding up the arithmetic. `nx` was
+  `7 + 2*n_model_joints` = 19, carrying Δq/qdot rows for every joint in the model;
+  the six belonging to the *other* arm appeared in neither the cost (`Q` is zero on
+  all joint rows) nor the constraints (the box covers `ownedJointInds` only) and no
+  other row's dynamics read them, so they were free variables carried at full
+  Riccati cost. `nx` is now `7 + 2*n_owned` = 13. Measured, paired and interleaved:
+  **solve −26%, tick −16 to −20%**, with `ee_err`, `it_mean` and `it_max` all
+  identical — the reduction is exact, not an approximation. The other arm's motion
+  is still predicted, by the nonlinear rollout, which uses the whole model.
+  - Worth noting the gain is far short of the `(13/19)^3 = 0.32` that pure
+    Riccati scaling predicts. The realised ratio is ~0.74, i.e. an effective
+    `nx^0.8`. That is NOT fixed overhead -- bucketing a 24k-tick trace by iteration
+    count shows almost no per-solve constant, the cost is essentially all
+    per-iteration. It is that the per-iteration work itself scales far more weakly
+    than `nx^3`, because at these dimensions BLASFEO's kernels are latency-bound
+    rather than flop-bound. Same conclusion the `HPIPM_TARGET` null result pointed
+    at, and it caps what further size or target tuning can return.
+
+#### What a solve actually costs
+
+From one 24k-tick trace, bucketed by iteration count (`hpipm_us` tracks `qpsolve`
+to within ~35 us throughout, so this is all inside `ocp_qp_solve`):
+
+| `qp_iters` | solve | per iteration | ticks |
+|---|---|---|---|
+| 7 | 2.0 ms | 285 us | 9885 |
+| 8 | 2.3 ms | 282 us | 10408 |
+| 10 | 3.3 ms | 326 us | 3211 |
+| 20 | 9.0 ms | 448 us | 8 |
+| 50 | 18.4 ms | 368 us | 2 |
+
+So the cost is **iterations x ~280-450 us with a near-zero intercept**: a hard
+problem pays both more iterations and somewhat dearer ones. Two consequences:
+
+- `qp_max_iter` IS a genuine time bound, provided it is sized with the *worst*
+  per-iteration cost (~450 us) and not the nominal (~280 us). A cap of 20 bounds the
+  solve near 9 ms, not 5.6 ms.
+- It also explains the 93 ms worst case arithmetically: 200 iterations (the warm
+  solve and its cold retry each burning a cap of 100) at ~465 us is ~93 ms.
+- **Build targets are not the lever, measured.** Both halves came out null, so the
+  remaining cost is algorithmic rather than a missed compiler flag:
+  - `-march=native -mtune=native` on this package (`PAT_ARCH_FLAGS`, empty by
+    default) moves nothing at tick level — five paired runs scattered either side
+    of zero. Only `buildmodel` improved (0.5 → 0.35 us/node), which is ~2% of the
+    tick. MuJoCo, acados, HPIPM and BLASFEO are all precompiled `.so`s, so these
+    flags reach only the ~13% of the tick that is this package's own code.
+  - `HPIPM_TARGET=X64_INTEL_HASWELL` in place of `GENERIC`, compared as the same
+    binary against two ABI-identical acados prefixes with byte-identical BLASFEO
+    targets: ~3% of the QP solve, ~2% of the tick, inside the noise. BLASFEO
+    already carries the AVX2/FMA kernels; HPIPM's target only tunes its glue. The
+    `HPIPM_TARGET` build arg exists for a Jetson retest but defaults to `GENERIC`.
+  - What is left for the solve is therefore `N: 40`, the RTI split, or a smaller
+    QP -- not the toolchain.
 - **No realtime scheduling anywhere.** Default `rclcpp` executor, default-priority
   DDS threads, no `SCHED_FIFO`, no `mlockall`, no core pinning. The dev container
   also lacks `CAP_SYS_NICE`, so it cannot currently request an RT policy at all.
+
+Cleared, and worth knowing about because each was invisible rather than noisy:
+
+- **MuJoCo's own logging no longer runs from the tick.** Its default warning hook
+  appends to `MUJOCO_LOG.TXT` -- a file write from a path that fires exactly when
+  the solver is struggling -- and its default error hook calls `exit()`, killing a
+  process mid-motion with a torque latched in the actuators. Both are now ours:
+  warnings are counted with a fixed message buffer and surface on the report line,
+  and an error throws so the existing guard turns it into safe-mode damping. The
+  file is no longer created by a full run. `pat_simulation` keeps MuJoCo's defaults
+  and is not affected by this (it is removed at deployment).
+- **Throttled log messages were permanently suppressed.** All five
+  `RCLCPP_*_THROTTLE` sites were gated on the node clock, which is frozen at zero
+  with `use_sim_time:=true` and nothing publishing `/clock`, so each fired once and
+  then went silent for the rest of the run -- including "waiting for joint_states"
+  and the dropped non-finite-measurement warnings. They now throttle against a
+  steady clock; the startup warning repeats every 2 s as intended. Note
+  `header.stamp` on everything published is still zero, which blocks any
+  subscriber-side latency measurement; fixing that needs `/clock` from
+  `pat_simulation` rather than a change here.
+- **The trust-region loop allocated a 3-vector per stage**, i.e. N per tick.
+  Hoisted to a member: 1850 -> 1809 allocations per tick, and paired runs put the
+  mean 81 us lower with `qp_iter` and tracking unchanged.
 
 ### Elsewhere
 

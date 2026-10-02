@@ -342,6 +342,7 @@ bool QuadProbSolver::solve(
     resetIters();
     int qp_status = ocp_qp_solve(solver, qp_in, qp_out);
     addIters();
+    recordFirstSolve(qp_status);
     if (qp_status != 0 && params_.qp_warm_start != 0) {
         int cold = 0;
         ocp_qp_xcond_solver_opts_set(config, opts, "warm_start", &cold);
@@ -478,6 +479,7 @@ bool QuadProbSolver::solveMultiStage(
     resetIters();
     int qp_status = ocp_qp_solve(solver, qp_in, qp_out);
     addIters();
+    recordFirstSolve(qp_status);
     if (qp_status != 0 && params_.qp_warm_start != 0) {
         int cold = 0;
         ocp_qp_xcond_solver_opts_set(config, opts, "warm_start", &cold);
@@ -498,10 +500,24 @@ bool QuadProbSolver::solveMultiStage(
     }
 }
 
+void QuadProbSolver::setIterMax(int iter_max) {
+    if (iter_max < 1) return;
+    params_.qp_max_iter = iter_max;
+    ocp_qp_xcond_solver_opts_set(config, opts, "iter_max", &params_.qp_max_iter);
+}
+
 void QuadProbSolver::resetIters() {
     last_iters_      = -1;
     last_qp_time_ms_ = 0.0;
     last_retried_    = false;
+    first_iters_     = -1;
+    first_status_    = 0;
+}
+
+void QuadProbSolver::recordFirstSolve(int status) {
+    // The warm solve on its own, captured before the retry can fold into the sum.
+    first_iters_  = last_iters_;
+    first_status_ = status;
 }
 
 void QuadProbSolver::addIters() {

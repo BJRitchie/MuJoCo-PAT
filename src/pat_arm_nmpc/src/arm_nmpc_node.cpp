@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <fstream>
+#include <iomanip>
 #include <iterator>
 #include <stdexcept>
 
@@ -56,6 +58,10 @@ ArmNMPCNode::ArmNMPCNode() : Node("pat_arm_nmpc") {
     base_anchor_y_ = declare_parameter<double>("base_anchor_y", 0.0);
 
     params_ = loadParams();
+    // Tier 1 replays a plan whose stages are Ts apart on ticks that are this far
+    // apart, so the controller has to know the period. It comes from the timer rate
+    // rather than the YAML so the two can never disagree.
+    params_.control_period = 1.0 / ctrl_hz;
     controller_ = std::make_unique<pat_arm_nmpc::ArmNMPC>(mjcf_path, params_);
 
     if (controller_->numArmJoints() != static_cast<int>(model_joint_names_.size()))
@@ -95,6 +101,45 @@ ArmNMPCNode::ArmNMPCNode() : Node("pat_arm_nmpc") {
                                   std::bind(&ArmNMPCNode::controlLoop, this));
     period_us_ = 1e6 / ctrl_hz;
     controller_->setTickBudgetUs(period_us_);
+
+    // Per-tick trace. The default capacity is 10 minutes at the control rate; the
+    // buffer is allocated now and recording simply stops when it is full, so a
+    // long run cannot grow memory without bound or allocate on a tick.
+    trace_file_ = declare_parameter<std::string>("trace_file", "");
+    // Only has to hold what accumulates between drains (1 s), with generous slack.
+    const int trace_cap = declare_parameter<int>(
+        "trace_capacity", static_cast<int>(60.0 * ctrl_hz));
+    if (!trace_file_.empty() && trace_cap > 0) {
+        // One file per arm: two nodes sharing a path would interleave their rows
+        // into nonsense, so the side goes in before the extension.
+        std::string path = trace_file_;
+        const auto dot = path.find_last_of('.');
+        const auto sep = path.find_last_of('/');
+        if (dot != std::string::npos && (sep == std::string::npos || dot > sep))
+            path.insert(dot, "_" + arm_side_);
+        else
+            path += "_" + arm_side_ + ".csv";
+
+        trace_out_.open(path);
+        if (!trace_out_) {
+            RCLCPP_ERROR(get_logger(), "pat_arm_nmpc[%s]: cannot open %s; not tracing",
+                         arm_side_.c_str(), path.c_str());
+        } else {
+            trace_out_ << "# arm=" << arm_side_ << " period_us=" << period_us_
+                       << " N=" << params_.N << " Ts=" << params_.Ts
+                       << " warm_start=" << params_.qp_warm_start
+                       << " qp_max_iter=" << params_.qp_max_iter << "\n"
+                       << "t_us,tick_us,dynamics,jdotqdot,lambda,qpsolve,"
+                          "rollout_dynamics,rollout_integrate,pinv,build_model,"
+                          "defect,trust_region,finalize,hpipm_us,qp_iters,"
+                          "qp_status,qp_iters1,qp_status1,mode,retried\n";
+            trace_rows_.reserve(static_cast<std::size_t>(trace_cap));
+            controller_->enableTrace(static_cast<std::size_t>(trace_cap));
+            RCLCPP_INFO(get_logger(),
+                        "pat_arm_nmpc[%s]: tracing every tick to %s",
+                        arm_side_.c_str(), path.c_str());
+        }
+    }
     diag_tmr_  = create_wall_timer(std::chrono::seconds(1),
                                    std::bind(&ArmNMPCNode::reportDiagnostics, this));
 
@@ -141,6 +186,12 @@ pat_arm_nmpc::NMPCParams ArmNMPCNode::loadParams() {
         declare_parameter<double>("safe_mode.damping_frac", p.safe_mode_damping_frac);
     p.safe_mode_recovery_ticks =
         declare_parameter<int>("safe_mode.recovery_ticks", p.safe_mode_recovery_ticks);
+    p.tier1_max_replay_ticks =
+        declare_parameter<int>("safe_mode.tier1_max_replay_ticks", p.tier1_max_replay_ticks);
+    p.tier3_latch_after_ticks =
+        declare_parameter<int>("safe_mode.tier3_latch_after_ticks", p.tier3_latch_after_ticks);
+    // control_period is not read here: it comes from control_hz, which the node's
+    // own timer owns. The constructor fills it in before building the controller.
     p.rollout_v_clamp_mult =
         declare_parameter<double>("nmpc.rollout_v_clamp_mult", p.rollout_v_clamp_mult);
     p.terminal_velocity_constraint =
@@ -249,7 +300,7 @@ void ArmNMPCNode::onJointState(sensor_msgs::msg::JointState::SharedPtr msg) {
     // q_joints_/v_joints_ it poisons every later tick, since these arrays are
     // only ever overwritten, never invalidated.
     if (!allFinite(msg->position) || !allFinite(msg->velocity)) {
-        RCLCPP_ERROR_THROTTLE(get_logger(), *get_clock(), 1000,
+        RCLCPP_ERROR_THROTTLE(get_logger(), log_clock_, 1000,
             "pat_arm_nmpc[%s]: dropping joint_states with non-finite values",
             arm_side_.c_str());
         return;
@@ -269,7 +320,7 @@ void ArmNMPCNode::onOdom(nav_msgs::msg::Odometry::SharedPtr msg) {
         !std::isfinite(tl.x) || !std::isfinite(tl.y) ||
         !std::isfinite(msg->twist.twist.angular.z)) {
             
-        RCLCPP_ERROR_THROTTLE(get_logger(), *get_clock(), 1000,
+        RCLCPP_ERROR_THROTTLE(get_logger(), log_clock_, 1000,
             "pat_arm_nmpc[%s]: dropping odom with non-finite values",
             arm_side_.c_str());
         return;
@@ -298,6 +349,38 @@ void ArmNMPCNode::onEeSetpoint(geometry_msgs::msg::PoseStamped::SharedPtr msg) {
     has_setpoint_ = true;
 }
 
+ArmNMPCNode::~ArmNMPCNode() {
+    // A destructor that lets an exception out during shutdown terminates the
+    // process with no diagnostic, so swallow everything. The ofstream flushes
+    // itself; this only catches the rows recorded since the last drain. Logging is
+    // already gone by now, hence no message here.
+    try {
+        flushTrace();
+    } catch (...) {
+    }
+}
+
+void ArmNMPCNode::flushTrace() {
+    if (!trace_out_ || !controller_) return;
+    controller_->drainTrace(trace_rows_);
+    if (trace_rows_.empty()) return;
+
+    trace_out_ << std::fixed << std::setprecision(2);
+    for (const auto& r : trace_rows_) {
+        trace_out_ << r.t_us << ',' << r.tick_us << ',' << r.dynamics << ','
+                   << r.jdotqdot << ',' << r.lambda << ',' << r.qpsolve << ','
+                   << r.rollout_dynamics << ',' << r.rollout_integrate << ','
+                   << r.pinv << ',' << r.build_model << ',' << r.defect << ','
+                   << r.trust_region << ',' << r.finalize << ',' << r.hpipm_us
+                   << ',' << r.qp_iters << ',' << r.qp_status
+                   << ',' << r.qp_iters1 << ',' << r.qp_status1 << ','
+                   << static_cast<int>(r.mode) << ','
+                   << static_cast<int>(r.retried) << '\n';
+    }
+    trace_out_.flush();
+    trace_written_ += static_cast<long>(trace_rows_.size());
+}
+
 double ArmNMPCNode::threadCpuUs() {
     timespec ts{};
     clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ts);
@@ -313,7 +396,7 @@ void ArmNMPCNode::controlLoop() {
     if (!has_state_ || !has_odom_) {
         // Throttled: this fires every tick until both arrive, which at
         // control_hz is hundreds of lines a second.
-        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
+        RCLCPP_WARN_THROTTLE(get_logger(), log_clock_, 2000,
             "pat_arm_nmpc[%s]: waiting for joint_states and/or odom",
             arm_side_.c_str());
         return;
@@ -373,23 +456,43 @@ void ArmNMPCNode::controlLoop() {
         tau = controller_->computeControl(q, v);
     } catch (const std::exception& e) {
         tau = controller_->dampingTorque(v);
-        RCLCPP_ERROR_THROTTLE(get_logger(), *get_clock(), 1000,
+        RCLCPP_ERROR_THROTTLE(get_logger(), log_clock_, 1000,
             "pat_arm_nmpc[%s]: control tick threw (%s) — commanding joint damping",
             arm_side_.c_str(), e.what());
     }
 
-    // Log safe-mode entry/exit once per transition, not per tick.
+    // Log tier transitions once each, not per tick. Severity follows the tier: a
+    // Tier 1 replay is a handled transient and should not read like a fault.
+    using Mode = pat_arm_nmpc::ArmNMPC::ControlMode;
     const auto mode = controller_->mode();
     if (mode != prev_mode_) {
-        if (mode == pat_arm_nmpc::ArmNMPC::ControlMode::Damping) {
-            RCLCPP_ERROR(get_logger(),
-                "pat_arm_nmpc[%s]: entering SAFE MODE (joint damping) — last QP status %d",
+        switch (mode) {
+        case Mode::PlanReplay:
+            RCLCPP_WARN(get_logger(),
+                "pat_arm_nmpc[%s]: TIER 1 — solve failed (QP status %d), replaying the "
+                "last accepted plan",
                 arm_side_.c_str(), controller_->lastQpStatus());
-        } else {
+            break;
+        case Mode::Damping:
+            RCLCPP_ERROR(get_logger(),
+                "pat_arm_nmpc[%s]: TIER 2 — joint damping, task abandoned "
+                "(QP status %d, %ld replay ticks used so far)",
+                arm_side_.c_str(), controller_->lastQpStatus(),
+                controller_->tier1Ticks());
+            break;
+        case Mode::Latched:
+            RCLCPP_ERROR(get_logger(),
+                "pat_arm_nmpc[%s]: TIER 3 — LATCHED in damping; the solver did not "
+                "recover and this will NOT clear on its own",
+                arm_side_.c_str());
+            break;
+        case Mode::Nominal:
             RCLCPP_INFO(get_logger(),
-                "pat_arm_nmpc[%s]: recovered from safe mode, resuming tracking "
-                "(%ld ticks damped in total)",
-                arm_side_.c_str(), controller_->safeModeTicks());
+                "pat_arm_nmpc[%s]: resumed tracking (%ld damped ticks, %ld replay "
+                "ticks over %ld Tier 1 entries, in total)",
+                arm_side_.c_str(), controller_->safeModeTicks(),
+                controller_->tier1Ticks(), controller_->tier1Entries());
+            break;
         }
         prev_mode_ = mode;
     }
@@ -399,7 +502,7 @@ void ArmNMPCNode::controlLoop() {
     // unreachable — which is exactly why it is worth asserting.
     if (!tau.allFinite()) {
         tau.setZero();
-        RCLCPP_ERROR_THROTTLE(get_logger(), *get_clock(), 1000,
+        RCLCPP_ERROR_THROTTLE(get_logger(), log_clock_, 1000,
             "pat_arm_nmpc[%s]: non-finite torque suppressed, commanding zero",
             arm_side_.c_str());
     }
@@ -449,6 +552,9 @@ void ArmNMPCNode::recordWake(std::chrono::steady_clock::time_point wake) {
 
 void ArmNMPCNode::reportDiagnostics() {
     std::lock_guard<std::mutex> lk(mu_);
+    // Before the early return below: a window with no completed tick still has a
+    // previous window's rows to get out, and the trace should not stall on it.
+    flushTrace();
     if (loop_.count == 0) return;   // no tick completed in this window
 
     RCLCPP_INFO(get_logger(),

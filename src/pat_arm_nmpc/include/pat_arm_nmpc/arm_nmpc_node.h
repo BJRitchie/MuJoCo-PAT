@@ -3,6 +3,7 @@
 #include <array>
 #include <chrono>
 #include <cstddef>
+#include <fstream>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -27,6 +28,9 @@
 class ArmNMPCNode : public rclcpp::Node {
 public:
     ArmNMPCNode();
+    //! Writes the per-tick trace out, if one was requested. In the destructor so a
+    //! Ctrl-C'd run still saves: nothing is written while the loop is running.
+    ~ArmNMPCNode() override;
 
 private:
     // --- Parameter loading (nmpc.yaml → NMPCParams) ----------------------- //
@@ -45,6 +49,14 @@ private:
     void onOdom(nav_msgs::msg::Odometry::SharedPtr msg);
     void onEeSetpoint(geometry_msgs::msg::PoseStamped::SharedPtr msg);
     void controlLoop();
+
+    //! The clock every throttled log message is rate-limited against. Steady, NOT
+    //! the node clock: launch files default use_sim_time:=true and nothing
+    //! publishes /clock, so get_clock()->now() is frozen at zero and a throttle
+    //! gated on it fires once and is then silent for the rest of the run -- which
+    //! silently hid the "waiting for joint_states" and dropped-measurement
+    //! warnings. Rate-limiting output is a wall-clock concern either way.
+    rclcpp::Clock log_clock_{RCL_STEADY_TIME};
 
     std::string arm_side_;                        // "left" | "right"
     pat_arm_nmpc::NMPCParams params_;
@@ -132,6 +144,17 @@ private:
     //! callback: the control tick must not do formatted I/O.
     rclcpp::TimerBase::SharedPtr diag_tmr_;
     void reportDiagnostics();
+
+    //! Per-tick trace. The control loop only stores into a preallocated buffer;
+    //! the rows are drained and appended here from the diagnostics timer, once a
+    //! second, so a killed process keeps everything up to the last drain. Opened
+    //! once at construction, never reopened.
+    std::string   trace_file_;
+    std::ofstream trace_out_;
+    //! Drain destination, reused so the swap inside drainTrace keeps its buffer.
+    std::vector<pat_arm_nmpc::ArmNMPC::TickTrace> trace_rows_;
+    long trace_written_{0};
+    void flushTrace();
 
     std::mutex mu_;
 };

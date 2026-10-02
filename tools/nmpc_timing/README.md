@@ -37,6 +37,95 @@ try.log                        566   56597   10000     3187   22768    8715  0.0
 changes how many startup windows are dropped, `--spike-ms` sets the last column's
 threshold.
 
+### Seeing the distribution
+
+`--plot` adds, per run and per arm, the tick-time histogram and a timeline of
+per-window maxima. ASCII on purpose: it works over any shell into the container,
+and the image's matplotlib is broken (numpy 1.x/2.x ABI clash).
+
+```bash
+tools/nmpc_timing/summarise_timing.py --per-arm --plot data/nmpc_timing/base.log
+```
+
+```
+base.log:left — 289 windows, 28897 ticks @ 10000 us period
+  tick time, all ticks
+       <=2500 us  ################################################    14339  49.6%
+       <=5000 us  ###############################################     14147  49.0%
+        >5000 us  #                                                     411   1.4%
+  per-window max: p50 4635  p90 6442  p99 9608  max 40229 us
+  per-window max over the run, ' '=3575 '#'=40229 us (log scale)
+        .   ..  -. .... :     . ..  .#  .  .. .... :.. .:.  :.          .:  ..
+```
+
+**The two views are not interchangeable.** The histogram covers *every* tick — the
+node bins each one as it happens, so summing per-window bins is the true
+distribution. The timeline and percentiles are over per-window *maxima*, because a
+worst case is all the log keeps per window. "49.6% of ticks under 2.5 ms" says
+nothing about how bad the worst one was.
+
+The timeline is one cell per window in run order, so clustering is visible —
+spikes bunch after a setpoint change rather than scattering uniformly.
+
+Note the histogram's resolution: `PhaseStat::kEdgeUs` in
+`arm_task_space_controller.h` was chosen around a 5 ms period, so at
+`control_hz: 100` nearly everything lands in two bins. `--plot` says so when it
+happens. For the real distribution, record a trace instead.
+
+## Per-tick traces
+
+`trace_file:=` records **every** control tick and streams it to CSV, one file per
+arm, so the distribution is not limited to the report's eight fixed bins.
+
+```bash
+./tools/nmpc_timing/run_trial.sh -d 300 -o /tmp/base.log -t data/nmpc_timing/trace.csv
+# or directly:
+ros2 launch launch/full_stack_nmpc.launch.py with_targets:=true \
+    trace_file:=data/nmpc_timing/trace.csv
+
+tools/nmpc_timing/plot_trace.py --bins 14 --phases --top 3 data/nmpc_timing/trace_left.csv
+```
+
+```
+  5920 ticks over 59.2 s
+        1731-2426     ############################################    2054  34.7% (cum  34.7%)
+        2426-3121     ######################################          1773  29.9% (cum  64.6%)
+        ...
+        9379-10074    .                                                  3   0.1% (cum  99.9%)  <-- deadline
+  tick_us: min 1731  p50 2741  p90 3960  p99 6000  p99.9 9475  max 11465 us
+  over the 10000 us period: 3 (0.05%)
+  mean tick by phase
+               qpsolve ##################################             2287.2 us  77.6%
+      rollout_dynamics ####                                            300.8 us  10.2%
+```
+
+`--column qpsolve` plots any single column, `--phases` breaks the mean tick down,
+`--top N` lists the slowest ticks with their phase split and QP status — which is
+how you find out what a spike actually was.
+
+The CSV columns are `t_us`, `tick_us`, the eleven phase durations, `hpipm_us`,
+`qp_iters`, `qp_status`, `mode`, `retried`. It is ordinary CSV, so pandas or
+gnuplot can take over for publication plots.
+
+### What tracing costs the control loop
+
+The tick only stores one preallocated row: no file I/O, no allocation, no syscall.
+Rows are drained and appended **from the 1 Hz diagnostics callback**, not the tick.
+That matters for two reasons:
+
+- Writing only at exit does not work. `ros2 launch` escalates its shutdown to
+  SIGKILL on a grace period, and it killed the process partway through a one-shot
+  write — the first attempt at this produced 824 of 4342 ticks in one file and 411
+  in the other. Draining each second means a killed run keeps everything up to the
+  last drain.
+- `trace_capacity` (default 60 s of ticks) only has to cover one drain interval,
+  so memory stays flat however long the run is. If it ever fills, recording stops
+  rather than wrapping or growing, and the report line shows `trace N/CAP FULL`.
+
+File I/O does land on the executor thread once a second, alongside the report line
+that was already being logged there. Tracing is a diagnostic mode; leave it off for
+a run whose absolute worst-case tick is the measurement.
+
 ### Reading the raw report
 
 `summarise_timing.py` aggregates, but each window is also readable directly — the

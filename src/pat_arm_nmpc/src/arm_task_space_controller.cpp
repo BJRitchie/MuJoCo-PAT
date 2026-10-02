@@ -1,11 +1,66 @@
 #include "pat_arm_nmpc/arm_task_space_controller.h"
 
 #include <algorithm>
-#include <iostream>
+#include <atomic>
+#include <cstdio>
 #include <stdexcept>
 #include <string>
 
 namespace pat_arm_nmpc {
+
+// === MuJoCo error / warning hooks ===========================================
+// MuJoCo's defaults are both unacceptable inside a control tick: mju_warning
+// opens and appends to MUJOCO_LOG.TXT (a file write of unbounded latency, from a
+// path that fires precisely when the solver is struggling), and mju_error prints
+// and calls exit(), killing a process that is mid-motion with a torque latched in
+// the actuators.
+//
+// The hooks are global C function pointers, so the state behind them is global
+// too. Plain counters and a fixed buffer, no allocation and no I/O: a hook can
+// fire from anywhere inside mj_forward.
+namespace {
+std::atomic<long> g_mj_warnings{0};
+std::atomic<long> g_mj_errors{0};
+constexpr std::size_t kMjMsgLen = 192;
+char g_mj_last_warning[kMjMsgLen] = {};
+char g_mj_last_error[kMjMsgLen]   = {};
+
+void copyMsg(char* dst, const char* msg) {
+    // std::snprintf rather than a std::string: bounded, and it does not allocate
+    // for a plain "%s".
+    std::snprintf(dst, kMjMsgLen, "%s", msg ? msg : "(null)");
+}
+
+void patMjWarning(const char* msg) {
+    g_mj_warnings.fetch_add(1, std::memory_order_relaxed);
+    copyMsg(g_mj_last_warning, msg);
+}
+
+void patMjError(const char* msg) {
+    g_mj_errors.fetch_add(1, std::memory_order_relaxed);
+    copyMsg(g_mj_last_error, msg);
+    // MuJoCo requires this not to return -- it calls exit() if it does. Throwing
+    // hands control to ArmNMPC's existing guard, which turns it into safe-mode
+    // joint damping: the same trade the QP-failure path already makes, a recorded
+    // survivable event instead of a dead process. Unwinding is not realtime, but
+    // this only runs when the alternative is termination.
+    throw std::runtime_error(std::string("MuJoCo error: ") + g_mj_last_error);
+}
+}  // namespace
+
+void ArmTaskSpaceController::installMujocoHooks() {
+    mju_user_warning = &patMjWarning;
+    mju_user_error   = &patMjError;
+}
+
+long ArmTaskSpaceController::mjWarningCount() {
+    return g_mj_warnings.load(std::memory_order_relaxed);
+}
+long ArmTaskSpaceController::mjErrorCount() {
+    return g_mj_errors.load(std::memory_order_relaxed);
+}
+const char* ArmTaskSpaceController::lastMjWarning() { return g_mj_last_warning; }
+const char* ArmTaskSpaceController::lastMjError()   { return g_mj_last_error; }
 
 // === MjImpl — MuJoCo model + data bundle ====================================
 struct MjImpl {
@@ -31,6 +86,10 @@ ArmTaskSpaceController::ArmTaskSpaceController(
     const std::string& mjcf_path)
     : mj_(std::make_unique<MjImpl>())
 {
+    // Before the first MuJoCo call, so even a load failure is reported through the
+    // hooks rather than MUJOCO_LOG.TXT.
+    installMujocoHooks();
+
     char error[1000] = "";
     mj_->model = mj_loadXML(mjcf_path.c_str(), nullptr, error, sizeof(error));
     if (!mj_->model) {

@@ -18,6 +18,7 @@
 #include <cstddef>
 #include <cstdio>
 #include <map>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -86,11 +87,13 @@ public:
     using ArmNMPC::torqueLimsByIndex;
     using ArmNMPC::vlimsByIndex;
     using ArmNMPC::evalTaskSpace;
+    using ArmNMPC::n_owned;
     using ArmNMPC::ownedJointInds;
     using ArmNMPC::qpsolve;
     using ArmNMPC::lastQpStatus;
     using ArmNMPC::mode;
     using ArmNMPC::params_;
+    using ArmNMPC::planStageForAge;
     using ArmNMPC::qlimsByIndex;
     using ArmNMPC::qp_;
     using ArmNMPC::reachableWrenchBound;
@@ -111,6 +114,10 @@ public:
     using ArmTaskSpaceController::integrateStep;
     using ArmTaskSpaceController::modelJointRanges;
     using ArmTaskSpaceController::n_joints_;
+    using ArmTaskSpaceController::lastMjError;
+    using ArmTaskSpaceController::lastMjWarning;
+    using ArmTaskSpaceController::mjErrorCount;
+    using ArmTaskSpaceController::mjWarningCount;
     using ArmTaskSpaceController::pinvDLS;
     using ArmTaskSpaceController::solveSpd;
 };
@@ -398,12 +405,15 @@ TEST(NmpcIntegrator, JointPositionUpdateUsesMidIntervalVelocity)
  *  the plant's true one-step response, in the same augmented coordinates. */
 struct OneStepComparison {
     Eigen::VectorXd x0, x_pred, x_true;
-    int d = 3, n_j = 0;
+    //! n_q is the number of joint rows the STATE carries -- the owned joints only,
+    //! not every model joint. The non-owned ones were dropped from the QP because
+    //! they appear in neither the cost nor the constraints.
+    int d = 3, n_q = 0;
 
     Eigen::VectorXd taskBlock(const Eigen::VectorXd& x) const { return x.head(2 * d); }
     Eigen::VectorXd jointBlock(const Eigen::VectorXd& x) const
     {
-        return x.segment(2 * d + 1, 2 * n_j);
+        return x.segment(2 * d + 1, 2 * n_q);
     }
 };
 
@@ -427,15 +437,18 @@ OneStepComparison compareOneStep(ModelProbe& c, const Eigen::Vector3d& u)
 
     OneStepComparison out;
     out.d   = d;
-    out.n_j = n_j;
+    out.n_q = c.n_owned;
 
-    const int nx = 2 * d + 1 + 2 * n_j;
+    const int n_q = c.n_owned;
+    const int nx = 2 * d + 1 + 2 * n_q;
     out.x0 = Eigen::VectorXd::Zero(nx);
     out.x0.segment(0, d)             = ts0.e;
     out.x0.segment(d, d)             = ts0.edot;
     out.x0(2 * d)                    = 1.0;
-    out.x0.segment(2 * d + 1, n_j).setZero();       // Δq measured from q0
-    out.x0.segment(2 * d + 1 + n_j, n_j) = s.v.tail(n_j);
+    // Owned joints, in ownedJointInds order: the state's layout. Δq starts at
+    // zero because it is measured relative to this tick's q0.
+    for (int i = 0; i < n_q; ++i)
+        out.x0(2 * d + 1 + n_q + i) = s.v(6 + c.ownedJointInds[i]);
 
     out.x_pred = A * out.x0 + B * u;
 
@@ -453,8 +466,11 @@ OneStepComparison compareOneStep(ModelProbe& c, const Eigen::Vector3d& u)
     out.x_true.segment(0, d)             = ts1.e;
     out.x_true.segment(d, d)             = ts1.edot;
     out.x_true(2 * d)                    = 1.0;
-    out.x_true.segment(2 * d + 1, n_j)   = q1.tail(n_j) - s.q.tail(n_j);
-    out.x_true.segment(2 * d + 1 + n_j, n_j) = v1.tail(n_j);
+    for (int i = 0; i < n_q; ++i) {
+        const int j = c.ownedJointInds[i];
+        out.x_true(2 * d + 1 + i)       = q1(7 + j) - s.q(7 + j);
+        out.x_true(2 * d + 1 + n_q + i) = v1(6 + j);
+    }
 
     return out;
 }
@@ -781,8 +797,12 @@ TEST(NmpcQP, DynamicsAreConsistentAcrossStages)
 
 NMPCParams liveParams()
 {
-    // The shape nmpc.yaml actually runs: SQP path, N=40, Ts=0.025.
+    // The shape nmpc.yaml actually runs: SQP path, N=40, Ts=0.025, 100 Hz. The
+    // control period matters here, not just to Tier 1: the warm-start shift
+    // advances by it, so leaving it unset makes the harness shift a whole stage a
+    // tick and stop representing the deployed controller.
     NMPCParams p = leftArmParams(0.025);
+    p.control_period = 0.010;
     p.N = 40;
     p.sqp_iters = 1;
     p.fullNonlinear = true;
@@ -1156,6 +1176,155 @@ TEST(SafeMode, DampingBringsTheArmToRest)
         << "decay stalled: v_mid=" << v_mid << " v_end=" << v_end;
 }
 
+// --- Tiered failure response ---------------------------------------------- //
+
+/*! Stage mapping: the plan's stages are Ts apart, the ticks control_period apart,
+ *  so a stage is held for the ticks it spans. Getting this wrong runs through the
+ *  plan 2.5x too fast at Ts=25 ms and a 10 ms period. */
+TEST(Tiers, PlanStageHoldsForTheTicksAStageSpans)
+{
+    NMPCParams p = liveParams();          // Ts = 0.025
+    p.control_period = 0.010;
+    ModelProbe c(kMjcf, p);
+    const State s = referenceState(c.n_joints_);
+    c.setDesiredPos(0.30, 0.25, 0.0);
+    c.computeControl(s.q, s.v);           // produces an accepted plan
+
+    // age 1,2 -> stage 0 (0 and 10 ms into a 25 ms stage); age 3,4,5 -> stage 1; ...
+    EXPECT_EQ(c.planStageForAge(1), 0);
+    EXPECT_EQ(c.planStageForAge(2), 0);
+    EXPECT_EQ(c.planStageForAge(3), 0);
+    EXPECT_EQ(c.planStageForAge(4), 1);
+    EXPECT_EQ(c.planStageForAge(6), 2);
+    EXPECT_EQ(c.planStageForAge(0), -1) << "age 0 is the accepting tick itself";
+    // Past the horizon the plan is exhausted and Tier 1 must give up.
+    EXPECT_EQ(c.planStageForAge(1 + static_cast<int>(2.5 * p.N) + 5), -1);
+}
+
+/*! A single failed solve should replay the plan, not abandon the task. Before the
+ *  tiers, one failure cost safe_mode_recovery_ticks of damping. */
+TEST(Tiers, OneFailedSolveReplaysThePlanInsteadOfDamping)
+{
+    NMPCParams p = liveParams();
+    p.control_period = 0.010;
+    ModelProbe c(kMjcf, p);
+    const State s = referenceState(c.n_joints_);
+    c.setDesiredPos(0.30, 0.25, 0.0);
+    const Eigen::VectorXd good = c.computeControl(s.q, s.v);
+    ASSERT_EQ(c.mode(), ArmNMPC::ControlMode::Nominal);
+
+    // Force exactly one failed solve by starving the solver, then restore it.
+    c.qp_->setIterMax(1);
+    const Eigen::VectorXd replayed = c.computeControl(s.q, s.v);
+    EXPECT_EQ(c.mode(), ArmNMPC::ControlMode::PlanReplay);
+    EXPECT_EQ(c.tier1Entries(), 1);
+    EXPECT_TRUE(replayed.allFinite());
+    // A replay is a task-space command, so it should look nothing like damping,
+    // which at near-zero velocity is near-zero torque.
+    EXPECT_GT(replayed.norm(), 1e-6);
+
+    c.qp_->setIterMax(p.qp_max_iter);
+    c.computeControl(s.q, s.v);
+    EXPECT_EQ(c.mode(), ArmNMPC::ControlMode::Nominal)
+        << "one good solve should end a Tier 1 replay -- no hysteresis";
+}
+
+/*! The replay budget has to be finite: a plan is only valid near the state it was
+ *  computed at, so a solver that stays broken must reach damping. */
+TEST(Tiers, ReplayBudgetExpiresIntoDamping)
+{
+    NMPCParams p = liveParams();
+    p.control_period = 0.010;
+    p.tier1_max_replay_ticks = 3;
+    ModelProbe c(kMjcf, p);
+    const State s = referenceState(c.n_joints_);
+    c.setDesiredPos(0.30, 0.25, 0.0);
+    c.computeControl(s.q, s.v);
+
+    c.qp_->setIterMax(1);
+    for (int i = 0; i < 3; ++i) {
+        c.computeControl(s.q, s.v);
+        EXPECT_EQ(c.mode(), ArmNMPC::ControlMode::PlanReplay) << "replay tick " << i;
+    }
+    c.computeControl(s.q, s.v);
+    EXPECT_EQ(c.mode(), ArmNMPC::ControlMode::Damping) << "budget spent, must damp";
+    EXPECT_EQ(c.tier1Ticks(), 3);
+}
+
+/*! Tier 1 off must reproduce the old behaviour exactly, so the tiers can be
+ *  switched out if they ever misbehave in flight. */
+TEST(Tiers, DisablingTier1FallsStraightToDamping)
+{
+    NMPCParams p = liveParams();
+    p.tier1_max_replay_ticks = 0;
+    ModelProbe c(kMjcf, p);
+    const State s = referenceState(c.n_joints_);
+    c.setDesiredPos(0.30, 0.25, 0.0);
+    c.computeControl(s.q, s.v);
+
+    c.qp_->setIterMax(1);
+    c.computeControl(s.q, s.v);
+    EXPECT_EQ(c.mode(), ArmNMPC::ControlMode::Damping);
+    EXPECT_EQ(c.tier1Ticks(), 0);
+}
+
+/*! Tier 3 stops the controller flapping between damping and tracking forever, and
+ *  must not clear itself. */
+TEST(Tiers, LatchesAfterSustainedDampingAndNeedsAnExplicitClear)
+{
+    NMPCParams p = liveParams();
+    p.tier1_max_replay_ticks  = 0;     // go straight to damping
+    p.tier3_latch_after_ticks = 4;
+    ModelProbe c(kMjcf, p);
+    const State s = referenceState(c.n_joints_);
+    c.setDesiredPos(0.30, 0.25, 0.0);
+    c.computeControl(s.q, s.v);
+
+    c.qp_->setIterMax(1);
+    for (int i = 0; i < 4; ++i) c.computeControl(s.q, s.v);
+    ASSERT_TRUE(c.latched());
+
+    // Healthy solves must NOT clear it.
+    c.qp_->setIterMax(p.qp_max_iter);
+    for (int i = 0; i < 3 * p.safe_mode_recovery_ticks; ++i) c.computeControl(s.q, s.v);
+    EXPECT_TRUE(c.latched()) << "a latch that times out is not a latch";
+
+    c.clearLatch();
+    EXPECT_FALSE(c.latched());
+    for (int i = 0; i < p.safe_mode_recovery_ticks + 1; ++i) c.computeControl(s.q, s.v);
+    EXPECT_EQ(c.mode(), ArmNMPC::ControlMode::Nominal)
+        << "after clearing, normal Tier 2 recovery should apply";
+}
+
+/*! Tier 1 reuses only the stale task WRENCH; the Jacobian and the Cv feedforward
+ *  are re-derived at the current measurement. So the same plan stage at a different
+ *  state must produce a different joint torque. */
+TEST(Tiers, ReplayUsesCurrentKinematicsNotAStaleTorque)
+{
+    NMPCParams p = liveParams();
+    p.control_period = 0.010;
+    ModelProbe c(kMjcf, p);
+    State s = referenceState(c.n_joints_);
+    c.setDesiredPos(0.30, 0.25, 0.0);
+    c.computeControl(s.q, s.v);
+
+    c.qp_->setIterMax(1);
+    const Eigen::VectorXd at_rest = c.computeControl(s.q, s.v);
+
+    // Same plan, same stage age, but the arm is now moving: Cv changes, so the
+    // commanded torque must too.
+    for (int idx : c.ownedJointInds) s.v[6 + idx] = 0.4;
+    ModelProbe c2(kMjcf, p);
+    c2.setDesiredPos(0.30, 0.25, 0.0);
+    c2.computeControl(s.q, Eigen::VectorXd::Zero(s.v.size()));
+    c2.qp_->setIterMax(1);
+    const Eigen::VectorXd moving = c2.computeControl(s.q, s.v);
+
+    ASSERT_EQ(c2.mode(), ArmNMPC::ControlMode::PlanReplay);
+    EXPECT_GT((moving - at_rest).norm(), 1e-9)
+        << "replay looks like it is reusing a torque rather than a wrench";
+}
+
 TEST(SafeMode, RejectsInvalidParams)
 {
     {   // sqp_iters = 0 skipped the rollout loop and left J_task0 at 0x0
@@ -1417,6 +1586,39 @@ TEST(RealtimeProfile, DeadlineMissesAreCountedAgainstTheBudget)
     EXPECT_EQ(c.profileReport().find("over_period"), std::string::npos);
 }
 
+/*! lastQpIters() sums acados' num_iter over every solve in the tick, which is only
+ *  right if acados reports it PER SOLVE rather than cumulatively. If it accumulated
+ *  internally the retry would be double counted and every reported figure for a
+ *  retried tick would be inflated. Pin it: one capped solve versus the same capped
+ *  solve plus its cold retry should differ by exactly one cap's worth. */
+TEST(RealtimeProfile, QpIterationsArePerSolveNotCumulative)
+{
+    constexpr int kCap = 4;        // below the ~8 a healthy solve needs, so it fails
+
+    NMPCParams cold = liveParams();
+    cold.qp_warm_start = 0;        // no retry path at all -> exactly one solve
+    ModelProbe c0(kMjcf, cold);
+    const State s = referenceState(c0.n_joints_);
+    c0.setDesiredPos(0.30, 0.25, 0.0);
+    c0.qp_->setIterMax(kCap);
+    c0.computeControl(s.q, s.v);
+    const int one_solve = c0.qp_->lastQpIters();
+
+    NMPCParams warm = liveParams();
+    warm.qp_warm_start = 1;        // fails, then retries cold -> two solves
+    ModelProbe c1(kMjcf, warm);
+    c1.setDesiredPos(0.30, 0.25, 0.0);
+    c1.qp_->setIterMax(kCap);
+    c1.computeControl(s.q, s.v);
+    const int two_solves = c1.qp_->lastQpIters();
+
+    ASSERT_TRUE(c1.qp_->lastRetried()) << "the retry did not fire, so this proves nothing";
+    EXPECT_EQ(one_solve, kCap) << "a capped failing solve should report the cap";
+    EXPECT_EQ(two_solves, 2 * kCap)
+        << "one solve reported " << one_solve << ", two reported " << two_solves
+        << " -- not 2x, so acados' num_iter is cumulative and the sum double counts";
+}
+
 /*! The iteration count is the link between a slow tick and its cause, so it has
  *  to come back from the solver rather than stay at the "no info" sentinel. */
 TEST(RealtimeProfile, QpIterationsAreReported)
@@ -1441,6 +1643,118 @@ TEST(RealtimeProfile, QpIterationsAreReported)
     EXPECT_EQ(c.qp_time_ms.count, 0);
     EXPECT_EQ(c.profileReport().find("qp_iter"), std::string::npos)
         << "an empty tally should not print a column";
+}
+
+/*! The per-tick trace exists because the report's eight histogram bins cannot
+ *  show the shape of the distribution. It has to be exact per tick, bounded, and
+ *  free of allocation on the control path. */
+TEST(RealtimeProfile, TraceRecordsEveryTickWithoutAllocating)
+{
+    constexpr std::size_t kCap = 8;
+    ModelProbe c(kMjcf, liveParams());
+    const State s = referenceState(c.n_joints_);
+    c.setDesiredPos(0.30, 0.25, 0.0);
+    c.computeControl(s.q, s.v);            // warm up before the buffer is armed
+
+    c.enableTrace(kCap);
+    long allocs = 0;
+    {
+        AllocScope scope;
+        for (std::size_t i = 0; i < kCap; ++i) c.computeControl(s.q, s.v);
+        allocs = scope.n();
+    }
+    ASSERT_EQ(c.trace().size(), kCap);
+
+    // Recording must not be what makes the tick allocate. Compare against the
+    // ceiling the un-traced path already holds to, rather than a fresh figure.
+    EXPECT_LT(static_cast<double>(allocs) / kCap, 2500.0);
+
+    for (const auto& r : c.trace()) {
+        EXPECT_GT(r.tick_us, 0.0f);
+        EXPECT_GT(r.qpsolve, 0.0f) << "the SQP path always solves";
+        // Phases are this tick's share, so they cannot exceed the tick itself.
+        const float summed = r.dynamics + r.jdotqdot + r.lambda + r.qpsolve
+                           + r.rollout_dynamics + r.rollout_integrate + r.pinv
+                           + r.build_model + r.defect + r.trust_region + r.finalize;
+        EXPECT_LE(summed, r.tick_us * 1.05f + 1.0f)
+            << "summed phases " << summed << " vs tick " << r.tick_us;
+        EXPECT_GE(r.qp_iters, 0);
+        EXPECT_EQ(r.mode, 0) << "nominal run should not be in safe mode";
+    }
+    // Monotonic timestamps, first row at zero.
+    EXPECT_FLOAT_EQ(static_cast<float>(c.trace().front().t_us), 0.0f);
+    for (std::size_t i = 1; i < c.trace().size(); ++i)
+        EXPECT_GT(c.trace()[i].t_us, c.trace()[i - 1].t_us);
+
+    // Bounded: further ticks are dropped, not appended, and never reallocate.
+    c.computeControl(s.q, s.v);
+    EXPECT_EQ(c.trace().size(), kCap);
+    EXPECT_TRUE(c.traceFull());
+}
+
+/*! A report window resets the PhaseStat sums the trace differences against, so
+ *  the first tick afterwards must not absorb the whole window's total. */
+TEST(RealtimeProfile, TraceSurvivesAProfileReset)
+{
+    ModelProbe c(kMjcf, liveParams());
+    const State s = referenceState(c.n_joints_);
+    c.setDesiredPos(0.30, 0.25, 0.0);
+    c.enableTrace(16);
+    for (int i = 0; i < 4; ++i) c.computeControl(s.q, s.v);
+    const float before = c.trace().back().qpsolve;
+
+    c.resetProfile();                      // what the diagnostics timer does
+    c.computeControl(s.q, s.v);
+    const float after = c.trace().back().qpsolve;
+
+    EXPECT_LT(after, 4.0f * before)
+        << "qpsolve " << after << " us after a reset vs " << before
+        << " before -- the reset baseline was not cleared";
+    EXPECT_LE(after, c.trace().back().tick_us);
+}
+
+// --- MuJoCo error / warning hooks ----------------------------------------- //
+
+/*! MuJoCo's default warning handler appends to MUJOCO_LOG.TXT -- a file write on
+ *  the control path, from a code path that fires when the solver is struggling.
+ *  The hook has to be ours, and it has to record rather than write. */
+TEST(MujocoHooks, WarningIsCountedAndNotWrittenToAFile)
+{
+    ModelProbe c(kMjcf, liveParams());     // the constructor installs the hooks
+    const long before = c.mjWarningCount();
+
+    mju_warning("pat test warning %d", 42);
+
+    EXPECT_EQ(c.mjWarningCount(), before + 1);
+    EXPECT_NE(std::string(c.lastMjWarning()).find("pat test warning 42"),
+              std::string::npos)
+        << "got: " << c.lastMjWarning();
+}
+
+/*! The default error handler calls exit(), which would kill the process mid-motion
+ *  with a torque latched in the actuators. Ours throws, so ArmNMPC's existing
+ *  guard can turn it into safe-mode damping. */
+TEST(MujocoHooks, ErrorThrowsInsteadOfTerminating)
+{
+    ModelProbe c(kMjcf, liveParams());
+    const long before = c.mjErrorCount();
+
+    EXPECT_THROW(mju_error("pat test error"), std::runtime_error);
+
+    EXPECT_EQ(c.mjErrorCount(), before + 1);
+    EXPECT_NE(std::string(c.lastMjError()).find("pat test error"),
+              std::string::npos)
+        << "got: " << c.lastMjError();
+}
+
+/*! Both counts have to reach the report, or redirecting MuJoCo's logging would
+ *  trade noisy-but-visible for silent. */
+TEST(MujocoHooks, CountsReachTheProfileReport)
+{
+    ModelProbe c(kMjcf, liveParams());
+    mju_warning("pat report probe");
+    EXPECT_NE(c.profileReport().find("MuJoCo warnings:"), std::string::npos);
+    EXPECT_NE(c.profileReport().find("pat report probe"), std::string::npos);
 }
 
 /*! Every phase the report lists must actually be timed on the active path --
@@ -1547,6 +1861,48 @@ TEST(DISABLED_PhaseStudy, Breakdown)
         st.v = v1;
     }
     std::printf("%s\n", c.profileReport().c_str());
+}
+
+/*! How much of each arm's plan depends on joints it does not command.
+ *
+ *  Each node runs its own ArmNMPC over the WHOLE model, so J_task is 3 x 6: its
+ *  columns for the other arm's joints are non-zero, because moving that arm pushes
+ *  the shared free-floating base and so moves this arm's end effector. The QP is
+ *  free to exploit those columns, but the node publishes effort only for its own
+ *  joints, and the other controller drives the rest to its own objective. The
+ *  column norms say whether that is a rounding error or a real model mismatch. */
+TEST(DISABLED_ArchitectureStudy, CrossArmCoupling)
+{
+    ModelProbe c(kMjcf, liveParams());        // left arm owns joints 0,1,2
+    const State s = referenceState(c.n_joints_);
+    const NodeDynamics nd = c.dynamicsAt(s.q, s.v, c.ee_site_id_);
+    const ModelProbe::NodeTaskSpace ts =
+        c.evalTaskSpace(s.q, s.v, nd.ee_pos, nd.ee_quat, nd.J_g6, nd.jdot_qdot6);
+
+    std::vector<bool> owned(c.n_joints_, false);
+    for (int i : c.ownedJointInds) owned[i] = true;
+
+    double owned_sq = 0.0, other_sq = 0.0;
+    std::printf("J_task column norms (rows = this arm's x, y, yaw task wrench)\n");
+    for (int j = 0; j < c.n_joints_; ++j) {
+        const double n = ts.J_task.col(j).norm();
+        (owned[j] ? owned_sq : other_sq) += n * n;
+        std::printf("  joint %d %-9s |col| = %.4f\n", j,
+                    owned[j] ? "(owned)" : "(OTHER arm)", n);
+    }
+    const double frac = std::sqrt(other_sq) / std::sqrt(owned_sq + other_sq);
+    std::printf("other-arm share of ||J_task|| = %.1f%%\n", 100.0 * frac);
+
+    // Also the authority the QP thinks it has, with and without those columns.
+    const Eigen::VectorXd bound_all = c.reachableWrenchBound(ts.J_task);
+    Eigen::MatrixXd J_owned = ts.J_task;
+    for (int j = 0; j < c.n_joints_; ++j)
+        if (!owned[j]) J_owned.col(j).setZero();
+    const Eigen::VectorXd bound_owned = c.reachableWrenchBound(J_owned);
+    std::printf("reachable wrench bound  all joints: %s\n",
+                (std::ostringstream{} << bound_all.transpose()).str().c_str());
+    std::printf("reachable wrench bound owned only: %s\n",
+                (std::ostringstream{} << bound_owned.transpose()).str().c_str());
 }
 
 TEST(DISABLED_WarmStartStudy, Ladder)

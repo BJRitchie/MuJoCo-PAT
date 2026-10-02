@@ -8,6 +8,30 @@ find_package(ament_cmake              REQUIRED)
 find_package(Eigen3                   REQUIRED NO_MODULE)
 find_package(pat_platform_description REQUIRED)   # shared piper_planar_arm.xacro
 
+# ─── Hot-path instruction set ──────────────────────────────────────────────
+# Empty by default and deliberately not "native": the runtime image is arm64, so
+# a baked-in host-specific default would either fail to build or produce
+# binaries that fault on the Jetson. Set it per build:
+#   dev box   -DPAT_ARCH_FLAGS="-march=native -mtune=native"
+#   Jetson    -DPAT_ARCH_FLAGS="-mcpu=cortex-a78"
+# Without it the workspace compiles for baseline x86-64 -- SSE2 only, no AVX or
+# FMA -- which is what Eigen then uses for the rollout's small dense algebra.
+# acados/BLASFEO are precompiled and unaffected; they carry their own target.
+set(PAT_ARCH_FLAGS "" CACHE STRING
+    "Extra -march/-mtune/-mcpu flags for this package's compiled code")
+
+# Applied to EVERY target here, never just the library. Eigen's object alignment
+# (EIGEN_MAX_ALIGN_BYTES) follows the enabled instruction set, so a library built
+# with AVX and an executable built without disagree about the layout of the Eigen
+# types they hand each other -- an ODR violation that corrupts data rather than
+# failing to link.
+function(pat_arm_nmpc_arch_flags target)
+    if(PAT_ARCH_FLAGS)
+        separate_arguments(_flags UNIX_COMMAND "${PAT_ARCH_FLAGS}")
+        target_compile_options(${target} PRIVATE ${_flags})
+    endif()
+endfunction()
+
 # The precompiled MuJoCo release ships no mujocoConfig.cmake — use our own
 # Find module (copied from pat_simulation). MuJoCo is used here only as a
 # rigid-body dynamics library (mass matrix, Jacobians, bias forces), never
@@ -31,6 +55,7 @@ target_include_directories(pat_arm_nmpc_lib PUBLIC
 target_link_libraries(pat_arm_nmpc_lib PUBLIC
     Eigen3::Eigen mujoco::mujoco acados::acados)
 target_compile_options(pat_arm_nmpc_lib PRIVATE -Wall -Wextra -Wpedantic)
+pat_arm_nmpc_arch_flags(pat_arm_nmpc_lib)
 
 # ─── ROS 2 node wrapper ───────────────────────────────────────────────────
 find_package(rclcpp        REQUIRED)
@@ -38,6 +63,7 @@ find_package(sensor_msgs   REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(nav_msgs      REQUIRED)
 add_executable(arm_nmpc_node src/arm_nmpc_node.cpp)
+pat_arm_nmpc_arch_flags(arm_nmpc_node)
 target_link_libraries(arm_nmpc_node pat_arm_nmpc_lib)
 ament_target_dependencies(arm_nmpc_node rclcpp sensor_msgs geometry_msgs nav_msgs)
 install(TARGETS arm_nmpc_node RUNTIME DESTINATION lib/${PROJECT_NAME})
@@ -77,6 +103,7 @@ install(FILES "${_model_xml}" "${CMAKE_CURRENT_SOURCE_DIR}/models/platform.xml"
 if(BUILD_TESTING)
     find_package(ament_cmake_gtest REQUIRED)
     ament_add_gtest(test_pat_arm_nmpc test/test_pat_arm_nmpc.cpp)
+    pat_arm_nmpc_arch_flags(test_pat_arm_nmpc)
     add_dependencies(test_pat_arm_nmpc pat_arm_nmpc_models)
     target_link_libraries(test_pat_arm_nmpc pat_arm_nmpc_lib)
     target_compile_definitions(test_pat_arm_nmpc PRIVATE

@@ -322,6 +322,24 @@ protected:
     /*! Log a BSK_ERROR and throw if hasNaN is true. */
     void checkNaN(bool hasNaN, const char* label);
 
+    /*! Redirect MuJoCo's error and warning hooks away from their defaults, which
+     *  are a file append (MUJOCO_LOG.TXT) and exit() respectively -- neither
+     *  acceptable from inside a control tick. Installed by this class's
+     *  constructor; exposed so a test can arm it explicitly.
+     *
+     *  The hooks are process-global in libmujoco, so this affects every MuJoCo
+     *  user in the process and the counters below are shared. A warning is
+     *  recorded and execution continues; an error throws, which ArmNMPC's guard
+     *  turns into safe-mode damping. */
+    static void installMujocoHooks();
+
+    //! Counts since process start, and the most recent message of each kind.
+    //! Read these off the tick -- they are what replaces MuJoCo's own logging.
+    static long mjWarningCount();
+    static long mjErrorCount();
+    static const char* lastMjWarning();
+    static const char* lastMjError();
+
     // --- Protected state (readable by subclass control laws) ------------------
     std::unique_ptr<MjImpl> mj_;     //!< mujoco model + data
     // Lazily created on first dynamicsAt()/integrateStep() call (mutable

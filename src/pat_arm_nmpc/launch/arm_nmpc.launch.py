@@ -32,12 +32,17 @@ def generate_launch_description() -> LaunchDescription:
         DeclareLaunchArgument("use_sim_time", default_value="true"),
         DeclareLaunchArgument("params_file", default_value=params_file),
         DeclareLaunchArgument("mjcf_path", default_value=mjcf_path),
+        # Per-tick timing trace, off when empty. Each node splices its own side
+        # into the filename, so both arms can share this one value.
+        DeclareLaunchArgument("trace_file", default_value=""),
         Node(name="pat_arm_nmpc_left", parameters=[
             LaunchConfiguration("params_file"),
             {"mjcf_path": LaunchConfiguration("mjcf_path"),
+             "trace_file": LaunchConfiguration("trace_file"),
              "use_sim_time": LaunchConfiguration("use_sim_time")}], **common),
         Node(name="pat_arm_nmpc_right", parameters=[
             LaunchConfiguration("params_file"),
             {"mjcf_path": LaunchConfiguration("mjcf_path"),
+             "trace_file": LaunchConfiguration("trace_file"),
              "use_sim_time": LaunchConfiguration("use_sim_time")}], **common),
     ])

@@ -45,6 +45,17 @@ ARG ACADOS_REF
 ARG TARGETARCH
 # Override for max perf: X64_INTEL_HASWELL / ARMV8A_ARM_CORTEX_A76 (Orin) / ...
 ARG BLASFEO_TARGET=""
+# HPIPM_TARGET stays GENERIC by default, deliberately. Measured on an i7-13700H
+# against an otherwise identical X64_INTEL_HASWELL build (same binary, swapped
+# only by LD_LIBRARY_PATH): ~3% of the QP solve, ~2% of the control tick -- at the
+# edge of this box's noise. BLASFEO already carries the AVX2/FMA kernels that do
+# the actual linear algebra; HPIPM's target only tunes its own glue.
+#
+# It must be set TOGETHER WITH an explicit BLASFEO_TARGET, never alone: a
+# concrete HPIPM target emits instructions for that CPU, so pairing it with
+# X64_AUTOMATIC (which resolves per build host) risks SIGILL wherever the image
+# later runs.
+ARG HPIPM_TARGET=GENERIC
 RUN set -eux; \
     git clone --recursive --depth 1 --branch "${ACADOS_REF}" \
         https://github.com/acados/acados.git /tmp/acados; \
@@ -54,12 +65,13 @@ RUN set -eux; \
         arm64) t=ARMV8A_ARM_CORTEX_A57 ;; \
         *)     t=GENERIC ;; \
       esac; fi; \
-    echo "BLASFEO_TARGET=$t"; \
+    echo "BLASFEO_TARGET=$t HPIPM_TARGET=${HPIPM_TARGET}"; \
     cmake -S /tmp/acados -B /tmp/acados/build \
         -DACADOS_INSTALL_DIR=/opt/acados \
         -DACADOS_WITH_QPOASES=OFF -DACADOS_WITH_OSQP=OFF -DACADOS_WITH_QPDUNES=OFF \
         -DACADOS_PYTHON=OFF -DACADOS_EXAMPLES=OFF -DACADOS_UNIT_TESTS=OFF \
-        -DBLASFEO_TARGET="$t" -DHPIPM_TARGET=GENERIC -DCMAKE_BUILD_TYPE=Release; \
+        -DBLASFEO_TARGET="$t" -DHPIPM_TARGET="${HPIPM_TARGET}" \
+        -DCMAKE_BUILD_TYPE=Release; \
     cmake --build /tmp/acados/build --target install -j2; \
     rm -rf /tmp/acados
 

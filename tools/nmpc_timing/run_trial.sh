@@ -17,7 +17,11 @@ usage: $(basename "$0") [-d SECONDS] [-o LOGFILE] [-t] [PARAMS_FILE]
   -d SECONDS   how long to run after startup (default 300). The report window is
                1 s, so this is roughly how many windows you get per arm.
   -o LOGFILE   where to write the captured output (default ./nmpc_trial.log)
-  -t           also bring up pat_telemetry, for EE-tracking plots
+  -T FILE      record every tick's timing to FILE, one CSV per arm (FILE gets
+               _left / _right spliced in). Plot with plot_trace.py. Adds a 1 Hz
+               file write on the executor thread, so leave it off when the
+               absolute worst-case tick is the measurement.
+  -e           also bring up pat_telemetry, for EE-tracking plots
   PARAMS_FILE  an nmpc.yaml to use instead of the installed default. Copy
                src/pat_arm_nmpc/config/nmpc.yaml, change one knob, pass it here --
                no rebuild needed, since the launch forwards it as params_file.
@@ -27,11 +31,13 @@ USAGE
 DURATION=300
 LOGFILE="nmpc_trial.log"
 TELEMETRY=false
-while getopts ":d:o:th" opt; do
+TRACE=""
+while getopts ":d:o:T:eh" opt; do
     case $opt in
         d) DURATION=$OPTARG ;;
         o) LOGFILE=$OPTARG ;;
-        t) TELEMETRY=true ;;
+        T) TRACE=$OPTARG ;;
+        e) TELEMETRY=true ;;
         h) usage; exit 0 ;;
         *) usage >&2; exit 2 ;;
     esac
@@ -68,15 +74,49 @@ if pgrep -x arm_nmpc_node >/dev/null 2>&1 || pgrep -x simulation_node >/dev/null
     exit 1
 fi
 
+# Which nmpc.yaml will actually be read. With no PARAMS the launch resolves
+# FindPackageShare, i.e. the INSTALLED copy -- which is a build-time copy of the
+# source one, so editing src/ without rebuilding silently measures the old
+# config. Resolve it here, report it, and refuse if the two have diverged.
+SRC_PARAMS="$ROOT/src/pat_arm_nmpc/config/nmpc.yaml"
+if [ -n "$PARAMS" ]; then
+    EFFECTIVE=$(readlink -f "$PARAMS")
+else
+    PREFIX=$(ros2 pkg prefix pat_arm_nmpc 2>/dev/null)
+    EFFECTIVE="$PREFIX/share/pat_arm_nmpc/config/nmpc.yaml"
+    if [ -f "$SRC_PARAMS" ] && [ -f "$EFFECTIVE" ] \
+       && ! diff -q "$SRC_PARAMS" "$EFFECTIVE" >/dev/null 2>&1; then
+        echo "REFUSING: the installed nmpc.yaml differs from src/." >&2
+        echo "  installed (what this run would use): $EFFECTIVE" >&2
+        echo "  source   (what you have been editing): $SRC_PARAMS" >&2
+        diff "$SRC_PARAMS" "$EFFECTIVE" | sed 's/^/    /' >&2
+        echo "  Either rebuild:  colcon build --packages-select pat_arm_nmpc" >&2
+        echo "  or pass it:      $(basename "$0") ... $SRC_PARAMS" >&2
+        exit 1
+    fi
+fi
+
 ARGS=(launch/full_stack_nmpc.launch.py with_targets:=true)
 [ -n "$PARAMS" ]        && ARGS+=("params_file:=$PARAMS")
+[ -n "$TRACE" ]         && ARGS+=("trace_file:=$TRACE")
 [ "$TELEMETRY" = true ] && ARGS+=(telemetry:=true)
 
 echo "running ${DURATION}s trial -> $LOGFILE" >&2
-echo "  params: ${PARAMS:-<installed default>}" >&2
+echo "  params: $EFFECTIVE" >&2
+[ -n "$TRACE" ] && echo "  trace:  ${TRACE} (_left / _right)" >&2
+# Record what produced this log, and the settings most likely to be the subject of
+# whatever comparison it gets used in. A log that cannot say which config it came
+# from is worth very little a day later.
+{
+    echo "# pat_arm_nmpc trial: $(date -Is), ${DURATION}s"
+    echo "# params_file: $EFFECTIVE"
+    grep -E '^\s+(control_hz|warm_start|max_iter|N|Ts|full_nonlinear|sqp_iters):' \
+        "$EFFECTIVE" 2>/dev/null | sed 's/^/#   /'
+} > "$LOGFILE"
+
 # Startup costs ~8 s (model load, DDS discovery, the first few solves) and those
 # windows are always the worst ones; summarise_timing.py drops them by default.
-timeout -s INT "$((DURATION + 10))" ros2 launch "${ARGS[@]}" > "$LOGFILE" 2>&1
+timeout -s INT "$((DURATION + 10))" ros2 launch "${ARGS[@]}" >> "$LOGFILE" 2>&1
 
 sleep 3
 if pgrep -x arm_nmpc_node >/dev/null 2>&1; then

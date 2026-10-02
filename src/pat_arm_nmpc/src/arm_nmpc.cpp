@@ -134,7 +134,8 @@ ArmNMPC::ArmNMPC(
     // --- Build the QuadProbSolver --------------------------------- //
     // This port is permanently the planar (x, y, theta_z) control law:
     //   task dim d = 3  (nu),  task-space block 2d+1 = 7  (nx_task),
-    //   augmented state nx = nx_task + 2*n_joints (the Delta-q / qdot rows).
+    //   augmented state nx = nx_task + 2*n_owned (the Delta-q / qdot rows of the
+    //   joints this controller actually commands).
     // Matches VORTEX's non-pose branch (use_pose_dims == false).
     const int d        = 3;
     const int nx_task  = 2 * d + 1;   // 7
@@ -143,7 +144,13 @@ ArmNMPC::ArmNMPC(
     quad_prob_solver::QuadProbSolverParams qp_params;
     qp_params.nx_task      = nx_task;
     qp_params.nu           = d;
-    qp_params.nx           = nx_task + 2 * n_j;
+
+    // Only the OWNED joints get Δq/qdot rows. The others would be states that
+    // appear in neither the cost (Q is zero on every joint row) nor the
+    // constraints (the box covers ownedJointInds only) and that no other row's
+    // dynamics read -- free variables, carried at full Riccati cost. Their motion
+    // is still predicted, in the nonlinear rollout, which uses the whole model.
+    qp_params.nx           = nx_task + 2 * n_owned;
     qp_params.N            = params_.N;
     qp_params.qp_max_iter  = params_.qp_max_iter;
     qp_params.qp_tol       = params_.qp_tol;
@@ -172,10 +179,13 @@ ArmNMPC::ArmNMPC(
             std::max(params_.relax_box_margin, params_.Ts * qd_max_owned);
     }
 
+    // Box rows, in QP-state coordinates. The joint rows are now indexed by OWNED
+    // position i, not by model joint index: the state carries n_owned of them, in
+    // ownedJointInds order, so this is the identity map and not a lookup.
     qp_params.idxbx_k.resize(2 * n_owned);
     for (int i = 0; i < n_owned; ++i) {
-        qp_params.idxbx_k[i]           = nx_task + ownedJointInds[i];         // Δq row for owned joint i
-        qp_params.idxbx_k[n_owned + i] = nx_task + n_j + ownedJointInds[i];   // qdot row for owned joint i
+        qp_params.idxbx_k[i]           = nx_task + i;              // Δq row
+        qp_params.idxbx_k[n_owned + i] = nx_task + n_owned + i;    // qdot row
     }
 
     // Hard terminal constraint edot_N = 0 (task-space velocity error), for
@@ -218,13 +228,12 @@ Eigen::VectorXd ArmNMPC::controlLaw(
     try {
         return controlLawImpl(q, v);
     } catch (const std::exception&) {
-        // A non-finite intermediate (checkNaN), a solver size mismatch, or an
-        // Eigen failure. Damping depends on none of that machinery, so it is
-        // still a valid command here — and it is finite by construction even if
-        // the measured velocity is not.
-        enterDamping();
-        ++safe_mode_ticks_;
-        return dampingTorque(v);
+        // A non-finite intermediate (checkNaN), a solver size mismatch, an Eigen
+        // failure, or a MuJoCo error via the installed hook. No Tier 1 here on
+        // purpose: the kinematics this tick produced are exactly what is suspect,
+        // so replaying a wrench through them is not safe. Damping depends on none
+        // of that machinery and is finite by construction even if v is not.
+        return onSolveFailure(v, nullptr, nullptr);
     }
 }
 
@@ -235,7 +244,7 @@ Eigen::VectorXd ArmNMPC::controlLawImpl(
     const auto start = std::chrono::steady_clock::now();
 
     const int n_j = n_joints_;
-    const int nx  = 7 + 2 * n_j;   // 2*d+1 + 2*n_j, d=3
+    const int nx  = 7 + 2 * n_owned;   // 2*d+1 + 2*n_owned, d=3
 
     // --- Stage/terminal cost (task-space channels only) -------------------------
     Eigen::MatrixXd Q = Eigen::MatrixXd::Zero(nx, nx);
@@ -324,18 +333,21 @@ Eigen::VectorXd ArmNMPC::controlLawImpl(
         Eigen::VectorXd tau_task;
         if (!solveStageQP(A, B, Q, R, lbx_j, ubx_j, D, lg, ug,
                           x_aug, Q_N, tau_task)) {
-            enterDamping();
-            ++safe_mode_ticks_;
+            // This path keeps no multi-stage plan (it solves one stage), so Tier 1
+            // has nothing to replay -- pass no kinematics and let it fall to Tier 2.
+            const Eigen::VectorXd out_fail = onSolveFailure(v, nullptr, nullptr);
             recordTick(start);
-            return dampingTorque(v);
+            return out_fail;
         }
-        if (mode_ == ControlMode::Damping) {
+        if (mode_ == ControlMode::Damping || mode_ == ControlMode::Latched) {
             ++safe_mode_ticks_;
-            if (++consecutive_ok_ < params_.safe_mode_recovery_ticks) {
+            if (mode_ == ControlMode::Latched ||
+                ++consecutive_ok_ < params_.safe_mode_recovery_ticks) {
                 recordTick(start);
                 return dampingTorque(v);
             }
             mode_ = ControlMode::Nominal;   // recovered; fall through to tracking
+            damping_run_ = 0;
         }
 
         out = finalizeJointTorques(J_g, tau_task, Cv_joints);
@@ -466,10 +478,10 @@ void ArmNMPC::buildAugmentedModel(
     Eigen::MatrixXd& A, Eigen::MatrixXd& B)
 {
     const int d   = static_cast<int>(Lambda_inv.rows());   // task dim == nu
-    const int n_j = n_joints_;
+    const int n_q = n_owned;            // joint rows carried in the state
     const double Ts = params_.Ts;
     const int nt  = 2 * d + 1;          // task-space block: pos + vel + bias channel
-    const int nx  = nt + 2 * n_j;
+    const int nx  = nt + 2 * n_q;
 
     Eigen::MatrixXd A_task = Eigen::MatrixXd::Zero(nt, nt);
     A_task.block(0, 0, d, d)     = Eigen::MatrixXd::Identity(d, d);
@@ -499,13 +511,20 @@ void ArmNMPC::buildAugmentedModel(
     // Sign is positive where the task rows' is negative: those track an error
     // (x_d − x), these track the joint quantities themselves.
 
-    // Δq rows: [nt, nt+n_j)
-    A.block(nt, nt, n_j, n_j)       = Eigen::MatrixXd::Identity(n_j, n_j);
-    A.block(nt, nt + n_j, n_j, n_j) = Ts * Eigen::MatrixXd::Identity(n_j, n_j);
-    B.block(nt, 0, n_j, d)          = (Ts * Ts / 2.0) * H_g_inv_Jt;
-    // qdot rows: [nt+n_j, nt+2*n_j)
-    A.block(nt + n_j, nt + n_j, n_j, n_j) = Eigen::MatrixXd::Identity(n_j, n_j);
-    B.block(nt + n_j, 0, n_j, d)          = Ts * H_g_inv_Jt;
+    // Δq rows: [nt, nt+n_q)
+    A.block(nt, nt, n_q, n_q)       = Eigen::MatrixXd::Identity(n_q, n_q);
+    A.block(nt, nt + n_q, n_q, n_q) = Ts * Eigen::MatrixXd::Identity(n_q, n_q);
+    // qdot rows: [nt+n_q, nt+2*n_q)
+    A.block(nt + n_q, nt + n_q, n_q, n_q) = Eigen::MatrixXd::Identity(n_q, n_q);
+
+    // H_g_inv_Jt is indexed by MODEL joint, the state by owned position, so the
+    // control blocks gather. Row at a time, rather than through a gathered
+    // temporary, so the rollout's ~N calls a tick stay allocation-free.
+    for (int k = 0; k < n_q; ++k) {
+        const int j = ownedJointInds[static_cast<std::size_t>(k)];
+        B.block(nt + k, 0, 1, d)         = (Ts * Ts / 2.0) * H_g_inv_Jt.row(j);
+        B.block(nt + n_q + k, 0, 1, d)   = Ts * H_g_inv_Jt.row(j);
+    }
 }
 
 // Δq/qdot box bounds on the OWNED joints, offset by the current measurement q0.
@@ -573,6 +592,106 @@ void ArmNMPC::enterDamping()
     u_bar_.assign(params_.N, Eigen::VectorXd::Zero(3));
 }
 
+void ArmNMPC::clearLatch()
+{
+    if (mode_ != ControlMode::Latched) return;
+    mode_ = ControlMode::Damping;   // back to auto-recovering, not straight to tracking
+    damping_run_ = 0;
+    consecutive_ok_ = 0;
+}
+
+void ArmNMPC::shiftNominalControl()
+{
+    const int N = static_cast<int>(u_bar_.size());
+    if (N < 2) return;
+
+    // The plan advances by the REAL time one tick covers, which is control_period,
+    // not by one stage. Shifting a whole stage per tick -- as this did -- advances
+    // the warm start Ts/control_period times too fast (2.5x at Ts=25 ms, 100 Hz),
+    // so every tick linearises around a trajectory 15 ms of plan ahead of where the
+    // arm will actually be.
+    //
+    // Fractional shift by linear interpolation: u_new[k] = u_old[k + f], with
+    // repeat-last-hold past the end, which is what the whole-stage version did at
+    // the tail. f == 1 reproduces it exactly.
+    const double dt = params_.control_period > 0.0 ? params_.control_period : params_.Ts;
+    const double f  = dt / params_.Ts;
+    if (f >= 1.0) {                    // ticks at or slower than the grid: plain shift
+        for (int k = 0; k < N - 1; ++k) u_bar_[k] = u_bar_[k + 1];
+        return;
+    }
+    for (int k = 0; k < N; ++k) {
+        const double src = static_cast<double>(k) + f;
+        const int    i   = static_cast<int>(src);
+        
+        if (i >= N - 1) { 
+            u_bar_[k] = u_bar_[N - 1]; 
+            continue; 
+        }
+        const double w = src - static_cast<double>(i);
+
+        // In place is safe here: f < 1 means i == k, so this reads entries k and
+        // k+1 and writes k. Entry k+1 still holds its original value, because it
+        // is not written until the next iteration.
+        u_bar_[k] = (1.0 - w) * u_bar_[i] + w * u_bar_[i + 1];
+    }
+}
+
+void ArmNMPC::acceptPlan()
+{
+    // Sizes match after the first tick, so this copy-assigns without allocating.
+    u_accepted_         = u_bar_;
+    have_accepted_plan_ = true;
+    replay_ticks_       = 0;
+}
+
+int ArmNMPC::planStageForAge(int age_ticks) const
+{
+    if (u_accepted_.empty() || age_ticks < 1) return -1;
+    const double dt = params_.control_period > 0.0 ? params_.control_period : params_.Ts;
+    // age 1 is the first tick after the plan was accepted. The shift already
+    // advanced u_bar_ by one stage before the snapshot, so that tick wants stage 0.
+    const int stage = static_cast<int>(
+        std::floor(static_cast<double>(age_ticks - 1) * dt / params_.Ts));
+    return stage < static_cast<int>(u_accepted_.size()) ? stage : -1;
+}
+
+Eigen::VectorXd ArmNMPC::onSolveFailure(
+    const Eigen::VectorXd& v, const Eigen::MatrixXd* J_task, const Eigen::VectorXd* Cv)
+{
+    // Tier 3 first: a latched controller stays down whatever this tick looked like.
+    if (mode_ == ControlMode::Latched) {
+        ++safe_mode_ticks_;
+        return dampingTorque(v);
+    }
+
+    // Tier 1: replay the accepted plan, if there is one, the budget is not spent,
+    // and this tick produced the kinematics needed to turn a wrench into torque.
+    const int stage = planStageForAge(replay_ticks_ + 1);
+    if (params_.tier1_max_replay_ticks > 0 && have_accepted_plan_ &&
+        replay_ticks_ < params_.tier1_max_replay_ticks && stage >= 0 &&
+        J_task != nullptr && Cv != nullptr) {
+        if (mode_ != ControlMode::PlanReplay) {
+            mode_ = ControlMode::PlanReplay;
+            ++tier1_entries_;
+        }
+        ++replay_ticks_;
+        ++tier1_ticks_;
+        consecutive_ok_ = 0;
+        damping_run_    = 0;
+        return finalizeJointTorques(*J_task, u_accepted_[static_cast<std::size_t>(stage)], *Cv);
+    }
+
+    // Tier 2, and Tier 3 once it has gone on long enough to count as not recovering.
+    enterDamping();
+    ++safe_mode_ticks_;
+    if (params_.tier3_latch_after_ticks > 0 &&
+        ++damping_run_ >= params_.tier3_latch_after_ticks) {
+        mode_ = ControlMode::Latched;
+    }
+    return dampingTorque(v);
+}
+
 int ArmNMPC::lastQpStatus() const
 {
     return qp_ ? qp_->lastStatus() : 0;
@@ -617,10 +736,88 @@ void ArmNMPC::recordSlack()
     }
 }
 
+void ArmNMPC::snapshotPhaseSums()
+{
+    prev_sums_.dynamics          = dynamics.sum_us;
+    prev_sums_.jdotqdot          = jdotqdot.sum_us;
+    prev_sums_.lambda            = lambda.sum_us;
+    prev_sums_.qpsolve           = qpsolve.sum_us;
+    prev_sums_.rollout_dynamics  = rollout_dynamics.sum_us;
+    prev_sums_.rollout_integrate = rollout_integrate.sum_us;
+    prev_sums_.pinv              = pinv.sum_us;
+    prev_sums_.build_model       = build_model.sum_us;
+    prev_sums_.defect            = defect.sum_us;
+    prev_sums_.trust_region      = trust_region.sum_us;
+    prev_sums_.finalize          = finalize.sum_us;
+    prev_sums_.hpipm_ms          = qp_time_ms.sum;
+}
+
+void ArmNMPC::enableTrace(std::size_t capacity)
+{
+    trace_cap_ = capacity;
+    trace_.clear();
+    // The one allocation, here and not on a tick. push_back below can then never
+    // reallocate, because recording stops at capacity.
+    trace_.reserve(capacity);
+    trace_t0_set_ = false;
+    // "Record from now", so the baseline is the sums as they stand. Leaving it at
+    // zero would charge every tick that ran before this call to the first traced
+    // one.
+    snapshotPhaseSums();
+}
+
+void ArmNMPC::drainTrace(std::vector<TickTrace>& sink)
+{
+    sink.clear();
+    sink.swap(trace_);
+    // trace_ now holds whatever buffer `sink` brought, which on the first drain is
+    // an empty one. Restoring the reservation here, off the control path, is what
+    // keeps the push_back in recordTick from ever allocating.
+    trace_.reserve(trace_cap_);
+}
+
 void ArmNMPC::recordTick(std::chrono::steady_clock::time_point start)
 {
     const auto stop = std::chrono::steady_clock::now();
-    tick.add(std::chrono::duration<double, std::micro>(stop - start).count());
+    const double tick_us =
+        std::chrono::duration<double, std::micro>(stop - start).count();
+    tick.add(tick_us);
+
+    if (trace_cap_ == 0 || trace_.size() >= trace_cap_) return;
+
+    if (!trace_t0_set_) {
+        trace_t0_     = start;
+        trace_t0_set_ = true;
+    }
+
+    // Each phase's share of THIS tick is how far its running sum moved.
+    const auto take = [](double now, double& prev) {
+        const double d = now - prev;
+        prev = now;
+        return static_cast<float>(d);
+    };
+    TickTrace r{};
+    r.t_us    = std::chrono::duration<double, std::micro>(start - trace_t0_).count();
+    r.tick_us = static_cast<float>(tick_us);
+    r.dynamics          = take(dynamics.sum_us,          prev_sums_.dynamics);
+    r.jdotqdot          = take(jdotqdot.sum_us,          prev_sums_.jdotqdot);
+    r.lambda            = take(lambda.sum_us,            prev_sums_.lambda);
+    r.qpsolve           = take(qpsolve.sum_us,           prev_sums_.qpsolve);
+    r.rollout_dynamics  = take(rollout_dynamics.sum_us,  prev_sums_.rollout_dynamics);
+    r.rollout_integrate = take(rollout_integrate.sum_us, prev_sums_.rollout_integrate);
+    r.pinv              = take(pinv.sum_us,              prev_sums_.pinv);
+    r.build_model       = take(build_model.sum_us,       prev_sums_.build_model);
+    r.defect            = take(defect.sum_us,            prev_sums_.defect);
+    r.trust_region      = take(trust_region.sum_us,      prev_sums_.trust_region);
+    r.finalize          = take(finalize.sum_us,          prev_sums_.finalize);
+    r.hpipm_us          = take(qp_time_ms.sum, prev_sums_.hpipm_ms) * 1.0e3f;
+    r.qp_iters   = qp_ ? qp_->lastQpIters() : -1;
+    r.qp_status  = static_cast<int16_t>(lastQpStatus());
+    r.qp_iters1  = qp_ ? qp_->firstQpIters() : -1;
+    r.qp_status1 = static_cast<int16_t>(qp_ ? qp_->firstQpStatus() : 0);
+    r.mode      = static_cast<int8_t>(mode_);   // 0 nominal, 1 replay, 2 damping, 3 latched
+    r.retried   = (qp_ && qp_->lastRetried()) ? 1 : 0;
+    trace_.push_back(r);
 }
 
 std::string ArmNMPC::profileReport() const
@@ -677,6 +874,21 @@ std::string ArmNMPC::profileReport() const
     // Only printed when non-zero: it should never happen, so a permanent "=0"
     // column would just be noise on every report.
     if (spd_fallbacks_ > 0) os << "  H_g NOT PD on " << spd_fallbacks_ << " solves";
+    if (trace_cap_ > 0) {
+        os << "  trace " << trace_.size() << "/" << trace_cap_
+           << (traceFull() ? " FULL" : "");
+    }
+    // MuJoCo's own logging is redirected to counters, so this is the only place it
+    // surfaces. Counts are since process start, not per window: an mj warning is a
+    // standing condition worth seeing every report until it is dealt with.
+    if (mjWarningCount() > 0) {
+        os << "\n  MuJoCo warnings: " << mjWarningCount()
+           << " (last: " << lastMjWarning() << ")";
+    }
+    if (mjErrorCount() > 0) {
+        os << "\n  MuJoCo errors: " << mjErrorCount()
+           << " (last: " << lastMjError() << ")";
+    }
     os << "  | peak slack: box=" << max_box_slack_ << " torque=" << max_tau_slack_;
     return os.str();
 }
@@ -690,6 +902,9 @@ void ArmNMPC::resetProfile()
     finalize.reset();   qp_iters.reset();          qp_time_ms.reset();
     qp_retries     = 0;
     spd_fallbacks_ = 0;
+    // The PhaseStat sums the trace differences against have just gone to zero, so
+    // the baseline has to follow or the next tick absorbs the whole window.
+    snapshotPhaseSums();
     max_box_slack_ = 0.0;
     max_tau_slack_ = 0.0;
 }
@@ -755,9 +970,10 @@ Eigen::VectorXd ArmNMPC::solveNonlinearMPC(
 {
     const int N   = params_.N;
     const int n_j = n_joints_;
+    const int n_q = n_owned;        // joint rows in the QP state, owned joints only
     const double Ts = params_.Ts;
     const int nt  = 2 * d + 1;
-    const int nx  = nt + 2 * n_j;
+    const int nx  = nt + 2 * n_q;
 
     // Warm start / re-init on first tick or a dimension change.
     if (static_cast<int>(u_bar_.size()) != N ||
@@ -795,8 +1011,14 @@ Eigen::VectorXd ArmNMPC::solveNonlinearMPC(
             x_aug_k.segment(0, d) = ts.e;
             x_aug_k.segment(d, d) = ts.edot;
             x_aug_k(2 * d) = 1.0;
-            x_aug_k.segment(nt, n_j)       = q_k.tail(n_j) - q0;   // Δq_k
-            x_aug_k.segment(nt + n_j, n_j) = v_k.tail(n_j);        // qdot_k
+            // Owned joints only, in ownedJointInds order, matching the state
+            // layout and idxbx_k. q0/q_k/v_k stay full-model: they feed the box
+            // bounds and the rollout, which both work in model indices.
+            for (int i = 0; i < n_q; ++i) {
+                const int j = ownedJointInds[static_cast<std::size_t>(i)];
+                x_aug_k(nt + i)       = q_k(7 + j) - q0(j);   // Δq_k
+                x_aug_k(nt + n_q + i) = v_k(6 + j);           // qdot_k
+            }
             x_aug_nodes[k] = x_aug_k;
 
             if (k == 0) {
@@ -911,10 +1133,10 @@ Eigen::VectorXd ArmNMPC::solveNonlinearMPC(
         // A solver that reports success but returns non-finite controls is a
         // failed solve: letting it into u_bar_ poisons every later rollout.
         if (ok) {
-            Eigen::VectorXd uk(d);
+            uk_.resize(d);
             for (int k = 0; k < N && ok; ++k) {
-                qp_->getU(k, uk.data());
-                ok = uk.allFinite();
+                qp_->getU(k, uk_.data());
+                ok = uk_.allFinite();
             }
         }
         lastIterOk = ok;
@@ -937,10 +1159,12 @@ Eigen::VectorXd ArmNMPC::solveNonlinearMPC(
                 ScopedTimer t_tr(trust_region);
                 const Eigen::VectorXd du_max =
                     params_.du_max_frac * reachableWrenchBound(J_task0);
+                // uk_ is a member, so this loop and the finite check above reuse
+                // one buffer instead of allocating a 3-vector per stage per tick.
+                uk_.resize(d);
                 for (int k = 0; k < N; ++k) {
-                    Eigen::VectorXd uk(d);
-                    qp_->getU(k, uk.data());
-                    u_bar_[k] = u_bar_[k] + (uk - u_bar_[k]).cwiseMax(-du_max).cwiseMin(du_max);
+                    qp_->getU(k, uk_.data());
+                    u_bar_[k] = u_bar_[k] + (uk_ - u_bar_[k]).cwiseMax(-du_max).cwiseMin(du_max);
                 }
             }
             tau_task_result = u_bar_[0];
@@ -966,23 +1190,37 @@ Eigen::VectorXd ArmNMPC::solveNonlinearMPC(
     // next tick's rollout input. enterDamping() zeroes the whole trajectory
     // instead, so the next rollout coasts rather than compounding whatever
     // caused this tick's solve to fail.
-    if (lastIterOk) {
-        for (int k = 0; k < N - 1; ++k) u_bar_[k] = u_bar_[k + 1];
-        // u_bar_[N-1] keeps its last value (repeat-last-hold).
-    } else {
-        enterDamping();
+    if (!lastIterOk) {
+        // Tier 1/2/3. J_task0 and Cv_joints0 come from rollout node 0, i.e. the
+        // CURRENT measurement, and are valid even though the solve failed -- the
+        // rollout runs before the QP.
+        return onSolveFailure(v, &J_task0, &Cv_joints0);
     }
 
-    // Safe mode is sticky: hold the damping command until the solver has been
-    // healthy for safe_mode_recovery_ticks in a row, so a marginal solve cannot
-    // chatter the output between damping and full tracking. Hysteresis only --
-    // the handover on recovery is a step, not a ramp.
-    if (mode_ == ControlMode::Damping) {
+    shiftNominalControl();
+    // u_bar_[N-1] keeps its last value (repeat-last-hold). Snapshot after the
+    // shift, so the plan's element 0 is the control for the NEXT tick.
+    acceptPlan();
+
+    // Tier 1 is a transient, so one good solve ends it -- no hysteresis, since
+    // replay was still tracking the setpoint and the handover is between two
+    // task-space commands rather than from damping.
+    if (mode_ == ControlMode::PlanReplay) {
+        mode_ = ControlMode::Nominal;
+    }
+
+    // Tier 2 is sticky: hold the damping command until the solver has been healthy
+    // for safe_mode_recovery_ticks in a row, so a marginal solve cannot chatter the
+    // output between damping and full tracking. Hysteresis only -- the handover on
+    // recovery is a step, not a ramp. Tier 3 does not recover here at all.
+    if (mode_ == ControlMode::Damping || mode_ == ControlMode::Latched) {
         ++safe_mode_ticks_;
-        if (!lastIterOk || ++consecutive_ok_ < params_.safe_mode_recovery_ticks) {
+        if (mode_ == ControlMode::Latched ||
+            ++consecutive_ok_ < params_.safe_mode_recovery_ticks) {
             return dampingTorque(v);
         }
         mode_ = ControlMode::Nominal;
+        damping_run_ = 0;
     }
 
     ScopedTimer t_fin(finalize);

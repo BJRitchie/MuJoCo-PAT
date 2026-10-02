@@ -18,6 +18,10 @@ its setpoint - see /chaser/telemetry/*).
 `params_file:=/path/to/nmpc.yaml` swaps the NMPC tuning set, forwarded to
 arm_nmpc.launch.py. Defaults to pat_arm_nmpc's installed config/nmpc.yaml.
 
+`trace_file:=/path/to/trace.csv` records every control tick's timing and writes
+it at exit, one file per arm (trace_left.csv / trace_right.csv). Off by default.
+Plot it with tools/nmpc_timing/plot_trace.py.
+
 `plotjuggler:=true` additionally launches PlotJuggler itself with the saved
 layout (`src/pat_telemetry/config/telemetry.xml`) preloaded - a separate flag
 from `telemetry` since the GUI is a viewing convenience, not something every
@@ -36,7 +40,8 @@ from launch_ros.substitutions import FindPackageShare
 def generate_launch_description() -> LaunchDescription:
     use_sim_time = {"use_sim_time": LaunchConfiguration("use_sim_time")}.items()
     nmpc_args = {"use_sim_time": LaunchConfiguration("use_sim_time"),
-                 "params_file": LaunchConfiguration("params_file")}.items()
+                 "params_file": LaunchConfiguration("params_file"),
+                 "trace_file": LaunchConfiguration("trace_file")}.items()
     # Repeats arm_nmpc.launch.py's own default rather than forwarding an empty
     # string: launch_arguments is fixed when the description is built, so there is
     # no way to omit the argument conditionally on its value.
@@ -45,6 +50,7 @@ def generate_launch_description() -> LaunchDescription:
     return LaunchDescription([
         DeclareLaunchArgument("use_sim_time", default_value="true"),
         DeclareLaunchArgument("params_file", default_value=nmpc_params),
+        DeclareLaunchArgument("trace_file", default_value=""),
         DeclareLaunchArgument("with_gnc", default_value="false"),
         DeclareLaunchArgument("with_targets", default_value="false"),
         DeclareLaunchArgument("telemetry", default_value="false"),

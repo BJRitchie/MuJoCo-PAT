@@ -15,12 +15,13 @@ namespace quad_prob_solver {
 struct QuadProbSolverParams {
     int nx_task = 0;   //!< task-space error state dim (7 or 13)
     int nu      = 0;   //!< control dim (3 or 6)
-    // Total state dim. For the bare task-space model this equals nx_task;
-    // if the caller augments the state with Δq/qdot joint-limit rows (see
-    // armConstrainedNMPController.cpp's reverted idxbx_joint design), this
-    // is nx_task + 2*n_joints instead. Not derived automatically since this
-    // class has no notion of "joints" -- the caller owns that math and just
-    // tells the solver how big the state vector it will push actually is.
+    
+    // Total state dim. For the bare task-space model this equals nx_task; if the
+    // caller augments the state with Δq/qdot joint-limit rows it is
+    // nx_task + 2*(however many joints the caller chose to carry) -- ArmNMPC
+    // carries only the joints it owns, not every joint in its model. Not derived
+    // automatically since this class has no notion of "joints": the caller owns
+    // that math and just tells the solver how big a state vector it will push.
     int nx      = 0;
     int N       = 0;
 
@@ -305,6 +306,14 @@ public:
      *  rate — and stderr bypasses ROS logging entirely. */
     int lastStatus() const { return last_status_; }
 
+    /*! Change the HPIPM iteration cap after construction.
+     *
+     *  Unlike warm_start this is safe to vary at runtime: it bounds the solve
+     *  rather than carrying state into it. Two uses -- forcing a failure in a test
+     *  without building a second solver, and a future time-bounded cap chosen from
+     *  the measured per-iteration cost. */
+    void setIterMax(int iter_max);
+
     /*! Interior-point iterations and the time HPIPM itself reports, summed over
      *  every ocp_qp_solve this tick — so a cold-start retry's first, failed solve
      *  is included rather than overwritten by the second. That makes the time
@@ -313,6 +322,15 @@ public:
      *  covers. -1 iterations if acados reported no info. */
     int    lastQpIters()   const { return last_iters_; }
     double lastQpTimeMs()  const { return last_qp_time_ms_; }
+
+    /*! The FIRST solve of the tick on its own -- its iteration count and its status
+     *  -- where lastQpIters()/lastStatus() describe the tick as a whole and the
+     *  retry respectively. The pair matters for diagnosing a bad tick: a first
+     *  solve that burns the cap and a retry that converges quickly means the warm
+     *  start was the problem, whereas both burning the cap means the QP instance
+     *  itself is hard and raising the cap is unlikely to help. */
+    int firstQpIters()  const { return first_iters_; }
+    int firstQpStatus() const { return first_status_; }
 
     /*! Whether the most recent solve needed the cold-start retry, which solves the
      *  same QP a second time. Worth separating from the iteration count: a retry
@@ -364,9 +382,13 @@ private:
     //! that ran long before failing is exactly the one worth accounting for.
     void resetIters();
     void addIters();
+    //! Latch the first solve's outcome, called once per tick right after it.
+    void recordFirstSolve(int status);
     int    last_iters_       = -1;
     double last_qp_time_ms_  = 0.0;
     bool   last_retried_     = false;
+    int    first_iters_      = -1;
+    int    first_status_     = 0;
 
     // Which rows are soft, per stage, decided once in the constructor and read
     // back by nsAt/nsbxAt/nsgAt. Single source of truth: the constructor wires

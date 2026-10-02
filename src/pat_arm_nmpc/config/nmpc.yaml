@@ -132,9 +132,29 @@
     # own joints. kd = damping_frac * model_tau_max / limits.qd_max, so it tracks
     # the torque limits and stays within damping_frac*tau_max at rated speed --
     # note the torque limit, not this number, sets how fast the arm can stop.
+    # Graded response to a solve that produced nothing usable:
+    #   Tier 1  replay the last accepted plan, time-shifted  (tier1_max_replay_ticks)
+    #   Tier 2  joint damping, task abandoned                (damping_frac)
+    #   Tier 3  latched damping, no auto-recovery            (tier3_latch_after_ticks)
+    # Tier 1 exists because the solver computes N stages and applies only the first,
+    # so one bad solve does not mean there is nothing sensible left to do.
     safe_mode:
       damping_frac: 1.0
-      recovery_ticks: 10   # good solves before resuming; hysteresis, not a ramp
+      recovery_ticks: 10   # good solves before leaving Tier 2; hysteresis, not a ramp
+      # 5 ticks = 50 ms at 100 Hz. Sized for the transient, not the horizon: the
+      # measured failures last one tick, and a replayed plan goes stale as the true
+      # state leaves the one it was computed at. Raising it trades tracking error
+      # for fewer Tier 2 entries. 0 disables Tier 1.
+      #
+      # How stale the plan goes depends on how far the setpoint moves. Today
+      # ee_target_publisher steps between waypoints, which is the worst case for a
+      # replayed plan; once a path planner feeds a smooth reference the plan stays
+      # valid for longer and this can afford to be larger.
+      tier1_max_replay_ticks: 5
+      # 5 s of unbroken damping at 100 Hz. Past that the solver is not coming back
+      # and flapping between damping and tracking is worse than stopping; clearing
+      # the latch is an operator action. 0 never latches.
+      tier3_latch_after_ticks: 500
 
     # /chaser/odom reports slide-joint values relative to air_bearing_table's
     # <body name="chaser" pos="-0.5 0 ..."> anchor, not world position, while this
@@ -144,8 +164,8 @@
     base_anchor_y:  0.0
 
     nmpc:
-      Ts: 0.025
-      N:  40
+      Ts: 0.033
+      N:  30
       
       full_nonlinear: true       
       sqp_iters: 1
@@ -166,7 +186,7 @@
       R_ori:        [ 1.0e-3, 1.0e-3, 1.0e-3]  # unused
 
     qp:
-      max_iter: 100
+      max_iter: 60
       tol: 1.0e-5
       reg_prim: 1.0e-6
       # 0 cold, 1 primal, 2 primal+dual. Primal-only: carrying the DUAL iterate

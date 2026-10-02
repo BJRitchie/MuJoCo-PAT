@@ -124,6 +124,34 @@ struct NMPCParams {
      *  which steps straight from damping to the full QP solution. */
     int    safe_mode_recovery_ticks = 10;
 
+    /*! Tier 1 budget: ticks the controller may keep executing the last ACCEPTED
+     *  plan after a failed solve, before giving up and damping. The solver already
+     *  produced N stages of control and only the first was applied, so a single
+     *  bad solve does not mean there is nothing sensible to do.
+     *
+     *  Replaying beats holding the last torque: on a free-floating base a held
+     *  torque keeps pushing the shared bus with nothing scheduled to undo it,
+     *  whereas the plan was computed as a trajectory that arrives with zero
+     *  terminal velocity. It beats damping for a TRANSIENT failure, which is what
+     *  the measured ones are (one bad solve, then recovery).
+     *
+     *  Sized for the transient, not for the horizon: the plan goes stale as the
+     *  true state diverges from the one it was computed at, so this is tens of
+     *  milliseconds, not the full second the horizon covers. 0 disables Tier 1. */
+    int    tier1_max_replay_ticks = 5;
+
+    /*! Tier 3: consecutive damping ticks after which safe mode LATCHES and stops
+     *  auto-recovering, so a solver that never regains health cannot flap between
+     *  damping and tracking indefinitely. Clearing it is deliberate
+     *  (ArmNMPC::clearLatch) rather than automatic. 0 disables latching. */
+    int    tier3_latch_after_ticks = 500;
+
+    /*! Control period [s] — the interval between ticks, NOT the horizon step Ts.
+     *  Used only to map a plan whose stages are Ts apart onto ticks that are this
+     *  far apart during Tier 1 replay. 0 means "one stage per tick", which is only
+     *  right when Ts happens to equal the period. */
+    double control_period = 0.0;
+
     NMPCParams() = default;
 };
 
@@ -156,9 +184,17 @@ public:
      *  external setpoint arrives. */
     EePose currentEePose(const Eigen::VectorXd& q, const Eigen::VectorXd& v);
 
-    /*! Nominal = tracking the setpoint. Damping = safe mode, commanding
-     *  tau = -kd*qdot to bring the arm to rest. */
-    enum class ControlMode { Nominal, Damping };
+    /*! The graded response to a solve that did not produce a usable answer.
+     *
+     *    Nominal    tracking the setpoint from a fresh solve
+     *    PlanReplay Tier 1 -- executing the last accepted plan, time-shifted
+     *    Damping    Tier 2 -- tau = -kd*qdot, task abandoned, auto-recovers
+     *    Latched    Tier 3 -- as Damping but will not auto-recover
+     *
+     *  The tiers exist because the response used to be binary: one failed solve
+     *  dropped straight to damping and safe_mode_recovery_ticks then held it there,
+     *  so a single bad solve cost ~100 ms of abandoned tracking at 100 Hz. */
+    enum class ControlMode { Nominal, PlanReplay, Damping, Latched };
 
     /*! Safe-mode joint damping: tau = -kd*qdot on the owned joints, zero
      *  elsewhere, clamped per joint. Deliberately depends on nothing but the
@@ -177,6 +213,14 @@ public:
      *  node to log, since a brief excursion and a permanent one look the same
      *  from a single transition message. */
     long safeModeTicks() const { return safe_mode_ticks_; }
+
+    //! Tier counters since construction, for the node's health reporting.
+    long tier1Ticks()   const { return tier1_ticks_; }
+    long tier1Entries() const { return tier1_entries_; }
+    bool latched()      const { return mode_ == ControlMode::Latched; }
+    /*! Leave Tier 3. Deliberately explicit: the latch means the solver never
+     *  recovered on its own, so resuming is an operator decision, not a timeout. */
+    void clearLatch();
     /*! HPIPM status from the most recent solve (0 = converged), for the node to
      *  report when it logs a transition into safe mode. */
     int lastQpStatus() const;
@@ -195,6 +239,57 @@ public:
      *  the statistics are per-interval, not cumulative, because a running average
      *  over a whole session stops responding to the spike that matters. */
     void resetProfile();
+
+    /*! One row per control tick, for plotting the distribution offline.
+     *
+     *  The report line's histogram is eight fixed bins chosen around a 5 ms
+     *  period, which is far too coarse to see the shape of the distribution at
+     *  other rates. This keeps every tick instead. Durations are microseconds;
+     *  the phase fields are that tick's share, so they sum to roughly `tick_us`
+     *  less the unattributed remainder. */
+    struct TickTrace {
+        double t_us;          //!< since the first recorded tick, the x axis
+        float tick_us;        //!< whole controlLawImpl
+        float dynamics;       //!< the linearized path only
+        float jdotqdot;       //!< the linearized path only
+        float lambda;
+        float qpsolve;
+        float rollout_dynamics;
+        float rollout_integrate;
+        float pinv;
+        float build_model;
+        float defect;
+        float trust_region;
+        float finalize;
+        float hpipm_us;       //!< HPIPM's own reported time, summed over the tick
+        int32_t qp_iters;     //!< summed over the tick's solves; -1 if unreported
+        int16_t qp_status;    //!< 0 converged, 1 max iter, 2 min step, 3 NaN
+        int32_t qp_iters1;    //!< the FIRST solve alone, before any retry
+        int16_t qp_status1;   //!< the first solve's status
+        int8_t mode;          //!< ControlMode: 0 nominal, 1 replay, 2 damping, 3 latched
+        int8_t retried;       //!< 1 if the cold-start retry ran
+    };
+
+    /*! Start recording, into a buffer allocated once, here. Recording stops when
+     *  it is full rather than growing or wrapping: a trace that silently dropped
+     *  its first half would misreport a run's start, and a tick must never
+     *  allocate. Capacity 0 disables. */
+    void enableTrace(std::size_t capacity);
+    const std::vector<TickTrace>& trace() const { return trace_; }
+    void clearTrace() { trace_.clear(); }
+    //! True once the buffer filled and ticks stopped being recorded. With a caller
+    //! that drains regularly this should never become true; if it does, the
+    //! capacity is smaller than the drain interval's worth of ticks.
+    bool traceFull() const { return trace_cap_ > 0 && trace_.size() >= trace_cap_; }
+
+    /*! Move the recorded rows into `sink` and resume recording from empty.
+     *
+     *  For a caller that writes them out as the run proceeds, so the trace is not
+     *  all held in memory and is not all lost if the process is killed -- which is
+     *  what happens under `ros2 launch`, whose shutdown escalates to SIGKILL on a
+     *  grace period a large write does not finish inside. Call this from the
+     *  diagnostics path, never from the control tick. */
+    void drainTrace(std::vector<TickTrace>& sink);
 
 protected:
     /*! Thin guard around controlLawImpl: any exception escaping the control
@@ -383,6 +478,46 @@ protected:
     ControlMode         mode_ = ControlMode::Nominal;
     int                 consecutive_ok_ = 0;
     long                safe_mode_ticks_ = 0;
+    int                 damping_run_ = 0;      //!< consecutive damping ticks, for Tier 3
+
+    /*! The graded failure response. Returns the torque to apply for a tick whose
+     *  solve produced nothing usable, and sets mode_ accordingly.
+     *
+     *  J_task / Cv are this tick's, at the CURRENT measurement, and may be null
+     *  when the failure happened before they were computed (an exception out of
+     *  the rollout). Tier 1 needs them: it reuses only the stale task WRENCH and
+     *  re-derives the joint torque from fresh kinematics, so the feedforward stays
+     *  current and only the plan is old. Without them it falls through to Tier 2. */
+    Eigen::VectorXd onSolveFailure(const Eigen::VectorXd& v,
+                                   const Eigen::MatrixXd* J_task,
+                                   const Eigen::VectorXd* Cv);
+
+    /*! Advance the nominal control trajectory by ONE TICK of real time, which is
+     *  control_period and not one horizon stage. Shifting a whole stage per tick
+     *  moves the warm start Ts/control_period times too fast; at Ts = 25 ms and
+     *  100 Hz that is 2.5x, so every tick would linearise around a trajectory
+     *  15 ms of plan ahead of where the arm is going to be. */
+    void shiftNominalControl();
+
+    //! Snapshot u_bar_ as the plan Tier 1 may replay. Only after a validated
+    //! success, and after the shift, so element 0 is the NEXT tick's control.
+    void acceptPlan();
+
+    /*! Which plan stage a replay tick that is `age_ticks` old should apply, or -1
+     *  if the plan is exhausted. Stages are Ts apart and ticks are control_period
+     *  apart, so a stage is HELD for the ticks it spans -- not an approximation,
+     *  since the prediction model itself assumes u constant across Ts. */
+    int planStageForAge(int age_ticks) const;
+
+    // The plan Tier 1 replays. Separate from u_bar_ on purpose: u_bar_ is mutated
+    // in place by the trust region, is zeroed by enterDamping(), and after a failed
+    // solve holds a partially-updated iterate. acados' internal iterate is no good
+    // either -- it may be garbage once a solve has failed.
+    std::vector<Eigen::VectorXd> u_accepted_;
+    bool                         have_accepted_plan_ = false;
+    int                          replay_ticks_  = 0;   //!< ticks into the current replay
+    long                         tier1_ticks_   = 0;
+    long                         tier1_entries_ = 0;
 
     // Box/torque-constrained QP solver (acados_c + HPIPM backend).
     std::unique_ptr<quad_prob_solver::QuadProbSolver> qp_;
@@ -431,6 +566,30 @@ protected:
     //! to stay 0: a non-zero count means the model's inertia is degenerate, not
     //! that the arm reached an awkward pose.
     long  spd_fallbacks_ = 0;
+
+    //! Stage-control scratch for the SQP path's per-stage reads out of the solver.
+    //! A member rather than a local because both loops that use it run N times a
+    //! tick, and a fresh VectorXd each pass is N allocations for a 3-vector.
+    Eigen::VectorXd uk_;
+
+    // --- Per-tick trace ----------------------------------------------------
+    // A tick's phase cost is the GROWTH of each PhaseStat's running sum across
+    // it, so no second set of accumulators is needed -- just the previous tick's
+    // sums. resetProfile() zeroes these alongside the PhaseStats, which keeps the
+    // first delta after a report window correct rather than counting the window's
+    // whole total into one tick.
+    std::vector<TickTrace> trace_;
+    std::size_t            trace_cap_ = 0;
+    bool                   trace_t0_set_ = false;
+    std::chrono::steady_clock::time_point trace_t0_{};
+    struct PhaseSums {
+        double dynamics = 0, jdotqdot = 0, lambda = 0, qpsolve = 0;
+        double rollout_dynamics = 0, rollout_integrate = 0, pinv = 0;
+        double build_model = 0, defect = 0, trust_region = 0, finalize = 0;
+        double hpipm_ms = 0;
+    } prev_sums_;
+    //! Re-baseline the per-tick deltas on the sums as they stand right now.
+    void snapshotPhaseSums();
 
     // Worst soft-constraint slack since the last profile report -- box (joint
     // position/velocity) and general (torque) rows kept apart, since they carry
