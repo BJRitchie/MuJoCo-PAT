@@ -258,8 +258,9 @@ Eigen::VectorXd ArmNMPC::controlLawImpl(
         TaskSpaceEval eval = [this](
             const Eigen::VectorXd& q_node, const Eigen::VectorXd& v_node,
             const Eigen::Vector3d& ee_pos, const Eigen::Vector4d& ee_quat,
-            const Eigen::MatrixXd& J_g6, const Eigen::Matrix<double, 6, 1>& jdot_qdot6) {
-            return evalTaskSpace(q_node, v_node, ee_pos, ee_quat, J_g6, jdot_qdot6);
+            const Eigen::MatrixXd& J_g6, const Eigen::Matrix<double, 6, 1>& jdot_qdot6,
+            NodeTaskSpace& ts_out) {
+            evalTaskSpace(q_node, v_node, ee_pos, ee_quat, J_g6, jdot_qdot6, ts_out);
         };
         out = solveNonlinearMPC(q, v, /*d=*/3, eval, Q, R, Q_N);
     } else {
@@ -390,10 +391,13 @@ void ArmNMPC::computeInertiaProducts(
         // model the QP sees, and removing it costs 83% on the worst tick (worst
         // solve 14 -> 24 iterations on the warm-start scenario) for no gain in
         // tracking.
+        // G, HgJt and the Cholesky are members: this runs once per rollout node,
+        // so a local for any of them is N allocations a tick.
         const double lambda_sq = params_.Hg_damping * params_.Hg_damping;
-        Eigen::MatrixXd G = H_g * H_g;
-        G.diagonal().array() += lambda_sq;
-        if (!solveSpd(G, H_g * J.transpose(), H_g_inv_Jt)) {
+        G_.noalias() = H_g * H_g;
+        G_.diagonal().array() += lambda_sq;
+        HgJt_.noalias() = H_g * J.transpose();
+        if (!solveSpd(G_, HgJt_, H_g_inv_Jt, hg_llt_)) {
             ++spd_fallbacks_;
             H_g_inv_Jt = pinvDLS(H_g, params_.Hg_damping) * J.transpose();
         }
@@ -483,22 +487,24 @@ void ArmNMPC::buildAugmentedModel(
     const int nt  = 2 * d + 1;          // task-space block: pos + vel + bias channel
     const int nx  = nt + 2 * n_q;
 
-    Eigen::MatrixXd A_task = Eigen::MatrixXd::Zero(nt, nt);
-    A_task.block(0, 0, d, d)     = Eigen::MatrixXd::Identity(d, d);
-    A_task.block(0, d, d, d)     = Ts * Eigen::MatrixXd::Identity(d, d);
-    A_task.block(0, 2 * d, d, 1) = (Ts * Ts / 2.0) * bias;
-    A_task.block(d, d, d, d)     = Eigen::MatrixXd::Identity(d, d);
-    A_task.block(d, 2 * d, d, 1) = Ts * bias;
-    A_task(2 * d, 2 * d)         = 1.0;
+    // Written straight into A/B's blocks. The task block used to be assembled in
+    // its own A_task/B_task first and copied in, which cost two allocations per
+    // rollout node for no benefit; setZero/setIdentity resize and fill in place,
+    // where MatrixXd::Zero/Identity build a temporary to assign from.
+    A.setZero(nx, nx);
+    B.setZero(nx, d);
 
-    Eigen::MatrixXd B_task = Eigen::MatrixXd::Zero(nt, d);
-    B_task.block(0, 0, d, d) = -(Ts * Ts / 2.0) * Lambda_inv;
-    B_task.block(d, 0, d, d) = -Ts * Lambda_inv;
+    // Task rows: [0, nt), the error double integrator plus the frozen-bias channel.
+    A.block(0, 0, d, d).setIdentity();
+    A.block(0, d, d, d).setIdentity();
+    A.block(0, d, d, d) *= Ts;
+    A.block(0, 2 * d, d, 1) = (Ts * Ts / 2.0) * bias;
+    A.block(d, d, d, d).setIdentity();
+    A.block(d, 2 * d, d, 1) = Ts * bias;
+    A(2 * d, 2 * d)         = 1.0;
 
-    A = Eigen::MatrixXd::Zero(nx, nx);
-    B = Eigen::MatrixXd::Zero(nx, d);
-    A.block(0, 0, nt, nt) = A_task;
-    B.block(0, 0, nt, d)  = B_task;
+    B.block(0, 0, d, d) = -(Ts * Ts / 2.0) * Lambda_inv;
+    B.block(d, 0, d, d) = -Ts * Lambda_inv;
 
     // Joint-space augmentation. Δq and qdot are states in their own right, so
     // they integrate their own dynamics rather than being reconstructed from
@@ -512,10 +518,11 @@ void ArmNMPC::buildAugmentedModel(
     // (x_d − x), these track the joint quantities themselves.
 
     // Δq rows: [nt, nt+n_q)
-    A.block(nt, nt, n_q, n_q)       = Eigen::MatrixXd::Identity(n_q, n_q);
-    A.block(nt, nt + n_q, n_q, n_q) = Ts * Eigen::MatrixXd::Identity(n_q, n_q);
+    A.block(nt, nt, n_q, n_q).setIdentity();
+    A.block(nt, nt + n_q, n_q, n_q).setIdentity();
+    A.block(nt, nt + n_q, n_q, n_q) *= Ts;
     // qdot rows: [nt+n_q, nt+2*n_q)
-    A.block(nt + n_q, nt + n_q, n_q, n_q) = Eigen::MatrixXd::Identity(n_q, n_q);
+    A.block(nt + n_q, nt + n_q, n_q, n_q).setIdentity();
 
     // H_g_inv_Jt is indexed by MODEL joint, the state by owned position, so the
     // control blocks gather. Row at a time, rather than through a gathered
@@ -919,11 +926,21 @@ void ArmNMPC::resetProfile()
 // node-0 computation (see the comment there), just packaged into a
 // NodeTaskSpace so solveNonlinearMPC can call it once per rollout node.
 ArmNMPC::NodeTaskSpace ArmNMPC::evalTaskSpace(
-    const Eigen::VectorXd& /*q_node*/, const Eigen::VectorXd& v_node,
+    const Eigen::VectorXd& q_node, const Eigen::VectorXd& v_node,
     const Eigen::Vector3d& ee_pos, const Eigen::Vector4d& ee_quat,
     const Eigen::MatrixXd& J_g6, const Eigen::Matrix<double, 6, 1>& jdot_qdot6) const
 {
     NodeTaskSpace ts;
+    evalTaskSpace(q_node, v_node, ee_pos, ee_quat, J_g6, jdot_qdot6, ts);
+    return ts;
+}
+
+void ArmNMPC::evalTaskSpace(
+    const Eigen::VectorXd& /*q_node*/, const Eigen::VectorXd& v_node,
+    const Eigen::Vector3d& ee_pos, const Eigen::Vector4d& ee_quat,
+    const Eigen::MatrixXd& J_g6, const Eigen::Matrix<double, 6, 1>& jdot_qdot6,
+    NodeTaskSpace& ts) const
+{
     Eigen::Vector2d p_d(desiredPos[0], desiredPos[1]);   // desiredPos[2] (Z) unused
     Eigen::Vector2d v_d(desiredVel[0], desiredVel[1]);
     Eigen::Vector2d a_d(desiredAcc[0], desiredAcc[1]);
@@ -952,7 +969,6 @@ ArmNMPC::NodeTaskSpace ArmNMPC::evalTaskSpace(
     ts.edot << v_d - v_ee.head<2>(), w_d - v_ee(2);
     ts.bias.resize(3);
     ts.bias << a_d - jdot_qdot6.head<2>(), aw_d - jdot_qdot6(5);
-    return ts;
 }
 
 // Multiple-shooting SQP: rolls the nonlinear plant forward N steps under the
@@ -991,21 +1007,36 @@ Eigen::VectorXd ArmNMPC::solveNonlinearMPC(
     bool lastIterOk = false;
 
     for (int iter = 0; iter < params_.sqp_iters; ++iter) {
-        std::vector<Eigen::MatrixXd> A_k(N), B_k(N), D_k(N);
-        std::vector<Eigen::VectorXd> b_k(N), lg_k(N), ug_k(N);
-        std::vector<Eigen::VectorXd> x_aug_nodes(N + 1);
+        // Members, not locals: six vectors of N matrices plus N+1 state vectors
+        // rebuilt every tick is the single largest block of per-tick allocation.
+        // Sized once here and reused; each entry's own buffer then survives too,
+        // because assigning a same-sized Eigen object does not reallocate.
+        if (static_cast<int>(A_k_.size()) != N) {
+            A_k_.resize(N); B_k_.resize(N); D_k_.resize(N);
+            b_k_.resize(N); lg_k_.resize(N); ug_k_.resize(N);
+            x_aug_nodes_.resize(N + 1);
+        }
+        auto& A_k = A_k_;  auto& B_k = B_k_;  auto& D_k = D_k_;
+        auto& b_k = b_k_;  auto& lg_k = lg_k_; auto& ug_k = ug_k_;
+        auto& x_aug_nodes = x_aug_nodes_;
 
         Eigen::VectorXd q_k = q, v_k = v;
         for (int k = 0; k <= N; ++k) {
             // Node 0 uses the same (q, v) as the live measured state -- a
             // scratch-buffer mj_forward at those exact inputs reproduces the
             // live computation exactly, so no special-casing is needed here.
-            NodeDynamics nd;
+            // nd_scratch_ is a member reused across nodes AND across ticks: a
+            // local NodeDynamics would allocate its three dynamic Eigen members
+            // at every one of the N+1 nodes. Only the current node's is ever
+            // needed -- node 0's J_task/Cv are captured separately below.
+            NodeDynamics& nd = nd_scratch_;
             {
                 ScopedTimer t(rollout_dynamics);
-                nd = dynamicsAt(q_k, v_k, ee_site_id_);
+                dynamicsAt(q_k, v_k, ee_site_id_, nd);
             }
-            NodeTaskSpace ts = evalTaskSpace(q_k, v_k, nd.ee_pos, nd.ee_quat, nd.J_g6, nd.jdot_qdot6);
+            // Same reasoning as nd_scratch_: one instance for all N+1 nodes.
+            NodeTaskSpace& ts = ts_scratch_;
+            evalTaskSpace(q_k, v_k, nd.ee_pos, nd.ee_quat, nd.J_g6, nd.jdot_qdot6, ts);
 
             Eigen::VectorXd x_aug_k = Eigen::VectorXd::Zero(nx);
             x_aug_k.segment(0, d) = ts.e;

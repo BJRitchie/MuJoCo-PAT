@@ -398,15 +398,26 @@ protected:
         Eigen::MatrixXd J_task;     // d x n_joints_
         Eigen::VectorXd bias;       // dim d (a_d - h')
     };
-    using TaskSpaceEval = std::function<NodeTaskSpace(
+    //! Writes into a NodeTaskSpace the caller owns rather than returning one:
+    //! NodeTaskSpace carries four dynamically-sized Eigen members, so a by-value
+    //! return costs four allocations at every rollout node.
+    using TaskSpaceEval = std::function<void(
         const Eigen::VectorXd& q_node, const Eigen::VectorXd& v_node,
         const Eigen::Vector3d& ee_pos, const Eigen::Vector4d& ee_quat,
-        const Eigen::MatrixXd& J_g6, const Eigen::Matrix<double, 6, 1>& jdot_qdot6)>;
+        const Eigen::MatrixXd& J_g6, const Eigen::Matrix<double, 6, 1>& jdot_qdot6,
+        NodeTaskSpace& out)>;
 
-    /*! TaskSpaceEval implementations. Each control law wraps it in a thin 
+    /*! TaskSpaceEval implementations. Each control law wraps it in a thin
      *  TaskSpaceEval lambda when calling solveNonlinearMPC()
      *  (a lambda is still needed to bind `this` into the std::function, but
-     *  the actual per-dimension logic lives here, named and documented). */
+     *  the actual per-dimension logic lives here, named and documented).
+     *  The out-parameter form is what the rollout uses; the by-value one remains
+     *  for the tests and for single-shot callers. */
+    void evalTaskSpace(
+        const Eigen::VectorXd& q_node, const Eigen::VectorXd& v_node,
+        const Eigen::Vector3d& ee_pos, const Eigen::Vector4d& ee_quat,
+        const Eigen::MatrixXd& J_g6, const Eigen::Matrix<double, 6, 1>& jdot_qdot6,
+        NodeTaskSpace& out) const;
     NodeTaskSpace evalTaskSpace(
         const Eigen::VectorXd& q_node, const Eigen::VectorXd& v_node,
         const Eigen::Vector3d& ee_pos, const Eigen::Vector4d& ee_quat,
@@ -566,6 +577,22 @@ protected:
     //! to stay 0: a non-zero count means the model's inertia is degenerate, not
     //! that the arm reached an awkward pose.
     long  spd_fallbacks_ = 0;
+
+    //! The rollout's per-node dynamics, held rather than created per node. Only
+    //! the current node's is ever live, so one instance serves all N+1.
+    NodeDynamics nd_scratch_;
+    NodeTaskSpace ts_scratch_;   //!< likewise, for the per-node task-space terms
+
+    //! The multi-stage QP's per-stage data, held across ticks. Sized once for the
+    //! horizon; each entry keeps its own buffer, since assigning a same-sized
+    //! Eigen object reuses the storage it already has.
+    std::vector<Eigen::MatrixXd> A_k_, B_k_, D_k_;
+    std::vector<Eigen::VectorXd> b_k_, lg_k_, ug_k_, x_aug_nodes_;
+
+    //! computeInertiaProducts' workspace: H_g^2 + d^2 I, H_g J^T, and the Cholesky
+    //! of the former. Members for the same reason -- once per node, N a tick.
+    Eigen::MatrixXd G_, HgJt_;
+    Eigen::LLT<Eigen::MatrixXd> hg_llt_;
 
     //! Stage-control scratch for the SQP path's per-stage reads out of the solver.
     //! A member rather than a local because both loops that use it run N times a

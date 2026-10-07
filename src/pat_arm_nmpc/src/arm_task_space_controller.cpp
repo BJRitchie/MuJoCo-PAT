@@ -110,6 +110,8 @@ ArmTaskSpaceController::ArmTaskSpaceController(
 
     mj_->data = mj_makeData(mj_->model);
     n_joints_ = mj_->model->nv - 6;
+
+    initNodeScratch();   // needs the model and n_joints_, so last
 }
 
 ArmTaskSpaceController::~ArmTaskSpaceController() = default;
@@ -209,6 +211,20 @@ Eigen::Vector4d ArmTaskSpaceController::eeOrientation(int site_id, mjData* data)
     return Eigen::Vector4d(quat[0], quat[1], quat[2], quat[3]);
 }
 
+void ArmTaskSpaceController::initNodeScratch()
+{
+    const int nv = mj_->model->nv;
+    ns_.J_full.resize(6, nv);
+    ns_.c_b.resize(6);
+    ns_.Cv_base.resize(6);
+    ns_.hbb_solve_vec.resize(6);
+    ns_.jacp_dot.resize(3, nv);
+    ns_.jacr_dot.resize(3, nv);
+    ns_.qvel.resize(nv);
+    ns_.J_0.resize(6, 6);
+    ns_.v_mid.resize(nv);
+}
+
 void ArmTaskSpaceController::computeBaseElim(mjData* data, BaseElim& be) const
 {
     mjData* d = data ? data : mj_->data;
@@ -218,6 +234,7 @@ void ArmTaskSpaceController::computeBaseElim(mjData* data, BaseElim& be) const
     mj_fullM(mj_->model, be.M.data(), d->qM);       // already dense + symmetric
     be.H_bm = be.M.topRightCorner(6, n_joints_);
     be.H_bb_ldlt.compute(be.M.topLeftCorner(6, 6));
+    be.H_bb_inv_H_bm = be.H_bb_ldlt.solve(be.H_bm);
 }
 
 void ArmTaskSpaceController::computeSiteJacobian(
@@ -245,8 +262,9 @@ void ArmTaskSpaceController::getDynamics(
     mjData* d = data ? data : mj_->data;
 
     // Generalised inertia:  H_g = H_mm − H_bm^T H_bb^{−1} H_bm
-    H_g = be.M.bottomRightCorner(n_joints_, n_joints_)
-          - be.H_bm.transpose() * be.H_bb_ldlt.solve(be.H_bm);
+    H_g.resize(n_joints_, n_joints_);
+    H_g.noalias() = be.M.bottomRightCorner(n_joints_, n_joints_)
+                    - be.H_bm.transpose() * be.H_bb_inv_H_bm;
 
     // Generalised bias, same base elimination as H_g (unactuated base):
     //   Cv_g = c_m − H_bm^T H_bb^{−1} c_b
@@ -254,13 +272,13 @@ void ArmTaskSpaceController::getDynamics(
     // omits the base Coriolis reaction, so the feedforward under-cancels and
     // H_g q̈ = J^T τ no longer holds (consistent with H_g, gjm6 and
     // jdotQdot6, which all apply this same elimination).
-    Eigen::VectorXd c_b(6);
-    for (int i = 0; i < 6; ++i) c_b[i] = d->qfrc_bias[i];
+    for (int i = 0; i < 6; ++i) ns_.c_b[i] = d->qfrc_bias[i];
     Cv_joints.resize(n_joints_);
     for (int i = 0; i < n_joints_; ++i) {
         Cv_joints[i] = d->qfrc_bias[6 + i];
     }
-    Cv_joints -= be.H_bm.transpose() * be.H_bb_ldlt.solve(c_b);
+    ns_.hbb_solve_vec = be.H_bb_ldlt.solve(ns_.c_b);
+    Cv_joints.noalias() -= be.H_bm.transpose() * ns_.hbb_solve_vec;
 }
 
 Eigen::Matrix3Xd ArmTaskSpaceController::gjm(int site_id, mjData* data) const
@@ -292,18 +310,25 @@ Eigen::MatrixXd ArmTaskSpaceController::gjm6(int site_id, mjData* data) const
     return gjm6(be);
 }
 
-Eigen::MatrixXd ArmTaskSpaceController::gjm6(const BaseElim& be) const
+void ArmTaskSpaceController::gjm6(const BaseElim& be, Eigen::MatrixXd& out) const
 {
-    Eigen::MatrixXd J_full(6, mj_->model->nv);
-    J_full.topRows(3)    = be.jacp;
-    J_full.bottomRows(3) = be.jacr;
+    ns_.J_full.topRows(3)    = be.jacp;
+    ns_.J_full.bottomRows(3) = be.jacr;
 
     // Same base-coupling correction as gjm(), applied to both the
     // translational and rotational rows at once — the correction
     // J_b H_bb^-1 H_bm is linear per-row, so stacking jacp/jacr first and
     // correcting once is equivalent to correcting each block separately.
-    return J_full.rightCols(n_joints_)
-           - J_full.leftCols(6) * be.H_bb_ldlt.solve(be.H_bm);
+    out.resize(6, n_joints_);
+    out.noalias() = ns_.J_full.rightCols(n_joints_)
+                    - ns_.J_full.leftCols(6) * be.H_bb_inv_H_bm;
+}
+
+Eigen::MatrixXd ArmTaskSpaceController::gjm6(const BaseElim& be) const
+{
+    Eigen::MatrixXd out;
+    gjm6(be, out);
+    return out;
 }
 
 Eigen::Vector3d ArmTaskSpaceController::jdotQdot(int site_id, mjData* data) const
@@ -351,29 +376,36 @@ Eigen::Matrix<double, 6, 1> ArmTaskSpaceController::jdotQdot6(
 {
     mjData* d = data ? data : mj_->data;
     const int nv = mj_->model->nv;
-    Eigen::Matrix<double, 3, Eigen::Dynamic, Eigen::RowMajor> jacp_dot(3, nv);
-    Eigen::Matrix<double, 3, Eigen::Dynamic, Eigen::RowMajor> jacr_dot(3, nv);
-    mj_jacDot(mj_->model, d, jacp_dot.data(), jacr_dot.data(),
+    mj_jacDot(mj_->model, d, ns_.jacp_dot.data(), ns_.jacr_dot.data(),
               d->site_xpos + 3 * site_id, mj_->model->site_bodyid[site_id]);
 
-    Eigen::VectorXd qvel(nv);
-    for (int i = 0; i < nv; ++i) qvel[i] = d->qvel[i];
+    for (int i = 0; i < nv; ++i) ns_.qvel[i] = d->qvel[i];
 
-    Eigen::MatrixXd J_0(6, 6);
-    J_0.topRows(3)    = be.jacp.leftCols(6);
-    J_0.bottomRows(3) = be.jacr.leftCols(6);
+    ns_.J_0.topRows(3)    = be.jacp.leftCols(6);
+    ns_.J_0.bottomRows(3) = be.jacr.leftCols(6);
 
-    Eigen::VectorXd Cv_base(6);
-    for (int i = 0; i < 6; ++i) Cv_base[i] = d->qfrc_bias[i];
+    for (int i = 0; i < 6; ++i) ns_.Cv_base[i] = d->qfrc_bias[i];
 
+    // The return is fixed-size, so it costs nothing; everything feeding it comes
+    // out of the held scratch.
     Eigen::Matrix<double, 6, 1> bias;
-    bias << jacp_dot * qvel, jacr_dot * qvel;
+    bias << ns_.jacp_dot * ns_.qvel, ns_.jacr_dot * ns_.qvel;
 
-    return bias - J_0 * be.H_bb_ldlt.solve(Cv_base);
+    ns_.hbb_solve_vec = be.H_bb_ldlt.solve(ns_.Cv_base);
+    return bias - ns_.J_0 * ns_.hbb_solve_vec;
 }
 
 NodeDynamics ArmTaskSpaceController::dynamicsAt(
     const Eigen::VectorXd& q, const Eigen::VectorXd& v, int site_id) const
+{
+    NodeDynamics nd;
+    dynamicsAt(q, v, site_id, nd);
+    return nd;
+}
+
+void ArmTaskSpaceController::dynamicsAt(
+    const Eigen::VectorXd& q, const Eigen::VectorXd& v, int site_id,
+    NodeDynamics& out) const
 {
     if (!mj_scratch_) {
         mj_scratch_ = std::make_unique<MjScratchData>();
@@ -391,13 +423,11 @@ NodeDynamics ArmTaskSpaceController::dynamicsAt(
     computeBaseElim(d, be_scratch_);
     computeSiteJacobian(site_id, d, be_scratch_);
 
-    NodeDynamics nd;
-    nd.ee_pos  = eePosition(site_id, d);
-    nd.ee_quat = eeOrientation(site_id, d);
-    getDynamics(nd.H_g, nd.Cv_joints, d, be_scratch_);
-    nd.J_g6       = gjm6(be_scratch_);
-    nd.jdot_qdot6 = jdotQdot6(site_id, d, be_scratch_);
-    return nd;
+    out.ee_pos  = eePosition(site_id, d);
+    out.ee_quat = eeOrientation(site_id, d);
+    getDynamics(out.H_g, out.Cv_joints, d, be_scratch_);
+    gjm6(be_scratch_, out.J_g6);
+    out.jdot_qdot6 = jdotQdot6(site_id, d, be_scratch_);
 }
 
 void ArmTaskSpaceController::integrateStep(
@@ -427,10 +457,9 @@ void ArmTaskSpaceController::integrateStep(
     mj_forward(mj_->model, d);   // solves the full coupled base+joint qacc
 
     v_next.resize(nv);
-    Eigen::VectorXd v_mid(nv);
     for (int i = 0; i < nv; ++i) {
-        v_next[i] = v[i] + Ts * d->qacc[i];
-        v_mid[i]  = v[i] + 0.5 * Ts * d->qacc[i];
+        v_next[i]    = v[i] + Ts * d->qacc[i];
+        ns_.v_mid[i] = v[i] + 0.5 * Ts * d->qacc[i];
     }
 
     q_next = q;
@@ -443,7 +472,7 @@ void ArmTaskSpaceController::integrateStep(
     // mj_integratePos correctly integrates the free joint's quaternion
     // component via the exponential map -- naive q + Ts*v is only valid for
     // the hinge/slide joint rows and would corrupt the base orientation.
-    mj_integratePos(mj_->model, q_next.data(), v_mid.data(), Ts);
+    mj_integratePos(mj_->model, q_next.data(), ns_.v_mid.data(), Ts);
 }
 
 Eigen::Vector3d ArmTaskSpaceController::sat(const Eigen::Vector3d& x)
@@ -465,7 +494,15 @@ bool ArmTaskSpaceController::solveSpd(
     // LDLT is the more forgiving of the two, which is exactly why it is wrong
     // here: it would factorise a degenerate inertia without complaint and hide
     // the condition the caller is asking about.
-    const Eigen::LLT<Eigen::MatrixXd> llt(A);
+    Eigen::LLT<Eigen::MatrixXd> llt;
+    return solveSpd(A, B, X, llt);
+}
+
+bool ArmTaskSpaceController::solveSpd(
+    const Eigen::MatrixXd& A, const Eigen::MatrixXd& B, Eigen::MatrixXd& X,
+    Eigen::LLT<Eigen::MatrixXd>& llt)
+{
+    llt.compute(A);
     if (llt.info() != Eigen::Success) return false;
     X = llt.solve(B);
     return true;

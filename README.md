@@ -501,11 +501,36 @@ comparison on a deterministic closed loop.
 - **Nominal is comfortable; the tail is not.** 2 iterations and ~0.85 ms of QP in
   a 3.2 ms tick, 20–40 us of period jitter. The remaining 23 ms outlier is the
   only thing between this and a 10 ms deadline guarantee.
-- **The control loop allocates 1850 times per tick** — ~1.9e5/s per arm, two arms.
-  Invisible on a general-purpose kernel; an unbounded latency violation under
-  `PREEMPT_RT`. The fix is a preallocated workspace with `Eigen::Map` views over
-  it. `RealtimeProfile.ControlTickAllocationCountIsBounded` measures it and holds
-  the line.
+- **The control loop allocates 351 times per tick**, down from 1369 at the same
+  `N: 30` tuning. Heap traffic on the control path is the classic unbounded-latency
+  source under `PREEMPT_RT` — glibc's arena lock, and the page faults behind a
+  fresh mapping — so it is being removed whether or not it shows in a tail here.
+  `RealtimeProfile.ControlTickAllocationCountIsBounded` holds the line and
+  `DISABLED_AllocStudy.PerPrimitive` attributes what is left.
+
+  What was done, each step verified numerically identical (`ee_err` 0.09486,
+  `it_mean` 7.30, `it_max` 15 unchanged throughout) and paired-interleaved for
+  timing:
+
+  | | allocations/tick |
+  |---|---|
+  | baseline at `N: 30` | 1369 |
+  | per-node temporaries held (`NodeScratch`), `dynamicsAt` out-parameter | 843 |
+  | `computeInertiaProducts` workspace + caller-owned Cholesky | 753 |
+  | `evalTaskSpace` out-parameter | 629 |
+  | `buildAugmentedModel` writes blocks directly | 569 |
+  | per-stage QP containers held across ticks | **351** |
+
+  `dynamicsAt` and `evalTaskSpace` now allocate **nothing** per call. The rest is
+  `computeInertiaProducts`, `buildAugmentedModel` and `integrateStep` at 2 each per
+  node, plus ~162 in the QP marshalling.
+
+  Two things worth knowing from doing it. Hoisting into members is **not**
+  automatically faster — the compiler loses some aliasing freedom — so each step
+  needs a paired measurement, not an assumption; the net came out neutral to
+  slightly better. And sharing `H_bb^-1 H_bm` between `getDynamics` and `gjm6`
+  (they each solved it) looked like a regression over four paired runs and a ~8%
+  win over the next six: four samples is not enough to judge anything on this box.
 - **The QP solve is the tick**, and the first thing that actually moved it was
   shrinking the state rather than speeding up the arithmetic. `nx` was
   `7 + 2*n_model_joints` = 19, carrying Δq/qdot rows for every joint in the model;

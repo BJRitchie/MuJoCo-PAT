@@ -110,8 +110,18 @@ public:
     using ArmNMPC::rollout_integrate;
     using ArmNMPC::tick;
     using ArmNMPC::trust_region;
+    using ArmNMPC::buildJointBoxBounds;
+    using ArmNMPC::buildTorqueGeneralConstraint;
+    using ArmNMPC::computeInertiaProducts;
+    using ArmNMPC::finalizeJointTorques;
+    using ArmTaskSpaceController::BaseElim;
+    using ArmTaskSpaceController::computeBaseElim;
+    using ArmTaskSpaceController::computeSiteJacobian;
     using ArmTaskSpaceController::dynamicsAt;
+    using ArmTaskSpaceController::getDynamics;
+    using ArmTaskSpaceController::gjm6;
     using ArmTaskSpaceController::integrateStep;
+    using ArmTaskSpaceController::jdotQdot6;
     using ArmTaskSpaceController::modelJointRanges;
     using ArmTaskSpaceController::n_joints_;
     using ArmTaskSpaceController::lastMjError;
@@ -797,13 +807,15 @@ TEST(NmpcQP, DynamicsAreConsistentAcrossStages)
 
 NMPCParams liveParams()
 {
-    // The shape nmpc.yaml actually runs: SQP path, N=40, Ts=0.025, 100 Hz. The
-    // control period matters here, not just to Tier 1: the warm-start shift
-    // advances by it, so leaving it unset makes the harness shift a whole stage a
-    // tick and stop representing the deployed controller.
-    NMPCParams p = leftArmParams(0.025);
+    // The shape nmpc.yaml actually runs: SQP path, N=30, Ts=0.033, 100 Hz,
+    // qp.max_iter 60. Keep these in step with config/nmpc.yaml -- every harness
+    // measurement is read as representative of the deployed controller, so a drift
+    // here silently invalidates the comparison. The control period matters beyond
+    // Tier 1: the warm-start shift advances by it, so leaving it unset makes the
+    // harness shift a whole stage per tick where the real one shifts 0.3 of one.
+    NMPCParams p = leftArmParams(0.033);
     p.control_period = 0.010;
-    p.N = 40;
+    p.N = 30;
     p.sqp_iters = 1;
     p.fullNonlinear = true;
     p.terminal_velocity_constraint = true;
@@ -811,7 +823,7 @@ NMPCParams liveParams()
     p.Qx = 10.0;   p.Qy = 10.0;   p.Qwz = 1.0;
     p.Qdotx = 1.0; p.Qdoty = 1.0; p.Qdotwz = 3.0;
     p.Rx = 1e-1;   p.Ry = 1e-1;   p.Rwz = 1e-1;
-    p.qp_max_iter = 100;
+    p.qp_max_iter = 60;
     p.qp_tol = 1e-5;
     for (auto& jl : p.joint_lims) { jl.qd_max = 2.0; }
     p.joint_lims[0].q_min =  0.0;   p.joint_lims[0].q_max = 3.14;
@@ -1183,8 +1195,12 @@ TEST(SafeMode, DampingBringsTheArmToRest)
  *  plan 2.5x too fast at Ts=25 ms and a 10 ms period. */
 TEST(Tiers, PlanStageHoldsForTheTicksAStageSpans)
 {
-    NMPCParams p = liveParams();          // Ts = 0.025
-    p.control_period = 0.010;
+    // Pins its own Ts and period rather than inheriting liveParams(): this is a
+    // test of the stage-hold arithmetic, so it must not change meaning when the
+    // deployed horizon is retuned.
+    NMPCParams p = liveParams();
+    p.Ts = 0.025;
+    p.control_period = 0.010;             // 2.5 ticks per stage
     ModelProbe c(kMjcf, p);
     const State s = referenceState(c.n_joints_);
     c.setDesiredPos(0.30, 0.25, 0.0);
@@ -1903,6 +1919,125 @@ TEST(DISABLED_ArchitectureStudy, CrossArmCoupling)
                 (std::ostringstream{} << bound_all.transpose()).str().c_str());
     std::printf("reachable wrench bound owned only: %s\n",
                 (std::ostringstream{} << bound_owned.transpose()).str().c_str());
+}
+
+/*! Where the per-tick heap allocations come from, so the hot-path refactor is
+ *  ordered by payoff rather than by guesswork.
+ *
+ *  Counts each primitive in isolation and multiplies by the calls per tick the
+ *  profile reports, then compares the total against what the whole-tick counter
+ *  measures. A large residual means something allocates outside these primitives
+ *  and a refactor targeting only them would miss it. */
+TEST(DISABLED_AllocStudy, PerPrimitive)
+{
+    NMPCParams p = liveParams();
+    ModelProbe c(kMjcf, p);
+    const State s = referenceState(c.n_joints_);
+    c.setDesiredPos(0.30, 0.25, 0.0);
+    c.computeControl(s.q, s.v);          // warm up: one-off sizing out of the way
+
+    const int N   = p.N;
+    const int n_j = c.n_joints_;
+
+    // Inputs for the primitives, built outside the measured scopes.
+    const NodeDynamics nd = c.dynamicsAt(s.q, s.v, c.ee_site_id_);
+    const ModelProbe::NodeTaskSpace ts =
+        c.evalTaskSpace(s.q, s.v, nd.ee_pos, nd.ee_quat, nd.J_g6, nd.jdot_qdot6);
+    const Eigen::VectorXd q0 = s.q.tail(n_j);
+    Eigen::VectorXd tau_j = Eigen::VectorXd::Zero(n_j);
+
+    struct Row { const char* name; long per_call; int calls; };
+    std::vector<Row> rows;
+    const auto measure = [&](const char* name, int calls, auto&& fn) {
+        constexpr int kReps = 20;        // average out any lazy one-off inside
+        long n = 0;
+        {
+            AllocScope scope;
+            for (int i = 0; i < kReps; ++i) fn();
+            n = scope.n();
+        }
+        rows.push_back({name, n / kReps, calls});
+    };
+
+    // Per rollout node. N+1 dynamicsAt (the terminal node too), N of the rest.
+    // These call the OUT-PARAMETER overloads with a persistent destination, which
+    // is what the rollout does; measuring the by-value forms instead would charge
+    // the study for returns production does not make.
+    NodeDynamics nd_out;
+    ModelProbe::NodeTaskSpace ts_out;
+    c.dynamicsAt(s.q, s.v, c.ee_site_id_, nd_out);        // warm its buffers first
+    c.evalTaskSpace(s.q, s.v, nd.ee_pos, nd.ee_quat, nd.J_g6, nd.jdot_qdot6, ts_out);
+    measure("dynamicsAt", N + 1, [&] {
+        c.dynamicsAt(s.q, s.v, c.ee_site_id_, nd_out); });
+    // The standalone overloads, for reference only. These are NOT a decomposition
+    // of dynamicsAt: each rebuilds its own BaseElim, where dynamicsAt builds one
+    // and shares it, which is why they sum to far more than the 16 it costs. They
+    // are off the hot path; listed to show what the sharing already saves.
+    measure("  [standalone] computeBaseElim", N + 1, [&] {
+        ModelProbe::BaseElim be;
+        c.computeBaseElim(nullptr, be); });
+    measure("  [standalone] getDynamics", N + 1, [&] {
+        Eigen::MatrixXd H_g; Eigen::VectorXd Cv;
+        c.getDynamics(H_g, Cv, nullptr); });
+    measure("  [standalone] gjm6", N + 1, [&] {
+        volatile auto r = c.gjm6(c.ee_site_id_, nullptr); (void)r; });
+    measure("  [standalone] jdotQdot6", N + 1, [&] {
+        volatile auto r = c.jdotQdot6(c.ee_site_id_, nullptr); (void)r; });
+    measure("evalTaskSpace", N, [&] {
+        c.evalTaskSpace(s.q, s.v, nd.ee_pos, nd.ee_quat,
+                        nd.J_g6, nd.jdot_qdot6, ts_out); });
+    measure("computeInertiaProducts", N, [&] {
+        Eigen::MatrixXd Hjt, Li;
+        c.computeInertiaProducts(nd.H_g, ts.J_task, Hjt, Li); });
+    measure("buildAugmentedModel", N, [&] {
+        Eigen::MatrixXd Hjt, Li, A, B;
+        c.computeInertiaProducts(nd.H_g, ts.J_task, Hjt, Li);
+        c.buildAugmentedModel(Li, ts.bias, Hjt, A, B); });
+    measure("integrateStep", N, [&] {
+        Eigen::VectorXd q1, v1;
+        c.integrateStep(s.q, s.v, tau_j, p.Ts, q1, v1); });
+    // Once per tick.
+    measure("buildJointBoxBounds", 1, [&] {
+        Eigen::VectorXd lb, ub; c.buildJointBoxBounds(q0, lb, ub); });
+    measure("buildTorqueGeneralConstraint", 1, [&] {
+        Eigen::MatrixXd D; Eigen::VectorXd lg, ug;
+        c.buildTorqueGeneralConstraint(ts.J_task, nd.Cv_joints, D, lg, ug); });
+    measure("finalizeJointTorques", 1, [&] {
+        volatile auto r = c.finalizeJointTorques(
+            ts.J_task, Eigen::Vector3d(0.05, -0.03, 0.01), nd.Cv_joints); (void)r; });
+
+    // buildAugmentedModel was measured with computeInertiaProducts inside it, so
+    // subtract that out to avoid charging it twice.
+    for (auto& r : rows)
+        if (std::string(r.name) == "buildAugmentedModel")
+            for (const auto& o : rows)
+                if (std::string(o.name) == "computeInertiaProducts")
+                    r.per_call -= o.per_call;
+
+    std::printf("\nN=%d, %d model joints, %d owned\n", N, n_j, c.n_owned);
+    std::printf("%-30s %9s %7s %9s\n", "primitive", "per call", "calls", "per tick");
+    long total = 0;
+    for (const auto& r : rows) {
+        // The indented rows are components of dynamicsAt, already counted in it.
+        const bool reference_only = r.name[0] == ' ';
+        const long sub = r.per_call * r.calls;
+        if (!reference_only) total += sub;
+        std::printf("%-30s %9ld %7d %9ld%s\n", r.name, r.per_call, r.calls, sub,
+                    reference_only ? "  (not counted)" : "");
+    }
+
+    // What the whole tick actually costs, for the residual.
+    long whole = 0;
+    {
+        AllocScope scope;
+        for (int i = 0; i < 10; ++i) c.computeControl(s.q, s.v);
+        whole = scope.n();
+    }
+    whole /= 10;
+    std::printf("%-30s %9s %7s %9ld\n", "--- primitives subtotal", "", "", total);
+    std::printf("%-30s %9s %7s %9ld\n", "--- whole tick (measured)", "", "", whole);
+    std::printf("%-30s %9s %7s %9ld  (%.0f%% unattributed)\n", "--- residual", "", "",
+                whole - total, 100.0 * (whole - total) / std::max(whole, 1L));
 }
 
 TEST(DISABLED_WarmStartStudy, Ladder)

@@ -219,10 +219,35 @@ protected:
         Eigen::MatrixXd M;                      //!< nv x nv, dense symmetric
         Eigen::MatrixXd H_bm;                   //!< M.topRightCorner(6, n_joints_)
         Eigen::LDLT<Eigen::MatrixXd> H_bb_ldlt; //!< of M.topLeftCorner(6, 6)
+        //! H_bb^-1 H_bm, the term both getDynamics() and gjm6() reduce by. Solved
+        //! once here rather than once in each of them, which is a 6x6 solve with
+        //! n_joints right-hand sides saved per rollout node.
+        Eigen::MatrixXd H_bb_inv_H_bm;
         //! mj_jacSite fills these as ROW-major 3 x nv buffers; declaring them
         //! column-major silently reinterprets the strides whenever nv != 3.
         Eigen::Matrix<double, 3, Eigen::Dynamic, Eigen::RowMajor> jacp, jacr;
     };
+
+    /*! Per-node workspace for the dynamics helpers.
+     *
+     *  The rollout calls those helpers ~N times a tick, so a local Eigen temporary
+     *  inside any of them is N allocations per tick. These are held instead, sized
+     *  on first use and reused thereafter, which is what keeps the control path
+     *  free of the allocator -- the hazard being glibc's arena lock and the page
+     *  faults behind a fresh mapping, both unbounded under PREEMPT_RT. */
+    struct NodeScratch {
+        Eigen::MatrixXd J_full;        //!< 6 x nv, gjm6's stacked site Jacobian
+        Eigen::VectorXd c_b, Cv_base;  //!< base rows of qfrc_bias, 6
+        Eigen::VectorXd hbb_solve_vec; //!< H_bb^-1 applied to a 6-vector
+        Eigen::Matrix<double, 3, Eigen::Dynamic, Eigen::RowMajor> jacp_dot, jacr_dot;
+        Eigen::VectorXd qvel;          //!< nv
+        Eigen::MatrixXd J_0;           //!< 6 x 6, base block of the stacked Jacobian
+        Eigen::VectorXd v_mid;         //!< nv, integrateStep's mid-interval velocity
+    };
+
+    /*! Size every NodeScratch buffer for this model. Called from the constructor,
+     *  so nothing on the control path has to check. */
+    void initNodeScratch();
 
     /*! Fill be.M / be.H_bm / be.H_bb_ldlt from `data` at its current qpos. */
     void computeBaseElim(mjData* data, BaseElim& be) const;
@@ -250,6 +275,9 @@ protected:
     // no-BaseElim overloads above build one and delegate here, so there is a
     // single implementation of each reduction. Each takes only what it still
     // needs beyond `be`: the Jacobian is in `be`, the bias and velocity are not.
+    // gjm6 also takes an out-parameter form, because returning by value costs an
+    // allocation per rollout node for a matrix whose size never changes.
+    void gjm6(const BaseElim& be, Eigen::MatrixXd& out) const;
     Eigen::MatrixXd gjm6(const BaseElim& be) const;
     void getDynamics(Eigen::MatrixXd& H_g, Eigen::VectorXd& Cv_joints,
                      mjData* data, const BaseElim& be) const;
@@ -279,6 +307,14 @@ protected:
      *  controlLaw's own q/v arguments. */
     NodeDynamics dynamicsAt(const Eigen::VectorXd& q, const Eigen::VectorXd& v,
                              int site_id) const;
+
+    /*! The same, written into a NodeDynamics the caller owns. The rollout uses
+     *  this and reuses one instance: NodeDynamics carries three dynamically-sized
+     *  Eigen members, so returning it by value allocates per node. Once `out` has
+     *  been through this one, every later call writes into buffers that are already
+     *  the right size and allocates nothing. */
+    void dynamicsAt(const Eigen::VectorXd& q, const Eigen::VectorXd& v,
+                    int site_id, NodeDynamics& out) const;
 
     /*! Rolls the FULL coupled floating-base + joint state forward one Ts
      *  step under an applied joint torque, via MuJoCo's own forward
@@ -312,6 +348,12 @@ protected:
      *  H_g^-1 in this package is a product with something. */
     static bool solveSpd(const Eigen::MatrixXd& A, const Eigen::MatrixXd& B,
                          Eigen::MatrixXd& X);
+
+    /*! The same, factorising into a decomposition the caller owns. On the control
+     *  path that matters: an `Eigen::LLT` constructed per call allocates its own
+     *  storage, and the rollout calls this once per node. */
+    static bool solveSpd(const Eigen::MatrixXd& A, const Eigen::MatrixXd& B,
+                         Eigen::MatrixXd& X, Eigen::LLT<Eigen::MatrixXd>& llt);
 
     /*! Damped-least-squares (Tikhonov) pseudo-inverse via SVD: each singular value
      *  is scaled by s/(s^2 + damping^2), so the result stays bounded as s -> 0.
@@ -350,6 +392,9 @@ protected:
     //! dynamicsAt()'s BaseElim, held rather than created per call for the same
     //! reason as mj_scratch_: the rollout calls it ~N times a tick.
     mutable BaseElim be_scratch_;
+    //! The dynamics helpers' Eigen temporaries, for the same reason again. Sized
+    //! once by initNodeScratch() at construction.
+    mutable NodeScratch ns_;
     int      n_joints_ = 0;          //!< arm DOF from URDF (nv − 6)
     uint64_t prevTime_ = 0;
 
