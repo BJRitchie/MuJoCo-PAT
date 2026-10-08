@@ -346,8 +346,14 @@ protected:
      *  caveat — the simultaneous feasible set is smaller by up to a factor of d
      *  — which suits a trust region, whose job is to bound a wild step rather
      *  than to replace the torque constraint. Channels the Jacobian cannot
-     *  actuate are capped at a finite value, since these feed QP bounds. */
+     *  actuate are capped at a finite value, since these feed QP bounds.
+     *
+     *  The out-parameter form is what the control path calls, so a per-tick
+     *  bound costs no allocation; the returning form is kept for the tests and
+     *  any caller that just wants the value. */
     Eigen::VectorXd reachableWrenchBound(const Eigen::MatrixXd& J_task) const;
+    void reachableWrenchBound(const Eigen::MatrixXd& J_task,
+                               Eigen::VectorXd& bound) const;
 
     /*! Δq/qdot box bounds on the OWNED joints, offset by current measurement q0. */
     void buildJointBoxBounds(const Eigen::VectorXd& q0,
@@ -377,10 +383,16 @@ protected:
                        Eigen::MatrixXd& Q_N,
                        Eigen::VectorXd& tau_task_out);
 
-    /*! tau_joints = J^T*tau_task + Cv_joints, clamped to torqueLimsByIndex. */
+    /*! tau_joints = J^T*tau_task + Cv_joints, clamped to torqueLimsByIndex. The
+     *  out-parameter form is the one the control path calls; see
+     *  reachableWrenchBound for why both exist. */
     Eigen::VectorXd finalizeJointTorques(const Eigen::MatrixXd& J,
                                           const Eigen::VectorXd& tau_task,
                                           const Eigen::VectorXd& Cv_joints);
+    void finalizeJointTorques(const Eigen::MatrixXd& J,
+                               const Eigen::VectorXd& tau_task,
+                               const Eigen::VectorXd& Cv_joints,
+                               Eigen::VectorXd& tau_joints);
 
 
     // === Full-nonlinear (multiple-shooting SQP) path, used instead of the
@@ -479,6 +491,11 @@ protected:
     std::vector<double>                    torqueLimsByIndex;
     std::vector<int>                       ownedJointInds;
     int                                    n_owned = 0;
+
+    //! torqueLimsByIndex as an Eigen vector, for the torque constraint's bound
+    //! arithmetic at every rollout node. Built once at construction alongside the
+    //! vector it mirrors, since neither changes afterwards.
+    Eigen::VectorXd tau_lim_vec_;
 
     // Safe mode. kd_ is sized n_joints_ and nonzero only on owned indices,
     // fixed at construction from the torque and velocity limits. The mode
@@ -588,6 +605,23 @@ protected:
     //! Eigen object reuses the storage it already has.
     std::vector<Eigen::MatrixXd> A_k_, B_k_, D_k_;
     std::vector<Eigen::VectorXd> b_k_, lg_k_, ug_k_, x_aug_nodes_;
+
+    //! The rollout loop's remaining per-node destinations. Locals here cost an
+    //! allocation each at every node; the model and the stage data are written
+    //! straight into their A_k_/B_k_ slots rather than through a copy. q_k_/v_k_
+    //! carry the rollout's running state across the nodes.
+    Eigen::MatrixXd hg_inv_Jt_, lambda_inv_;
+    Eigen::VectorXd tau_joints_k_, q_next_, v_next_, q_k_, v_k_;
+
+    //! And the once-per-tick ones: the measurement the box bounds are offset by,
+    //! those bounds, node 0's kinematics and the resulting task wrench, plus the
+    //! reachable wrench and the trust-region width derived from it.
+    Eigen::VectorXd q0_, lbx_j_, ubx_j_, Cv_joints0_, tau_task_result_;
+    Eigen::VectorXd wrench_bound_, du_max_;
+    Eigen::MatrixXd J_task0_;
+    //! Stage and terminal cost. Built from weights fixed at construction, so
+    //! rebuilding them per tick allocated for a result that never changes.
+    Eigen::MatrixXd Q_, R_, Q_N_;
 
     //! computeInertiaProducts' workspace: H_g^2 + d^2 I, H_g J^T, and the Cholesky
     //! of the former. Members for the same reason -- once per node, N a tick.

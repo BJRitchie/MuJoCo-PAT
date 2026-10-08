@@ -377,6 +377,11 @@ private:
     Eigen::VectorXd last_tau_task;
     int             last_status_ = 0;
 
+    //! Zero blocks the solver pushes for the stages it does not constrain, and
+    //! the concatenated terminal bounds. Held rather than built per solve: the
+    //! control path calls this every tick and none of it varies.
+    Eigen::VectorXd zero_vec_, zero_u_, lbxN_, ubxN_, u0_sol_;
+
     //! Clear the per-tick metrics, then add one ocp_qp_solve's worth from acados'
     //! qp_info. addIters() runs after every solve including the failures: a solve
     //! that ran long before failing is exactly the one worth accounting for.

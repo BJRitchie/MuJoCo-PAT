@@ -105,7 +105,9 @@ if(BUILD_TESTING)
     ament_add_gtest(test_pat_arm_nmpc test/test_pat_arm_nmpc.cpp)
     pat_arm_nmpc_arch_flags(test_pat_arm_nmpc)
     add_dependencies(test_pat_arm_nmpc pat_arm_nmpc_models)
-    target_link_libraries(test_pat_arm_nmpc pat_arm_nmpc_lib)
+    # ${CMAKE_DL_LIBS}: DISABLED_AllocStudy.Attribution resolves allocation call
+    # sites to their shared object with dladdr.
+    target_link_libraries(test_pat_arm_nmpc pat_arm_nmpc_lib ${CMAKE_DL_LIBS})
     target_compile_definitions(test_pat_arm_nmpc PRIVATE
         PAT_NMPC_TEST_MJCF="${_model_xml}")
 endif()

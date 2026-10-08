@@ -86,6 +86,11 @@ ArmNMPC::ArmNMPC(
                     "and the rollout clamp cover all of them).");
             }
         }
+        // Eigen mirror of the same limits, built here because the torque
+        // constraint needs them as a vector at every rollout node and they do
+        // not change after construction.
+        tau_lim_vec_.resize(n_joints_);
+        for (int i = 0; i < n_joints_; ++i) tau_lim_vec_(i) = torqueLimsByIndex[i];
         for (const auto& [jname, bounds] : qlims) {
             int idx = jointIndexFromName(jname);
             // Intersect rather than replace: a configured range may tighten the
@@ -247,11 +252,16 @@ Eigen::VectorXd ArmNMPC::controlLawImpl(
     const int nx  = 7 + 2 * n_owned;   // 2*d+1 + 2*n_owned, d=3
 
     // --- Stage/terminal cost (task-space channels only) -------------------------
-    Eigen::MatrixXd Q = Eigen::MatrixXd::Zero(nx, nx);
+    // Members: the weights are fixed at construction, so rebuilding these every
+    // tick allocated three matrices for a result that never changes.
+    Eigen::MatrixXd& Q   = Q_;
+    Eigen::MatrixXd& R   = R_;
+    Eigen::MatrixXd& Q_N = Q_N_;
+    Q.setZero(nx, nx);
     Q(0, 0) = params_.Qx;    Q(1, 1) = params_.Qy;    Q(2, 2) = params_.Qwz;
     Q(3, 3) = params_.Qdotx; Q(4, 4) = params_.Qdoty; Q(5, 5) = params_.Qdotwz;
-    Eigen::MatrixXd R = Eigen::Vector3d(params_.Rx, params_.Ry, params_.Rwz).asDiagonal();
-    Eigen::MatrixXd Q_N = Q * params_.terminal_cost_multiplier;   // == Q when multiplier is the default 1.0
+    R = Eigen::Vector3d(params_.Rx, params_.Ry, params_.Rwz).asDiagonal();
+    Q_N = Q * params_.terminal_cost_multiplier;   // == Q when multiplier is the default 1.0
     Eigen::VectorXd out;
 
     if (params_.fullNonlinear) {
@@ -351,7 +361,7 @@ Eigen::VectorXd ArmNMPC::controlLawImpl(
             damping_run_ = 0;
         }
 
-        out = finalizeJointTorques(J_g, tau_task, Cv_joints);
+        finalizeJointTorques(J_g, tau_task, Cv_joints, out);
     }
 
     recordTick(start);
@@ -411,13 +421,21 @@ void ArmNMPC::computeInertiaProducts(
 
 Eigen::VectorXd ArmNMPC::reachableWrenchBound(const Eigen::MatrixXd& J_task) const
 {
+    Eigen::VectorXd bound;
+    reachableWrenchBound(J_task, bound);
+    return bound;
+}
+
+void ArmNMPC::reachableWrenchBound(
+    const Eigen::MatrixXd& J_task, Eigen::VectorXd& bound) const
+{
     // Finite cap for channels the Jacobian barely couples to: tau/|J| runs away
     // as |J| -> 0, and HPIPM's factorization does not tolerate bounds spanning
     // many orders of magnitude.
     constexpr double kMaxBound = 1.0e3;
 
     const int d = static_cast<int>(J_task.rows());
-    Eigen::VectorXd bound(d);
+    bound.resize(d);
     for (int j = 0; j < d; ++j) {
         double lim = kMaxBound;
 
@@ -429,7 +447,6 @@ Eigen::VectorXd ArmNMPC::reachableWrenchBound(const Eigen::MatrixXd& J_task) con
         }
         bound(j) = std::min(lim, kMaxBound);
     }
-    return bound;
 }
 
 bool ArmNMPC::solveStageQP(
@@ -558,10 +575,8 @@ void ArmNMPC::buildTorqueGeneralConstraint(
     Eigen::MatrixXd& D, Eigen::VectorXd& lg, Eigen::VectorXd& ug)
 {
     D = J.transpose();   // n_j x d
-    Eigen::VectorXd tauLimVec(n_joints_);
-    for (int i = 0; i < n_joints_; ++i) tauLimVec(i) = torqueLimsByIndex[i];
-    lg = -tauLimVec - Cv_joints;
-    ug =  tauLimVec - Cv_joints;
+    lg = -tau_lim_vec_ - Cv_joints;
+    ug =  tau_lim_vec_ - Cv_joints;
 }
 
 // tau_joints = J^T*tau_task + Cv_joints, clamped per-joint to torqueLimsByIndex.
@@ -569,12 +584,23 @@ Eigen::VectorXd ArmNMPC::finalizeJointTorques(
     const Eigen::MatrixXd& J, const Eigen::VectorXd& tau_task,
     const Eigen::VectorXd& Cv_joints)
 {
-    Eigen::VectorXd tau_joints = J.transpose() * tau_task + Cv_joints;
+    Eigen::VectorXd tau_joints;
+    finalizeJointTorques(J, tau_task, Cv_joints, tau_joints);
+    return tau_joints;
+}
+
+void ArmNMPC::finalizeJointTorques(
+    const Eigen::MatrixXd& J, const Eigen::VectorXd& tau_task,
+    const Eigen::VectorXd& Cv_joints, Eigen::VectorXd& tau_joints)
+{
+    // Bias first, then the product accumulated onto it: assigning the whole
+    // expression at once evaluates J^T*tau_task into a temporary.
+    tau_joints = Cv_joints;
+    tau_joints.noalias() += J.transpose() * tau_task;
     for (int i = 0; i < n_joints_; ++i) {
         tau_joints[i] = std::max(-torqueLimsByIndex[i],
                                  std::min(torqueLimsByIndex[i], tau_joints[i]));
     }
-    return tau_joints;
 }
 
 Eigen::VectorXd ArmNMPC::dampingTorque(const Eigen::VectorXd& v) const
@@ -997,13 +1023,17 @@ Eigen::VectorXd ArmNMPC::solveNonlinearMPC(
         u_bar_.assign(N, Eigen::VectorXd::Zero(d));
     }
 
-    Eigen::VectorXd q0 = q.tail(n_j);   // fixed measurement this tick, for box bounds
-    Eigen::VectorXd lbx_j, ubx_j;
-    buildJointBoxBounds(q0, lbx_j, ubx_j);
+    // Once-per-tick destinations, held for the same reason as the per-node ones.
+    q0_ = q.tail(n_j);                  // fixed measurement this tick, for box bounds
+    buildJointBoxBounds(q0_, lbx_j_, ubx_j_);
+    Eigen::VectorXd& q0    = q0_;
+    Eigen::VectorXd& lbx_j = lbx_j_;
+    Eigen::VectorXd& ubx_j = ubx_j_;
 
-    Eigen::MatrixXd J_task0;
-    Eigen::VectorXd Cv_joints0;
-    Eigen::VectorXd tau_task_result = Eigen::VectorXd::Zero(d);
+    Eigen::MatrixXd& J_task0    = J_task0_;
+    Eigen::VectorXd& Cv_joints0 = Cv_joints0_;
+    tau_task_result_.setZero(d);
+    Eigen::VectorXd& tau_task_result = tau_task_result_;
     bool lastIterOk = false;
 
     for (int iter = 0; iter < params_.sqp_iters; ++iter) {
@@ -1020,7 +1050,13 @@ Eigen::VectorXd ArmNMPC::solveNonlinearMPC(
         auto& b_k = b_k_;  auto& lg_k = lg_k_; auto& ug_k = ug_k_;
         auto& x_aug_nodes = x_aug_nodes_;
 
-        Eigen::VectorXd q_k = q, v_k = v;
+        // Members, so the rollout's running state does not allocate a fresh pair
+        // of state vectors every tick. Assigning same-sized Eigen objects reuses
+        // the existing buffers.
+        q_k_ = q;
+        v_k_ = v;
+        Eigen::VectorXd& q_k = q_k_;
+        Eigen::VectorXd& v_k = v_k_;
         for (int k = 0; k <= N; ++k) {
             // Node 0 uses the same (q, v) as the live measured state -- a
             // scratch-buffer mj_forward at those exact inputs reproduces the
@@ -1038,7 +1074,10 @@ Eigen::VectorXd ArmNMPC::solveNonlinearMPC(
             NodeTaskSpace& ts = ts_scratch_;
             evalTaskSpace(q_k, v_k, nd.ee_pos, nd.ee_quat, nd.J_g6, nd.jdot_qdot6, ts);
 
-            Eigen::VectorXd x_aug_k = Eigen::VectorXd::Zero(nx);
+            // Straight into its slot: a local here, copied in below, cost an
+            // allocation and a copy at every node.
+            Eigen::VectorXd& x_aug_k = x_aug_nodes[k];
+            x_aug_k.setZero(nx);
             x_aug_k.segment(0, d) = ts.e;
             x_aug_k.segment(d, d) = ts.edot;
             x_aug_k(2 * d) = 1.0;
@@ -1050,24 +1089,21 @@ Eigen::VectorXd ArmNMPC::solveNonlinearMPC(
                 x_aug_k(nt + i)       = q_k(7 + j) - q0(j);   // Δq_k
                 x_aug_k(nt + n_q + i) = v_k(6 + j);           // qdot_k
             }
-            x_aug_nodes[k] = x_aug_k;
-
             if (k == 0) {
                 J_task0    = ts.J_task;
                 Cv_joints0 = nd.Cv_joints;
             }
 
             if (k < N) {
-                Eigen::MatrixXd H_g_inv_Jt, Lambda_inv;
-                computeInertiaProducts(nd.H_g, ts.J_task, H_g_inv_Jt, Lambda_inv);
-
-                Eigen::MatrixXd A_node, B_node;
+                // Held across nodes, and the model is built straight into its
+                // stage slots -- the locals these replace cost four allocations
+                // and two full matrix copies at every node.
+                computeInertiaProducts(nd.H_g, ts.J_task, hg_inv_Jt_, lambda_inv_);
                 {
                     ScopedTimer t_bm(build_model);
-                    buildAugmentedModel(Lambda_inv, ts.bias, H_g_inv_Jt, A_node, B_node);
+                    buildAugmentedModel(lambda_inv_, ts.bias, hg_inv_Jt_,
+                                        A_k[k], B_k[k]);
                 }
-                A_k[k] = A_node;
-                B_k[k] = B_node;
 
                 buildTorqueGeneralConstraint(ts.J_task, nd.Cv_joints, D_k[k], lg_k[k], ug_k[k]);
 
@@ -1089,15 +1125,15 @@ Eigen::VectorXd ArmNMPC::solveNonlinearMPC(
                 // (feedforward included), clamped as a whole -- so the
                 // rollout predicts the plant that actually runs, and matches
                 // the QP's own model (H_g qddot = J^T u).
-                Eigen::VectorXd tau_joints_k = ts.J_task.transpose() * u_bar_[k] + nd.Cv_joints;
+                tau_joints_k_.noalias() = ts.J_task.transpose() * u_bar_[k];
+                tau_joints_k_ += nd.Cv_joints;
                 for (int i = 0; i < n_j; ++i) {
-                    tau_joints_k[i] = std::max(-torqueLimsByIndex[i],
-                                                std::min(torqueLimsByIndex[i], tau_joints_k[i]));
+                    tau_joints_k_[i] = std::max(-torqueLimsByIndex[i],
+                                                std::min(torqueLimsByIndex[i], tau_joints_k_[i]));
                 }
-                Eigen::VectorXd q_next, v_next;
                 {
                     ScopedTimer t(rollout_integrate);
-                    integrateStep(q_k, v_k, tau_joints_k, Ts, q_next, v_next);
+                    integrateStep(q_k, v_k, tau_joints_k_, Ts, q_next_, v_next_);
                 }
 
                 // Rollout velocity trust region: hard-clamp the PREDICTED
@@ -1107,13 +1143,13 @@ Eigen::VectorXd ArmNMPC::solveNonlinearMPC(
                 // torque clamp above bounds the INPUT, but zero/small torque
                 // plus already-nonzero velocity can still diverge via
                 // Coriolis coupling alone). Applying this to the clamped
-                // v_next before it's used to build the NEXT node's x_aug is
+                // v_next_ before it's used to build the NEXT node's x_aug is
                 // what makes the b_k defect (below) transparently reflect
                 // the true (now-bounded) trajectory -- no separate change to
                 // the defect formula is needed.
                 for (int i = 0; i < n_j; ++i) {
                     double lim = params_.rollout_v_clamp_mult * vlimsByIndex[i];
-                    v_next[6 + i] = std::max(-lim, std::min(lim, v_next[6 + i]));
+                    v_next_[6 + i] = std::max(-lim, std::min(lim, v_next_[6 + i]));
                 }
 
                 // Rollout position clamp, to the MECHANICAL range only. The
@@ -1132,13 +1168,13 @@ Eigen::VectorXd ArmNMPC::solveNonlinearMPC(
                 // IS the reachable configuration space) while leaving the margin
                 // for the QP to enforce, which is the whole point of having one.
                 for (int i = 0; i < n_j; ++i) {
-                    q_next[7 + i] = std::max(modelQlimsByIndex[i].first,
+                    q_next_[7 + i] = std::max(modelQlimsByIndex[i].first,
                                               std::min(modelQlimsByIndex[i].second,
-                                                        q_next[7 + i]));
+                                                        q_next_[7 + i]));
                 }
 
-                q_k = q_next;
-                v_k = v_next;
+                q_k = q_next_;
+                v_k = v_next_;
             }
         }
 
@@ -1147,7 +1183,14 @@ Eigen::VectorXd ArmNMPC::solveNonlinearMPC(
         {
             ScopedTimer t_def(defect);
             for (int k = 0; k < N; ++k) {
-                b_k[k] = x_aug_nodes[k + 1] - A_k[k] * x_aug_nodes[k] - B_k[k] * u_bar_[k];
+                // Accumulated in place rather than as one expression: Eigen
+                // evaluates a matrix-vector product nested inside a larger
+                // expression into a temporary, which is a fresh allocation at
+                // every node. noalias() is safe because b_k[k] is neither
+                // operand.
+                b_k[k] = x_aug_nodes[k + 1];
+                b_k[k].noalias() -= A_k[k] * x_aug_nodes[k];
+                b_k[k].noalias() -= B_k[k] * u_bar_[k];
             }
         }
 
@@ -1188,8 +1231,9 @@ Eigen::VectorXd ArmNMPC::solveNonlinearMPC(
 
             {
                 ScopedTimer t_tr(trust_region);
-                const Eigen::VectorXd du_max =
-                    params_.du_max_frac * reachableWrenchBound(J_task0);
+                reachableWrenchBound(J_task0, wrench_bound_);
+                du_max_ = params_.du_max_frac * wrench_bound_;
+                const Eigen::VectorXd& du_max = du_max_;
                 // uk_ is a member, so this loop and the finite check above reuse
                 // one buffer instead of allocating a 3-vector per stage per tick.
                 uk_.resize(d);

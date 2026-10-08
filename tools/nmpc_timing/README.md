@@ -126,6 +126,45 @@ File I/O does land on the executor thread once a second, alongside the report li
 that was already being logged there. Tracing is a diagnostic mode; leave it off for
 a run whose absolute worst-case tick is the measurement.
 
+It does **not** inflate the ticks around it, measured rather than assumed — see
+the flush test below, which finds the tick right after each flush slightly
+*faster* than the rest.
+
+### Where a tail comes from
+
+`plot_trace.py` shows the distribution; `tail_source.py` asks what produced its
+tail, which is what decides whether the tail is worth tuning:
+
+```bash
+tools/nmpc_timing/tail_source.py data/nmpc_timing/trace_{left,right}.csv
+tools/nmpc_timing/tail_source.py --pct 99.9 --top 15 data/nmpc_timing/trace_left.csv
+```
+
+Three tests, all on traces you already have:
+
+- **The 1 Hz flush**, the obvious suspect since it writes on the control
+  callback's executor. Compares the tick right after each flush against every
+  other tick, and histograms where in the second the slow ticks fall. A flush
+  cause concentrates them in the first bin.
+- **Cross-arm co-occurrence.** The two arms are separate processes solving
+  independent QPs, so outliers that coincide in wall-clock time have a cause
+  outside both controllers. It scans ±1 s for the clock offset that aligns them
+  best (each node's `t_us` starts at its own bring-up) and compares the hit rate
+  against what independence would give.
+- **The slowest ticks, split into iteration count versus cost per iteration.** A
+  tick that is slow because HPIPM needed more iterations is a solver problem; one
+  that ran the *same* iterations at several times the median cost per iteration
+  is the machine.
+
+On the 309 s / 30,692-tick-per-arm baseline all three agree, and none of them
+point at this package: flush-adjacent ticks average 1024 µs against 1061 µs for
+the rest, the two arms' p99 outliers co-occur within ±20 ms at **43% against 4%
+expected** (11× enrichment), and the worst ticks run 7–13 iterations at **9–16×
+the median 94 µs per iteration**. Same arithmetic, executed more slowly, in both
+processes at once — a CPU frequency dip or an external preemption, not a QP that
+got harder. Pin the governor to `performance` before reading anything into a
+tail, and compare paired and interleaved.
+
 ### Reading the raw report
 
 `summarise_timing.py` aggregates, but each window is also readable directly — the

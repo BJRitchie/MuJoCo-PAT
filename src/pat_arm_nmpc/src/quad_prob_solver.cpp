@@ -304,7 +304,10 @@ bool QuadProbSolver::solve(
     d_ocp_qp_set_q(N, zero_vec.data(), qp_in);
     const int n_terminal = static_cast<int>(params_.idxbx_terminal.size());
     if (n_terminal > 0) {
-        Eigen::VectorXd lbxN(nbx_k + n_terminal), ubxN(nbx_k + n_terminal);
+        lbxN_.resize(nbx_k + n_terminal);
+        ubxN_.resize(nbx_k + n_terminal);
+        Eigen::VectorXd& lbxN = lbxN_;
+        Eigen::VectorXd& ubxN = ubxN_;
         if (nbx_k > 0) {
             lbxN.head(nbx_k) = Eigen::Map<const Eigen::VectorXd>(lbx_use, nbx_k);
             ubxN.head(nbx_k) = Eigen::Map<const Eigen::VectorXd>(ubx_use, nbx_k);
@@ -396,8 +399,13 @@ bool QuadProbSolver::solveMultiStage(
             "QuadProbSolver::solveMultiStage: D_k/lg_k/ug_k must each have exactly N entries when ng > 0");
     }
 
-    Eigen::VectorXd zero_vec = Eigen::VectorXd::Zero(params_.nx);
-    Eigen::VectorXd zero_u   = Eigen::VectorXd::Zero(params_.nu);
+    // Members, sized on first use: these are constant for the solver's lifetime,
+    // so rebuilding them per solve allocated for a result that never changes.
+    if (zero_vec_.size() != params_.nx) zero_vec_.setZero(params_.nx);
+    if (zero_u_.size()   != params_.nu) zero_u_.setZero(params_.nu);
+    // Non-const: acados' setters take double*, even for data they only read.
+    Eigen::VectorXd& zero_vec = zero_vec_;
+    Eigen::VectorXd& zero_u   = zero_u_;
 
     // Optional guard: widen the box rows so they contain the pinned stage-0
     // state. Applied once here, so every stage that consumes these bounds
@@ -457,7 +465,10 @@ bool QuadProbSolver::solveMultiStage(
     d_ocp_qp_set_q(N, zero_vec.data(), qp_in);
     const int n_terminal = static_cast<int>(params_.idxbx_terminal.size());
     if (n_terminal > 0) {
-        Eigen::VectorXd lbxN(nbx_k + n_terminal), ubxN(nbx_k + n_terminal);
+        lbxN_.resize(nbx_k + n_terminal);
+        ubxN_.resize(nbx_k + n_terminal);
+        Eigen::VectorXd& lbxN = lbxN_;
+        Eigen::VectorXd& ubxN = ubxN_;
         if (nbx_k > 0) {
             lbxN.head(nbx_k) = Eigen::Map<const Eigen::VectorXd>(lbx_use, nbx_k);
             ubxN.head(nbx_k) = Eigen::Map<const Eigen::VectorXd>(ubx_use, nbx_k);
@@ -491,7 +502,8 @@ bool QuadProbSolver::solveMultiStage(
     last_status_ = qp_status;
 
     if (qp_status == 0) {
-        Eigen::VectorXd u0_sol(params_.nu);
+        u0_sol_.resize(params_.nu);
+        Eigen::VectorXd& u0_sol = u0_sol_;
         d_ocp_qp_sol_get_u(0, qp_out, u0_sol.data());
         last_tau_task = u0_sol;
         return true;

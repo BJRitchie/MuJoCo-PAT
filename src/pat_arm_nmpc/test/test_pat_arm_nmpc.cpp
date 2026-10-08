@@ -12,14 +12,21 @@
  */
 #include <gtest/gtest.h>
 
+#include <dlfcn.h>
+
 #include <Eigen/Dense>
+#include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cinttypes>
 #include <cstddef>
+#include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <map>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "pat_arm_nmpc/arm_nmpc.h"
@@ -47,18 +54,38 @@ namespace pat_rt_alloc {
 // during static init, before any constructor here could have run.
 volatile bool counting = false;
 long          count    = 0;
+
+// Call-site attribution, off unless a study turns it on. Only the IMMEDIATE
+// caller's return address is kept: frame 0 is the one address available without
+// a frame pointer, and resolving further would need backtrace(), which takes
+// the loader lock and can itself allocate -- inside malloc that deadlocks. One
+// frame is enough for the question these studies ask, because acados, HPIPM and
+// BLASFEO call malloc directly, so frame 0 names their shared object. A caller
+// reaching malloc through libstdc++'s operator new resolves to libstdc++ and is
+// reported as such rather than guessed at.
+//
+// Addresses only, symbolised after the scope closes: dladdr allocates.
+constexpr int kMaxSites = 4096;
+volatile bool tracing   = false;
+void*         sites[kMaxSites];
+long          n_sites = 0;
+
+inline void note(void* ret_addr) {
+    ++count;
+    if (tracing && n_sites < kMaxSites) sites[n_sites++] = ret_addr;
+}
 }  // namespace pat_rt_alloc
 
 extern "C" void* malloc(std::size_t n) {
-    if (pat_rt_alloc::counting) ++pat_rt_alloc::count;
+    if (pat_rt_alloc::counting) pat_rt_alloc::note(__builtin_return_address(0));
     return __libc_malloc(n);
 }
 extern "C" void* calloc(std::size_t n, std::size_t sz) {
-    if (pat_rt_alloc::counting) ++pat_rt_alloc::count;
+    if (pat_rt_alloc::counting) pat_rt_alloc::note(__builtin_return_address(0));
     return __libc_calloc(n, sz);
 }
 extern "C" void* realloc(void* p, std::size_t n) {
-    if (pat_rt_alloc::counting) ++pat_rt_alloc::count;
+    if (pat_rt_alloc::counting) pat_rt_alloc::note(__builtin_return_address(0));
     return __libc_realloc(p, n);
 }
 
@@ -71,6 +98,77 @@ struct AllocScope {
     AllocScope() { pat_rt_alloc::count = 0; pat_rt_alloc::counting = true; }
     ~AllocScope() { pat_rt_alloc::counting = false; }
     long n() const { return pat_rt_alloc::count; }
+};
+
+/*! AllocScope plus the call site of every allocation, grouped by the shared
+ *  object that made it. Answers "whose allocation is this" rather than just how
+ *  many, which is the difference between a site this package can remove and one
+ *  inside a precompiled dependency. */
+struct AllocTrace {
+    AllocTrace() {
+        pat_rt_alloc::n_sites = 0;
+        pat_rt_alloc::count   = 0;
+        pat_rt_alloc::tracing = true;
+        pat_rt_alloc::counting = true;
+    }
+    ~AllocTrace() { stop(); }
+
+    //! End the measured region. Must be called before reading the results:
+    //! byObject() allocates, and left counting it would tally itself.
+    void stop() const {
+        pat_rt_alloc::counting = false;
+        pat_rt_alloc::tracing  = false;
+    }
+    long n() const { return pat_rt_alloc::count; }
+
+    //! Allocation count per originating object, most frequent first. Call stop()
+    //! first; this allocates, and dladdr does too.
+    std::vector<std::pair<std::string, long>> byObject() const {
+        std::map<std::string, long> tally;
+        for (long i = 0; i < pat_rt_alloc::n_sites; ++i) {
+            Dl_info info{};
+            const bool ok = dladdr(pat_rt_alloc::sites[i], &info) != 0;
+            const char* path = (ok && info.dli_fname) ? info.dli_fname : "<unresolved>";
+            const char* base = std::strrchr(path, '/');
+            ++tally[base ? base + 1 : path];
+        }
+        std::vector<std::pair<std::string, long>> rows(tally.begin(), tally.end());
+        std::sort(rows.begin(), rows.end(),
+                  [](const auto& a, const auto& b) { return a.second > b.second; });
+        return rows;
+    }
+
+    //! Per distinct call site: the object, the call's offset within it, and how
+    //! many allocations came from there, most frequent first. The offset is what
+    //! addr2line resolves to a file and line (the objects here are all built
+    //! with debug info), which is what makes a site actionable rather than just
+    //! attributed. Same precondition as byObject().
+    struct Site { std::string object; std::uintptr_t offset; long count; };
+    std::vector<Site> bySite() const {
+        std::map<std::pair<std::string, std::uintptr_t>, long> tally;
+        for (long i = 0; i < pat_rt_alloc::n_sites; ++i) {
+            Dl_info info{};
+            std::string object = "<unresolved>";
+            std::uintptr_t offset = reinterpret_cast<std::uintptr_t>(pat_rt_alloc::sites[i]);
+            if (dladdr(pat_rt_alloc::sites[i], &info) != 0 && info.dli_fname) {
+                const char* base = std::strrchr(info.dli_fname, '/');
+                object = base ? base + 1 : info.dli_fname;
+                offset -= reinterpret_cast<std::uintptr_t>(info.dli_fbase);
+            }
+            ++tally[{object, offset}];
+        }
+        std::vector<Site> rows;
+        rows.reserve(tally.size());
+        for (const auto& [key, n] : tally) rows.push_back({key.first, key.second, n});
+        std::sort(rows.begin(), rows.end(),
+                  [](const Site& a, const Site& b) { return a.count > b.count; });
+        return rows;
+    }
+
+    //! Whether the trace buffer overflowed, in which case byObject() is a
+    //! truncated sample and the proportions are still meaningful but the counts
+    //! are not.
+    bool truncated() const { return pat_rt_alloc::n_sites >= pat_rt_alloc::kMaxSites; }
 };
 
 // Re-exports the protected model-construction seams so a test can build A/B at
@@ -1518,16 +1616,21 @@ TEST(HardConstraints, HardTorqueDoesNotChangeTheNominalCommand)
 
 /*! The per-tick heap traffic of the live configuration, as a bound rather than
  *  an exact figure: it depends on the Eigen and acados builds, so pinning it
- *  exactly would flake. The bound is there to catch an order-of-magnitude
- *  regression while the hot path is made allocation-free; tighten it as that
- *  work lands, until the target is zero. */
+ *  exactly would flake. The bound catches a reintroduced allocation on the hot
+ *  path, which is what matters under a realtime policy. */
 TEST(RealtimeProfile, ControlTickAllocationCountIsBounded)
 {
     constexpr long kTicks       = 10;
-    // Measured ~1850. The ceiling is loose enough not to flake on an Eigen or
-    // acados rebuild and tight enough to catch a reintroduced per-node
-    // allocation; lower it as the hot path is cleaned up, the target being zero.
-    constexpr long kMaxPerTick  = 2500;
+    // Measured 1 (was 1369), and that one is computeControl's returned vector:
+    // the signature returns by value, so the caller's result is necessarily a
+    // heap allocation. Nothing else on the tick allocates -- acados, HPIPM,
+    // BLASFEO and MuJoCo contribute none of it, confirmed by resolving every
+    // call site to its originating object (DISABLED_AllocStudy.Attribution).
+    //
+    // The ceiling allows a little slack for a different Eigen or acados build
+    // rather than pinning 1 exactly, while still failing if a single per-node
+    // allocation comes back -- those arrive 30 at a time.
+    constexpr long kMaxPerTick  = 8;
 
     ModelProbe c(kMjcf, liveParams());
     const State s = referenceState(c.n_joints_);
@@ -1659,6 +1762,41 @@ TEST(RealtimeProfile, QpIterationsAreReported)
     EXPECT_EQ(c.qp_time_ms.count, 0);
     EXPECT_EQ(c.profileReport().find("qp_iter"), std::string::npos)
         << "an empty tally should not print a column";
+}
+
+/*! The hot path must reach a steady state where a tick allocates nothing new.
+ *
+ *  Separate from the ceiling test above because the two ask different things: that
+ *  one bounds the average, this one asserts the FIRST tick is where sizing happens
+ *  and later ticks do not keep growing. A buffer that is re-sized every tick, or a
+ *  container that is cleared and refilled, passes a loose average and fails here. */
+TEST(RealtimeProfile, SteadyStateTicksDoNotKeepAllocating)
+{
+    ModelProbe c(kMjcf, liveParams());
+    const State s = referenceState(c.n_joints_);
+    c.setDesiredPos(0.30, 0.25, 0.0);
+
+    long first = 0, later = 0;
+    {
+        AllocScope scope;
+        c.computeControl(s.q, s.v);
+        first = scope.n();
+    }
+    // Several more, so a per-tick leak shows up multiplied rather than once.
+    constexpr long kLater = 20;
+    {
+        AllocScope scope;
+        for (long i = 0; i < kLater; ++i) c.computeControl(s.q, s.v);
+        later = scope.n();
+    }
+    const double per_later = static_cast<double>(later) / kLater;
+    std::printf("[alloc] first tick %ld, steady state %.1f per tick\n", first, per_later);
+
+    EXPECT_LT(per_later, static_cast<double>(first))
+        << "the first tick should be the expensive one -- it does the sizing";
+    // What remains is computeControl's returned vector, one per tick. See
+    // ControlTickAllocationCountIsBounded for why that one is the floor here.
+    EXPECT_LT(per_later, 8.0);
 }
 
 /*! The per-tick trace exists because the report's eight histogram bins cannot
@@ -1986,33 +2124,32 @@ TEST(DISABLED_AllocStudy, PerPrimitive)
     measure("evalTaskSpace", N, [&] {
         c.evalTaskSpace(s.q, s.v, nd.ee_pos, nd.ee_quat,
                         nd.J_g6, nd.jdot_qdot6, ts_out); });
+    // Persistent destinations, again matching the rollout: these all write into
+    // members there, so measuring them into fresh locals would charge the study
+    // for allocations production has already hoisted out.
+    Eigen::MatrixXd Hjt, Li, A_out, B_out;
+    Eigen::VectorXd q1, v1;
+    c.computeInertiaProducts(nd.H_g, ts.J_task, Hjt, Li);
+    c.buildAugmentedModel(Li, ts.bias, Hjt, A_out, B_out);
+    c.integrateStep(s.q, s.v, tau_j, p.Ts, q1, v1);
     measure("computeInertiaProducts", N, [&] {
-        Eigen::MatrixXd Hjt, Li;
         c.computeInertiaProducts(nd.H_g, ts.J_task, Hjt, Li); });
     measure("buildAugmentedModel", N, [&] {
-        Eigen::MatrixXd Hjt, Li, A, B;
-        c.computeInertiaProducts(nd.H_g, ts.J_task, Hjt, Li);
-        c.buildAugmentedModel(Li, ts.bias, Hjt, A, B); });
+        c.buildAugmentedModel(Li, ts.bias, Hjt, A_out, B_out); });
     measure("integrateStep", N, [&] {
-        Eigen::VectorXd q1, v1;
         c.integrateStep(s.q, s.v, tau_j, p.Ts, q1, v1); });
-    // Once per tick.
+    // Once per tick, also into persistent destinations as production does.
+    Eigen::VectorXd lb, ub, lg, ug;
+    Eigen::MatrixXd D;
+    c.buildJointBoxBounds(q0, lb, ub);
+    c.buildTorqueGeneralConstraint(ts.J_task, nd.Cv_joints, D, lg, ug);
     measure("buildJointBoxBounds", 1, [&] {
-        Eigen::VectorXd lb, ub; c.buildJointBoxBounds(q0, lb, ub); });
+        c.buildJointBoxBounds(q0, lb, ub); });
     measure("buildTorqueGeneralConstraint", 1, [&] {
-        Eigen::MatrixXd D; Eigen::VectorXd lg, ug;
         c.buildTorqueGeneralConstraint(ts.J_task, nd.Cv_joints, D, lg, ug); });
     measure("finalizeJointTorques", 1, [&] {
         volatile auto r = c.finalizeJointTorques(
             ts.J_task, Eigen::Vector3d(0.05, -0.03, 0.01), nd.Cv_joints); (void)r; });
-
-    // buildAugmentedModel was measured with computeInertiaProducts inside it, so
-    // subtract that out to avoid charging it twice.
-    for (auto& r : rows)
-        if (std::string(r.name) == "buildAugmentedModel")
-            for (const auto& o : rows)
-                if (std::string(o.name) == "computeInertiaProducts")
-                    r.per_call -= o.per_call;
 
     std::printf("\nN=%d, %d model joints, %d owned\n", N, n_j, c.n_owned);
     std::printf("%-30s %9s %7s %9s\n", "primitive", "per call", "calls", "per tick");
@@ -2038,6 +2175,48 @@ TEST(DISABLED_AllocStudy, PerPrimitive)
     std::printf("%-30s %9s %7s %9ld\n", "--- whole tick (measured)", "", "", whole);
     std::printf("%-30s %9s %7s %9ld  (%.0f%% unattributed)\n", "--- residual", "", "",
                 whole - total, 100.0 * (whole - total) / std::max(whole, 1L));
+}
+
+/*! Which binary object the steady-state allocations belong to.
+ *
+ *  PerPrimitive localises them to a phase of the tick; this attributes them to
+ *  the code that issues them, which is the question that decides whether a count
+ *  is reachable. An allocation from this executable is this package's own (the
+ *  lib is static, so its Eigen and STL call sites resolve here) and can be
+ *  hoisted; one from libacados/libhpipm/libblasfeo is inside a precompiled
+ *  dependency's per-solve path and cannot be, short of changing solver. */
+TEST(DISABLED_AllocStudy, Attribution)
+{
+    NMPCParams p = liveParams();
+    ModelProbe c(kMjcf, p);
+    const State s = referenceState(c.n_joints_);
+    c.setDesiredPos(0.30, 0.25, 0.0);
+    // Several ticks first: the first sizes every buffer, and a warm-started
+    // steady state is what the deployed loop actually runs.
+    for (int i = 0; i < 5; ++i) c.computeControl(s.q, s.v);
+
+    AllocTrace trace;
+    c.computeControl(s.q, s.v);
+    trace.stop();
+    const long total     = trace.n();
+    const bool truncated = trace.truncated();
+    const auto rows      = trace.byObject();
+
+    std::printf("\none steady-state tick: %ld allocations%s\n", total,
+                truncated ? "  (TRACE BUFFER FULL -- counts truncated)" : "");
+    std::printf("%-40s %9s %7s\n", "originating object", "allocs", "share");
+    for (const auto& r : rows) {
+        std::printf("%-40s %9ld %6.0f%%\n", r.first.c_str(), r.second,
+                    100.0 * static_cast<double>(r.second) / std::max(total, 1L));
+    }
+
+    // Distinct call sites, as addr2line input: resolve with
+    //   addr2line -f -C -i -e <object> <offset>
+    std::printf("\n%-40s %18s %9s\n", "object", "offset", "allocs");
+    for (const auto& st : trace.bySite()) {
+        std::printf("%-40s %#18" PRIxPTR " %9ld\n",
+                    st.object.c_str(), st.offset, st.count);
+    }
 }
 
 TEST(DISABLED_WarmStartStudy, Ladder)

@@ -501,16 +501,16 @@ comparison on a deterministic closed loop.
 - **Nominal is comfortable; the tail is not.** 2 iterations and ~0.85 ms of QP in
   a 3.2 ms tick, 20–40 us of period jitter. The remaining 23 ms outlier is the
   only thing between this and a 10 ms deadline guarantee.
-- **The control loop allocates 351 times per tick**, down from 1369 at the same
-  `N: 30` tuning. Heap traffic on the control path is the classic unbounded-latency
-  source under `PREEMPT_RT` — glibc's arena lock, and the page faults behind a
-  fresh mapping — so it is being removed whether or not it shows in a tail here.
-  `RealtimeProfile.ControlTickAllocationCountIsBounded` holds the line and
-  `DISABLED_AllocStudy.PerPrimitive` attributes what is left.
-
-  What was done, each step verified numerically identical (`ee_err` 0.09486,
-  `it_mean` 7.30, `it_max` 15 unchanged throughout) and paired-interleaved for
-  timing:
+- **The control loop allocates once per tick**, down from 1369 at the same
+  `N: 30` tuning, and that one is `computeControl`'s returned vector — the
+  signature returns by value, so the caller's result is necessarily a heap
+  allocation. Nothing else on the tick allocates. Heap traffic on the control path
+  is the classic unbounded-latency source under `PREEMPT_RT` — glibc's arena lock,
+  and the page faults behind a fresh mapping — so it was removed whether or not it
+  showed in a tail here. `RealtimeProfile.ControlTickAllocationCountIsBounded`
+  bounds the average, `SteadyStateTicksDoNotKeepAllocating` asserts the first tick
+  is where sizing happens (327, then 1 steady), and the two
+  `DISABLED_AllocStudy` tests attribute whatever appears.
 
   | | allocations/tick |
   |---|---|
@@ -519,18 +519,38 @@ comparison on a deterministic closed loop.
   | `computeInertiaProducts` workspace + caller-owned Cholesky | 753 |
   | `evalTaskSpace` out-parameter | 629 |
   | `buildAugmentedModel` writes blocks directly | 569 |
-  | per-stage QP containers held across ticks | **351** |
+  | per-stage QP containers held across ticks | 351 |
+  | the rollout's remaining per-node destinations | 80 |
+  | per-tick cost/bounds, and the solver's constant blocks | 66 |
+  | torque-limit mirror, in-place defect, out-parameter returns | **1** |
 
-  `dynamicsAt` and `evalTaskSpace` now allocate **nothing** per call. The rest is
-  `computeInertiaProducts`, `buildAugmentedModel` and `integrateStep` at 2 each per
-  node, plus ~162 in the QP marshalling.
+  Every primitive — `dynamicsAt`, `evalTaskSpace`, `computeInertiaProducts`,
+  `buildAugmentedModel`, `integrateStep`, `buildJointBoxBounds`,
+  `buildTorqueGeneralConstraint`, `finalizeJointTorques` — is at **zero**, and so
+  are acados, HPIPM, BLASFEO and MuJoCo: not one of the allocations was ever
+  theirs. Going from 66 to 1 was two sites at exactly N each (a torque-limit
+  vector rebuilt per node from values fixed at construction, and the
+  multiple-shooting defect, where Eigen evaluates a matrix-vector product nested
+  in a larger expression into a temporary) plus four once-per-tick locals.
 
-  Two things worth knowing from doing it. Hoisting into members is **not**
+  Verified numerically identical at every step (`ee_err` 0.09486, `it_mean` 7.30,
+  `it_max` 15, availability 1.000 throughout). Through the 66 state it was also
+  **−106 us a tick, 8 of 8 paired runs** — removing allocator traffic was a speed
+  win as well as an RT one; the last 65 were not separately A/B'd.
+
+  Four things worth knowing from doing it. Hoisting into members is **not**
   automatically faster — the compiler loses some aliasing freedom — so each step
-  needs a paired measurement, not an assumption; the net came out neutral to
-  slightly better. And sharing `H_bb^-1 H_bm` between `getDynamics` and `gjm6`
-  (they each solved it) looked like a regression over four paired runs and a ~8%
-  win over the next six: four samples is not enough to judge anything on this box.
+  needs its own paired measurement. Sharing `H_bb^-1 H_bm` between `getDynamics`
+  and `gjm6` (they each solved it) read as a regression over four paired runs and a
+  ~8% win over the next six, so four samples settles nothing on this box. An
+  allocation study has to call the code the way production calls it: measuring the
+  by-value overloads after production moved to out-parameters made the study
+  over-report until its residual went negative, which is what exposed it. And a
+  count is not an attribution — "the rest is inside acados" was asserted from the
+  fact that the remainder sat outside the measured primitives, and it was wrong.
+  `DISABLED_AllocStudy.Attribution` settles it instead by resolving each
+  allocation's call site with `dladdr`, grouping by originating shared object, and
+  printing offsets that `addr2line` turns into file and line.
 - **The QP solve is the tick**, and the first thing that actually moved it was
   shrinking the state rather than speeding up the arithmetic. `nx` was
   `7 + 2*n_model_joints` = 19, carrying Δq/qdot rows for every joint in the model;
