@@ -21,6 +21,10 @@ usage: $(basename "$0") [-d SECONDS] [-o LOGFILE] [-t] [PARAMS_FILE]
                _left / _right spliced in). Plot with plot_trace.py. Adds a 1 Hz
                file write on the executor thread, so leave it off when the
                absolute worst-case tick is the measurement.
+  -g           refuse to run unless the CPU governor is 'performance'. The
+               governor is reported either way and recorded in the log; it cannot
+               be SET from in here (/sys is read-only in the container), so pin it
+               from a host shell first: sudo cpupower frequency-set -g performance
   -e           also bring up pat_telemetry, for EE-tracking plots
   PARAMS_FILE  an nmpc.yaml to use instead of the installed default. Copy
                src/pat_arm_nmpc/config/nmpc.yaml, change one knob, pass it here --
@@ -32,12 +36,14 @@ DURATION=300
 LOGFILE="nmpc_trial.log"
 TELEMETRY=false
 TRACE=""
-while getopts ":d:o:T:eh" opt; do
+REQUIRE_PERF=false
+while getopts ":d:o:T:egh" opt; do
     case $opt in
         d) DURATION=$OPTARG ;;
         o) LOGFILE=$OPTARG ;;
         T) TRACE=$OPTARG ;;
         e) TELEMETRY=true ;;
+        g) REQUIRE_PERF=true ;;
         h) usage; exit 0 ;;
         *) usage >&2; exit 2 ;;
     esac
@@ -96,6 +102,28 @@ else
     fi
 fi
 
+# The CPU governor, which this box's measurements are extremely sensitive to:
+# cores have been observed spread over 464-2113 MHz on powersave, and the worst
+# ticks in a trial are the same arithmetic executed more slowly rather than more
+# work. /sys is readable here but mounted read-only, so this reports and refuses;
+# it cannot set it. Pin it from a HOST shell:
+#   sudo cpupower frequency-set -g performance
+GOV_FILES=(/sys/devices/system/cpu/cpu*/cpufreq/scaling_governor)
+GOVERNORS=""
+if [ -r "${GOV_FILES[0]}" ]; then
+    GOVERNORS=$(cat "${GOV_FILES[@]}" 2>/dev/null | sort -u | paste -sd, -)
+fi
+if [ -z "$GOVERNORS" ]; then
+    GOVERNORS="unknown (no cpufreq sysfs)"
+fi
+if [ "$REQUIRE_PERF" = true ] && [ "$GOVERNORS" != "performance" ]; then
+    echo "REFUSING: -g given but the CPU governor is '$GOVERNORS', not performance." >&2
+    echo "  cpupower is not in the dev image and /sys is mounted read-only here," >&2
+    echo "  so set it from a HOST shell, then re-run this:" >&2
+    echo "    sudo cpupower frequency-set -g performance" >&2
+    exit 1
+fi
+
 ARGS=(launch/full_stack_nmpc.launch.py with_targets:=true)
 [ -n "$PARAMS" ]        && ARGS+=("params_file:=$PARAMS")
 [ -n "$TRACE" ]         && ARGS+=("trace_file:=$TRACE")
@@ -104,12 +132,19 @@ ARGS=(launch/full_stack_nmpc.launch.py with_targets:=true)
 echo "running ${DURATION}s trial -> $LOGFILE" >&2
 echo "  params: $EFFECTIVE" >&2
 [ -n "$TRACE" ] && echo "  trace:  ${TRACE} (_left / _right)" >&2
+if [ "$GOVERNORS" = "performance" ]; then
+    echo "  governor: performance" >&2
+else
+    echo "  governor: $GOVERNORS  <-- NOT performance; the tail of this run is" >&2
+    echo "            not comparable with a pinned one (see tools/nmpc_timing/README.md)" >&2
+fi
 # Record what produced this log, and the settings most likely to be the subject of
 # whatever comparison it gets used in. A log that cannot say which config it came
 # from is worth very little a day later.
 {
     echo "# pat_arm_nmpc trial: $(date -Is), ${DURATION}s"
     echo "# params_file: $EFFECTIVE"
+    echo "# cpu_governor: $GOVERNORS"
     grep -E '^\s+(control_hz|warm_start|max_iter|N|Ts|full_nonlinear|sqp_iters):' \
         "$EFFECTIVE" 2>/dev/null | sed 's/^/#   /'
 } > "$LOGFILE"

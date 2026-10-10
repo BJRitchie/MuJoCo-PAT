@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstdio>
 #include <fstream>
 #include <iomanip>
 #include <iterator>
@@ -81,6 +82,18 @@ ArmNMPCNode::ArmNMPCNode() : Node("pat_arm_nmpc") {
             static_cast<std::size_t>(std::distance(model_joint_names_.begin(), it)));
     }
 
+    // JointSnapshot carries fixed-size arrays so the control thread can copy a
+    // whole measurement without allocating. Check the bound here rather than
+    // trusting it at every write: a model with more joints than this would
+    // otherwise overrun the snapshot silently.
+    if (model_joint_names_.size() > kMaxJoints) {
+        throw std::runtime_error(
+            "pat_arm_nmpc: model_joint_names has " +
+            std::to_string(model_joint_names_.size()) + " entries, more than the " +
+            std::to_string(kMaxJoints) + " a JointSnapshot holds — raise "
+            "ArmNMPCNode::kMaxJoints in arm_nmpc_node.h");
+    }
+
     q_joints_.assign(model_joint_names_.size(), 0.0);
     v_joints_.assign(model_joint_names_.size(), 0.0);
 
@@ -99,8 +112,26 @@ ArmNMPCNode::ArmNMPCNode() : Node("pat_arm_nmpc") {
         "/chaser/arm/" + arm_side_ + "/ee_pose", 10);
     ctrl_tmr_ = create_wall_timer(std::chrono::duration<double>(1.0 / ctrl_hz),
                                   std::bind(&ArmNMPCNode::controlLoop, this));
+                                  
+    // Publishing asynchronously costs actuation latency: a command computed at t
+    // is not published until the next drain, so the drain period IS added delay
+    // in the control loop. Ten times the control rate keeps the worst case at a
+    // tenth of a period (1 ms at 100 Hz) and the mean at half that, which is
+    // small against the solve itself. A timer that usually finds both queues
+    // empty is nearly free, so the rate is set by the latency, not by the cost.
+    //
+    // Polling is the simple version. Signalling a dedicated publisher thread
+    // from the tick would cut the delay to a thread wakeup, and belongs with the
+    // realtime-thread change rather than here.
+    drain_tmr_ = create_wall_timer(std::chrono::duration<double>(0.1 / ctrl_hz),
+                                   std::bind(&ArmNMPCNode::drainOutputs, this));
     period_us_ = 1e6 / ctrl_hz;
     controller_->setTickBudgetUs(period_us_);
+
+    // Sized here so the first tick does not allocate either. numArmJoints() is
+    // fixed by the model the controller just loaded.
+    q_.resize(7 + controller_->numArmJoints());
+    v_.resize(6 + controller_->numArmJoints());
 
     // Per-tick trace. The default capacity is 10 minutes at the control rate; the
     // buffer is allocated now and recording simply stops when it is full, so a
@@ -305,11 +336,20 @@ void ArmNMPCNode::onJointState(sensor_msgs::msg::JointState::SharedPtr msg) {
             arm_side_.c_str());
         return;
     }
-    std::lock_guard<std::mutex> lk(mu_);
     applyNamedValues(msg, msg->position, model_joint_names_, q_joints_);
     if (!msg->velocity.empty())
         applyNamedValues(msg, msg->velocity, model_joint_names_, v_joints_);
-    has_state_ = true;
+
+    // Publish the accumulated arrays, not the message: a JointState need not
+    // name every joint, so the running copy is the complete state and the
+    // message is only the update to it.
+    JointSnapshot snap;
+    snap.n = static_cast<std::uint32_t>(q_joints_.size());
+    for (std::size_t i = 0; i < q_joints_.size(); ++i) {
+        snap.q[i] = q_joints_[i];
+        snap.v[i] = v_joints_[i];
+    }
+    joint_mail_.write(snap);
 }
 
 void ArmNMPCNode::onOdom(nav_msgs::msg::Odometry::SharedPtr msg) {
@@ -325,28 +365,30 @@ void ArmNMPCNode::onOdom(nav_msgs::msg::Odometry::SharedPtr msg) {
             arm_side_.c_str());
         return;
     }
-    std::lock_guard<std::mutex> lk(mu_);
+    BaseSnapshot snap;
     // + base_anchor_{x,y}: see the header's comment on why odom's raw value
     // isn't the true world position on its own.
-    base_x_     = base_anchor_x_ + msg->pose.pose.position.x;
-    base_y_     = base_anchor_y_ + msg->pose.pose.position.y;
-    base_yaw_   = quatToYaw(msg->pose.pose.orientation);
+    snap.x     = base_anchor_x_ + msg->pose.pose.position.x;
+    snap.y     = base_anchor_y_ + msg->pose.pose.position.y;
+    snap.yaw   = quatToYaw(msg->pose.pose.orientation);
     // simulation_node publishes world-frame linear velocity in the twist (it
     // copies the chaser slide-joint qvel directly), matching MuJoCo's
     // free-joint linvel convention.
-    base_vx_    = msg->twist.twist.linear.x;
-    base_vy_    = msg->twist.twist.linear.y;
-    base_omega_ = msg->twist.twist.angular.z;
-    has_odom_ = true;
+    snap.vx    = msg->twist.twist.linear.x;
+    snap.vy    = msg->twist.twist.linear.y;
+    snap.omega = msg->twist.twist.angular.z;
+    base_mail_.write(snap);
 }
 
 void ArmNMPCNode::onEeSetpoint(geometry_msgs::msg::PoseStamped::SharedPtr msg) {
-    std::lock_guard<std::mutex> lk(mu_);
-    ee_x_ = msg->pose.position.x;
-    ee_y_ = msg->pose.position.y;
-    ee_quat_ = {msg->pose.orientation.w, msg->pose.orientation.x,
-                msg->pose.orientation.y, msg->pose.orientation.z};
-    has_setpoint_ = true;
+    SetpointSnapshot snap;
+    snap.x = msg->pose.position.x;
+    snap.y = msg->pose.position.y;
+    snap.quat[0] = msg->pose.orientation.w;
+    snap.quat[1] = msg->pose.orientation.x;
+    snap.quat[2] = msg->pose.orientation.y;
+    snap.quat[3] = msg->pose.orientation.z;
+    setpoint_mail_.write(snap);
 }
 
 ArmNMPCNode::~ArmNMPCNode() {
@@ -392,27 +434,34 @@ void ArmNMPCNode::controlLoop() {
     const double cpu_0 = threadCpuUs();
     recordWake(wake);
 
-    std::lock_guard<std::mutex> lk(mu_);
-    if (!has_state_ || !has_odom_) {
-        // Throttled: this fires every tick until both arrive, which at
-        // control_hz is hundreds of lines a second.
-        RCLCPP_WARN_THROTTLE(get_logger(), log_clock_, 2000,
-            "pat_arm_nmpc[%s]: waiting for joint_states and/or odom",
-            arm_side_.c_str());
+    // Take one coherent copy of each input up front. A failed read means either
+    // nothing has arrived yet or the producer was mid-write, and in both cases
+    // the previous copy still stands -- have_* latches once the first real value
+    // lands, so the loop never runs on a default-constructed state.
+    if (joint_mail_.read(joints_)) have_joints_ = true;
+    if (base_mail_.read(base_))    have_base_   = true;
+    if (!have_joints_ || !have_base_) {
+        // Counted, not logged: the report turns this into one throttled line.
+        n_waiting_for_input_.fetch_add(1, std::memory_order_relaxed);
         return;
     }
 
     const int n = controller_->numArmJoints();
-    Eigen::VectorXd q(7 + n), v(6 + n);
-    q(0) = base_x_; q(1) = base_y_; q(2) = 0.0;
-    q(3) = std::cos(base_yaw_ / 2.0);
+    // Sized once; resize is a no-op at an unchanged size, so no allocation after
+    // the first tick.
+    q_.resize(7 + n);
+    v_.resize(6 + n);
+    Eigen::VectorXd& q = q_;
+    Eigen::VectorXd& v = v_;
+    q(0) = base_.x; q(1) = base_.y; q(2) = 0.0;
+    q(3) = std::cos(base_.yaw / 2.0);
     q(4) = 0.0; q(5) = 0.0;
-    q(6) = std::sin(base_yaw_ / 2.0);
-    v(0) = base_vx_; v(1) = base_vy_; v(2) = 0.0;
-    v(3) = 0.0; v(4) = 0.0; v(5) = base_omega_;
+    q(6) = std::sin(base_.yaw / 2.0);
+    v(0) = base_.vx; v(1) = base_.vy; v(2) = 0.0;
+    v(3) = 0.0; v(4) = 0.0; v(5) = base_.omega;
     for (int i = 0; i < n; ++i) {
-        q(7 + i) = q_joints_[static_cast<size_t>(i)];
-        v(6 + i) = v_joints_[static_cast<size_t>(i)];
+        q(7 + i) = joints_.q[static_cast<size_t>(i)];
+        v(6 + i) = joints_.v[static_cast<size_t>(i)];
     }
 
     // Measured EE pose (world frame): published for downstream consumers
@@ -420,31 +469,37 @@ void ArmNMPCNode::controlLoop() {
     // tick, used to seed a hold-pose setpoint.
     const auto meas = controller_->currentEePose(q, v);
     {
-        geometry_msgs::msg::PoseStamped ps;
-        ps.header.stamp = get_clock()->now();
-        ps.header.frame_id = "map";
-        ps.pose.position.x = meas.pos.x();
-        ps.pose.position.y = meas.pos.y();
-        ps.pose.position.z = meas.pos.z();
-        ps.pose.orientation.w = meas.quat[0];
-        ps.pose.orientation.x = meas.quat[1];
-        ps.pose.orientation.y = meas.quat[2];
-        ps.pose.orientation.z = meas.quat[3];
-        ee_pose_pub_->publish(ps);
+        EePoseOut out;
+        out.pos[0] = meas.pos.x();
+        out.pos[1] = meas.pos.y();
+        out.pos[2] = meas.pos.z();
+        for (int i = 0; i < 4; ++i) out.quat[i] = meas.quat[i];
+        if (!ee_pose_out_.push(out))
+            n_ee_pose_dropped_.fetch_add(1, std::memory_order_relaxed);
     }
 
-    if (!has_setpoint_) {
-        ee_x_ = meas.pos.x();
-        ee_y_ = meas.pos.y();
-        ee_quat_ = {meas.quat[0], meas.quat[1], meas.quat[2], meas.quat[3]};
-        has_setpoint_ = true;
-        RCLCPP_INFO(get_logger(),
-            "pat_arm_nmpc[%s]: no ee_setpoint yet — holding start pose "
-            "(%.3f, %.3f)", arm_side_.c_str(), ee_x_, ee_y_);
+    // A published setpoint always wins; otherwise hold wherever the arm started,
+    // captured once. Both land in the loop's own desired pose, so a tick is never
+    // tracking a target that changed halfway through it.
+    SetpointSnapshot sp;
+    if (setpoint_mail_.read(sp)) {
+        des_x_    = sp.x;
+        des_y_    = sp.y;
+        des_quat_ = {sp.quat[0], sp.quat[1], sp.quat[2], sp.quat[3]};
+        have_des_ = true;
+    } else if (!have_des_) {
+        des_x_    = meas.pos.x();
+        des_y_    = meas.pos.y();
+        des_quat_ = {meas.quat[0], meas.quat[1], meas.quat[2], meas.quat[3]};
+        have_des_ = true;
+        // Left for the report to log: this is the control thread.
+        seeded_x_ = des_x_;
+        seeded_y_ = des_y_;
+        seeded_hold_pose_.store(true, std::memory_order_release);
     }
 
-    controller_->setDesiredPos(ee_x_, ee_y_, 0.0);
-    controller_->setDesiredOrient(ee_quat_[0], ee_quat_[1], ee_quat_[2], ee_quat_[3]);
+    controller_->setDesiredPos(des_x_, des_y_, 0.0);
+    controller_->setDesiredOrient(des_quat_[0], des_quat_[1], des_quat_[2], des_quat_[3]);
 
     // computeControl handles its own numerical failures by entering safe mode,
     // so an exception reaching here means something outside the control law
@@ -456,44 +511,25 @@ void ArmNMPCNode::controlLoop() {
         tau = controller_->computeControl(q, v);
     } catch (const std::exception& e) {
         tau = controller_->dampingTorque(v);
-        RCLCPP_ERROR_THROTTLE(get_logger(), log_clock_, 1000,
-            "pat_arm_nmpc[%s]: control tick threw (%s) — commanding joint damping",
-            arm_side_.c_str(), e.what());
+        // Copied into a fixed buffer rather than logged: no formatting, no
+        // allocation, no write from the control thread.
+        std::snprintf(threw_msg_, kMsgLen, "%s", e.what());
+        n_tick_threw_.fetch_add(1, std::memory_order_relaxed);
     }
 
-    // Log tier transitions once each, not per tick. Severity follows the tier: a
-    // Tier 1 replay is a handled transient and should not read like a fault.
-    using Mode = pat_arm_nmpc::ArmNMPC::ControlMode;
+    // Queue tier transitions for the report to log, once each rather than per
+    // tick. Detected here because a 1 Hz sample of mode() would miss any
+    // transition that came and went inside a window.
     const auto mode = controller_->mode();
     if (mode != prev_mode_) {
-        switch (mode) {
-        case Mode::PlanReplay:
-            RCLCPP_WARN(get_logger(),
-                "pat_arm_nmpc[%s]: TIER 1 — solve failed (QP status %d), replaying the "
-                "last accepted plan",
-                arm_side_.c_str(), controller_->lastQpStatus());
-            break;
-        case Mode::Damping:
-            RCLCPP_ERROR(get_logger(),
-                "pat_arm_nmpc[%s]: TIER 2 — joint damping, task abandoned "
-                "(QP status %d, %ld replay ticks used so far)",
-                arm_side_.c_str(), controller_->lastQpStatus(),
-                controller_->tier1Ticks());
-            break;
-        case Mode::Latched:
-            RCLCPP_ERROR(get_logger(),
-                "pat_arm_nmpc[%s]: TIER 3 — LATCHED in damping; the solver did not "
-                "recover and this will NOT clear on its own",
-                arm_side_.c_str());
-            break;
-        case Mode::Nominal:
-            RCLCPP_INFO(get_logger(),
-                "pat_arm_nmpc[%s]: resumed tracking (%ld damped ticks, %ld replay "
-                "ticks over %ld Tier 1 entries, in total)",
-                arm_side_.c_str(), controller_->safeModeTicks(),
-                controller_->tier1Ticks(), controller_->tier1Entries());
-            break;
-        }
+        ModeEvent ev;
+        ev.mode            = static_cast<int>(mode);
+        ev.qp_status       = controller_->lastQpStatus();
+        ev.tier1_ticks     = controller_->tier1Ticks();
+        ev.safe_mode_ticks = controller_->safeModeTicks();
+        ev.tier1_entries   = controller_->tier1Entries();
+        if (!mode_events_.push(ev))
+            n_mode_events_dropped_.fetch_add(1, std::memory_order_relaxed);
         prev_mode_ = mode;
     }
 
@@ -502,18 +538,19 @@ void ArmNMPCNode::controlLoop() {
     // unreachable — which is exactly why it is worth asserting.
     if (!tau.allFinite()) {
         tau.setZero();
-        RCLCPP_ERROR_THROTTLE(get_logger(), log_clock_, 1000,
-            "pat_arm_nmpc[%s]: non-finite torque suppressed, commanding zero",
-            arm_side_.c_str());
+        n_nonfinite_torque_.fetch_add(1, std::memory_order_relaxed);
     }
 
-    sensor_msgs::msg::JointState cmd;
-    cmd.header.stamp = get_clock()->now();
-    cmd.name = joint_names_;
-    cmd.effort.resize(joint_names_.size());
-    for (size_t k = 0; k < joint_names_.size(); ++k)
-        cmd.effort[k] = tau(static_cast<Eigen::Index>(owned_model_idx_[k]));
-    torque_pub_->publish(cmd);
+    {
+        TorqueOut out;
+        out.n = static_cast<std::uint32_t>(joint_names_.size());
+        for (size_t k = 0; k < joint_names_.size(); ++k)
+            out.effort[k] = tau(static_cast<Eigen::Index>(owned_model_idx_[k]));
+        // A dropped torque leaves the actuator on the previous command for an
+        // extra period, so this is counted rather than ignored.
+        if (!torque_out_.push(out))
+            n_torque_dropped_.fetch_add(1, std::memory_order_relaxed);
+    }
 
     // Time the whole callback, not just computeControl: state assembly, both
     // publishes and the torque copy are all on the control thread and all count
@@ -521,15 +558,49 @@ void ArmNMPCNode::controlLoop() {
     // deadline accounting needs the value.
     const double body_us = std::chrono::duration<double, std::micro>(
         std::chrono::steady_clock::now() - wake).count();
-    loop_.add(body_us);
-    cpu_.add(threadCpuUs() - cpu_0);
-    if (period_us_ > 0.0 && body_us > period_us_) {
-        ++deadline_misses_;
-        ++consecutive_misses_;
-        worst_consecutive_misses_ =
-            std::max(worst_consecutive_misses_, consecutive_misses_);
-    } else {
-        consecutive_misses_ = 0;
+    {
+        std::lock_guard<std::mutex> lk(stats_mu_);
+        loop_.add(body_us);
+        cpu_.add(threadCpuUs() - cpu_0);
+        if (period_us_ > 0.0 && body_us > period_us_) {
+            ++deadline_misses_;
+            ++consecutive_misses_;
+            worst_consecutive_misses_ =
+                std::max(worst_consecutive_misses_, consecutive_misses_);
+        } else {
+            consecutive_misses_ = 0;
+        }
+    }
+}
+
+void ArmNMPCNode::drainOutputs() {
+    // Everything the tick produced since the last drain, published from this
+    // thread so the control path never calls into the middleware. Drains the
+    // whole queue rather than one entry, so a late drain catches up instead of
+    // falling further behind.
+    TorqueOut t;
+    while (torque_out_.pop(t)) {
+        sensor_msgs::msg::JointState cmd;
+        cmd.header.stamp = get_clock()->now();
+        cmd.name = joint_names_;
+        cmd.effort.resize(t.n);
+        for (std::uint32_t k = 0; k < t.n; ++k) cmd.effort[k] = t.effort[k];
+        torque_pub_->publish(cmd);
+    }
+
+    EePoseOut p;
+    while (ee_pose_out_.pop(p)) {
+        geometry_msgs::msg::PoseStamped ps;
+        ps.header.stamp = get_clock()->now();
+        ps.header.frame_id = "map";
+        ps.pose.position.x = p.pos[0];
+        ps.pose.position.y = p.pos[1];
+        ps.pose.position.z = p.pos[2];
+        ps.pose.orientation.w = p.quat[0];
+        ps.pose.orientation.x = p.quat[1];
+        ps.pose.orientation.y = p.quat[2];
+        ps.pose.orientation.z = p.quat[3];
+        ee_pose_pub_->publish(ps);
     }
 }
 
@@ -544,6 +615,9 @@ void ArmNMPCNode::recordWake(std::chrono::steady_clock::time_point wake) {
     last_wake_ = wake;
     if (period_us_ <= 0.0) return;
 
+    // last_wake_/have_last_wake_ above belong to this thread alone; jitter_ and
+    // skipped_periods_ are what the report reads and resets.
+    std::lock_guard<std::mutex> lk(stats_mu_);
     jitter_.add(std::abs(dt_us - period_us_));
     // Round down, so an interval inside one period counts as nothing skipped.
     const long periods = static_cast<long>(dt_us / period_us_);
@@ -551,7 +625,77 @@ void ArmNMPCNode::recordWake(std::chrono::steady_clock::time_point wake) {
 }
 
 void ArmNMPCNode::reportDiagnostics() {
-    std::lock_guard<std::mutex> lk(mu_);
+    // Everything the control tick recorded but could not log. Drained first, so
+    // a window that then returns early below still gets these out.
+    if (seeded_hold_pose_.exchange(false, std::memory_order_acq_rel)) {
+        RCLCPP_INFO(get_logger(),
+            "pat_arm_nmpc[%s]: no ee_setpoint yet — holding start pose (%.3f, %.3f)",
+            arm_side_.c_str(), seeded_x_, seeded_y_);
+    }
+    if (const long n = n_waiting_for_input_.exchange(0, std::memory_order_relaxed)) {
+        RCLCPP_WARN(get_logger(),
+            "pat_arm_nmpc[%s]: waiting for joint_states and/or odom (%ld ticks)",
+            arm_side_.c_str(), n);
+    }
+    if (const long n = n_tick_threw_.exchange(0, std::memory_order_relaxed)) {
+        RCLCPP_ERROR(get_logger(),
+            "pat_arm_nmpc[%s]: control tick threw %ld time(s), last: %s "
+            "— commanded joint damping",
+            arm_side_.c_str(), n, threw_msg_);
+    }
+    if (const long n = n_nonfinite_torque_.exchange(0, std::memory_order_relaxed)) {
+        RCLCPP_ERROR(get_logger(),
+            "pat_arm_nmpc[%s]: non-finite torque suppressed %ld time(s), commanded zero",
+            arm_side_.c_str(), n);
+    }
+    // A drop here means the drain did not keep up with the tick, which costs a
+    // held-stale actuator command -- worth surfacing loudly, not as a statistic.
+    const long dropped_tau = n_torque_dropped_.exchange(0, std::memory_order_relaxed);
+    const long dropped_ee  = n_ee_pose_dropped_.exchange(0, std::memory_order_relaxed);
+    const long dropped_ev  = n_mode_events_dropped_.exchange(0, std::memory_order_relaxed);
+    if (dropped_tau || dropped_ee || dropped_ev) {
+        RCLCPP_ERROR(get_logger(),
+            "pat_arm_nmpc[%s]: outbound queue overflow — dropped %ld torque, "
+            "%ld ee_pose, %ld mode events; the publisher is not keeping up",
+            arm_side_.c_str(), dropped_tau, dropped_ee, dropped_ev);
+    }
+
+    // Tier transitions, in the order the control loop saw them. Severity follows
+    // the tier: a Tier 1 replay is a handled transient and should not read like a
+    // fault.
+    using Mode = pat_arm_nmpc::ArmNMPC::ControlMode;
+    ModeEvent ev;
+    while (mode_events_.pop(ev)) {
+        switch (static_cast<Mode>(ev.mode)) {
+        case Mode::PlanReplay:
+            RCLCPP_WARN(get_logger(),
+                "pat_arm_nmpc[%s]: TIER 1 — solve failed (QP status %d), replaying the "
+                "last accepted plan",
+                arm_side_.c_str(), ev.qp_status);
+            break;
+        case Mode::Damping:
+            RCLCPP_ERROR(get_logger(),
+                "pat_arm_nmpc[%s]: TIER 2 — joint damping, task abandoned "
+                "(QP status %d, %ld replay ticks used so far)",
+                arm_side_.c_str(), ev.qp_status, ev.tier1_ticks);
+            break;
+        case Mode::Latched:
+            RCLCPP_ERROR(get_logger(),
+                "pat_arm_nmpc[%s]: TIER 3 — LATCHED in damping; the solver did not "
+                "recover and this will NOT clear on its own",
+                arm_side_.c_str());
+            break;
+        case Mode::Nominal:
+            RCLCPP_INFO(get_logger(),
+                "pat_arm_nmpc[%s]: resumed tracking (%ld damped ticks, %ld replay "
+                "ticks over %ld Tier 1 entries, in total)",
+                arm_side_.c_str(), ev.safe_mode_ticks, ev.tier1_ticks,
+                ev.tier1_entries);
+            break;
+        }
+    }
+
+    std::lock_guard<std::mutex> lk(stats_mu_);
     // Before the early return below: a window with no completed tick still has a
     // previous window's rows to get out, and the trace should not stall on it.
     flushTrace();

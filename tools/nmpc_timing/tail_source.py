@@ -23,6 +23,7 @@ traces you already have -- no new run:
 Stdlib only and ASCII out, for the same reasons as plot_trace.py.
 """
 import argparse
+import math
 import sys
 
 from plot_trace import read
@@ -45,7 +46,18 @@ def mean(values):
 
 
 def flush_test(rows, pct, bins=20):
-    """Is the tick that follows a flush slower than the rest?"""
+    """Is the tick that follows a flush slower than the rest?
+
+    Judged on the OUTLIERS, not the means. The question a flush raises is whether
+    it produces expensive ticks, and the mean of a heavily skewed distribution
+    answers a different question badly: across two 309 s runs of one config the
+    post-flush mean difference came out -37/-48 us and then +33/+57 us, each
+    time with a bootstrap interval excluding zero. Within-run significance of a
+    systematic subsample does not survive to the next run, because the machine's
+    state drifts over the run and the 1 s-boundary ticks sample that drift
+    differently. The share of outliers is both the relevant question and a stable
+    answer.
+    """
     ticks = [r['tick_us'] for r in rows]
     thr = pctl(ticks, pct)
     period = _tick_period(rows)
@@ -62,11 +74,34 @@ def flush_test(rows, pct, bins=20):
             continue
         print(f"     {name:<22} n={len(vals):<6} mean {mean(vals):6.0f}  "
               f"p99 {pctl(vals, 99):6.0f}  max {max(vals):7.0f} us")
+
     if first and rest:
-        verdict = ("flush-adjacent ticks are NOT slower"
-                   if mean(first) <= mean(rest) else
-                   "flush-adjacent ticks ARE slower -- investigate")
-        print(f"     -> {verdict}")
+        # How many of the run's outliers were post-flush, against how many that
+        # group's size would give if the flush made no difference.
+        n_out_first = sum(1 for v in first if v >= thr)
+        n_out_all = sum(1 for v in ticks if v >= thr)
+        share = len(first) / len(ticks)
+        exp = n_out_all * share
+        # Counts this small are Poisson, so a ratio against the expectation is
+        # mostly noise: at exp ~3 an observed 6 is a routine fluctuation, not a
+        # doubling. Flag only past two standard deviations.
+        sd = math.sqrt(exp) if exp > 0 else 0.0
+        print(f"     of the {n_out_all} ticks >= p{pct} ({thr:.0f} us), "
+              f"{n_out_first} were post-flush "
+              f"({exp:.1f} +- {2 * sd:.1f} expected from this group's size)")
+        if n_out_first <= exp + 2 * sd:
+            print("     -> consistent with the flush producing no outliers")
+        else:
+            print(f"     -> {n_out_first} is beyond 2 sd of {exp:.1f} "
+                  f"-- confirm with a run with -T off")
+        # The cleanest statement available, and the one that does not depend on
+        # a distributional assumption: how big the worst post-flush tick got.
+        print(f"     worst post-flush tick {max(first):.0f} us vs "
+              f"{max(rest):.0f} us elsewhere")
+        # The mean difference, reported but not ruled on, for the reason above.
+        d = mean(first) - mean(rest)
+        print(f"     (mean difference {d:+.0f} us; not reproducible in sign "
+              f"across runs, so do not read a verdict into it)")
 
     # Where in the second the slow ticks fall. A flush cause concentrates them
     # in the first bin; anything else does not.

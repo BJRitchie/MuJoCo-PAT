@@ -608,9 +608,72 @@ problem pays both more iterations and somewhat dearer ones. Two consequences:
 - **No realtime scheduling anywhere.** Default `rclcpp` executor, default-priority
   DDS threads, no `SCHED_FIFO`, no `mlockall`, no core pinning. The dev container
   also lacks `CAP_SYS_NICE`, so it cannot currently request an RT policy at all.
+  The control loop's *inputs* are now ready for it (see below); its statistics are
+  not.
 
 Cleared, and worth knowing about because each was invisible rather than noisy:
 
+- **The control loop's inputs arrive without a shared lock.** The tick used to hold
+  one mutex across its whole body, including both publishes. That costs nothing
+  today — `rclcpp::spin()` is single-threaded, so the lock is uncontended and it is
+  the executor that serialises the callbacks — but a tick moved to `SCHED_FIFO`
+  blocking on a lock a normal-priority subscription callback holds is priority
+  inversion, and the control thread would then wait on the scheduler. The three
+  inputs now arrive through `SeqlockMailbox` (`rt_mailbox.h`): each callback
+  publishes one whole fixed-size POD snapshot, the tick copies whichever is current
+  without waiting, and a read that loses its race leaves the loop on its previous
+  value rather than blocking for a fresh one. Measured at 10x the production rate:
+  zero torn reads, zero give-ways, zero allocations.
+
+  The tick also no longer writes back into the setpoint it reads. Seeding the
+  hold-pose used to have the control loop assign `ee_x_`/`ee_y_`, making it a second
+  producer on state the subscription owned; the desired pose is now the loop's own,
+  taken from the mailbox when a setpoint exists and seeded from the measured pose
+  when none ever arrives.
+
+- **The tick no longer publishes, logs, or allocates.** Both publishes went through
+  `rclcpp::Publisher::publish`, which depending on the middleware can allocate, take
+  a lock or touch a socket, and the tick carried six `RCLCPP_*` sites, which format
+  and write. Output now goes into `SpscRing` queues (`rt_mailbox.h`) that a drain
+  timer publishes from, the log sites became atomic counters and a queue of mode
+  events that the 1 Hz report turns back into the same log lines, and the state
+  vectors are members rather than per-tick `VectorXd` locals.
+
+  Queues rather than a latest-value mailbox for the output, because a dropped
+  torque leaves the actuator on the previous command for an extra period; a refused
+  push is counted and reported as an overflow rather than passed over. Mode
+  transitions are queued for the same reason the report cannot just sample `mode()`
+  at 1 Hz: a transition that came and went inside a window would be invisible.
+
+  **This costs actuation latency**, which is inherent to publishing
+  asynchronously: a command computed at *t* is published at the next drain. The
+  drain runs at 10x the control rate, so the added delay is at most a tenth of a
+  period (1 ms at 100 Hz) and on average half that. Signalling a dedicated
+  publisher thread from the tick would reduce it to a thread wakeup; polling is the
+  simple version and the rate is chosen by the latency, not the cost, since a timer
+  that finds both queues empty is nearly free.
+
+  **Not finished:** the diagnostics statistics. `stats_mu_` still covers the
+  `PhaseStat`s, the deadline counters and the controller's profile, which the tick
+  accumulates and the 1 Hz report reads and resets. It is harmless while both run on
+  the one executor thread, and it is the remaining cross-thread item to resolve
+  alongside the thread change — the accumulation has to stay on the control thread,
+  with the report reading a published snapshot and requesting the reset. `PhaseStat`
+  is trivially copyable, so that is a snapshot rather than an atomics refactor, but
+  it means regrouping the controller's profile members into one struct that can be
+  copied in a single go.
+- **The dev container can now request a realtime policy.** `docker-compose.yml`
+  grants `ulimits: {rtprio: 99, memlock: 268435456}`. Deliberately **not**
+  `cap_add: [SYS_NICE]`: `user:` runs the container as a non-root user, whose
+  effective capability set is empty, and a capability in the bounding set is not
+  granted to a non-root process without ambient capabilities — `cap_add` would look
+  like it worked and do nothing. `RLIMIT_RTPRIO` is what works unprivileged, and
+  `chrt -f 99 true` now succeeds with `CapEff: 0000000000000000`, which is the proof.
+  `CAP_SYS_NICE` is only needed to exceed the rlimit, renice negatively, or change
+  another process's policy. memlock is sized from the measured ~33 MB RSS of
+  `arm_nmpc_node` (8x headroom) and kept finite, given this box's `systemd-oomd`
+  history. `CONFIG_RT_GROUP_SCHED` is unset on the host, so there is no cgroup RT
+  budget to fight; cgroups are v2, so `--cpu-rt-runtime` is unusable regardless.
 - **MuJoCo's own logging no longer runs from the tick.** Its default warning hook
   appends to `MUJOCO_LOG.TXT` -- a file write from a path that fires exactly when
   the solver is struggling -- and its default error hook calls `exit()`, killing a

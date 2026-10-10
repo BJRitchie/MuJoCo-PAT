@@ -15,6 +15,7 @@
 #include <sensor_msgs/msg/joint_state.hpp>
 
 #include "pat_arm_nmpc/arm_nmpc.h"
+#include "pat_arm_nmpc/rt_mailbox.h"
 
 /// One ArmNMPC instance per arm (run two node processes, left + right).
 ///
@@ -27,6 +28,62 @@
 /// instances coexist on one topic).
 class ArmNMPCNode : public rclcpp::Node {
 public:
+    /*! The measurements and the setpoint, handed from the subscription callbacks
+     *  to the control loop one whole value at a time.
+     *
+     *  Fixed-size arrays rather than vectors because SeqlockMailbox copies these
+     *  by plain assignment on both sides: a vector would allocate on the control
+     *  thread, which is the one thing the hot path no longer does. The node
+     *  refuses to construct if the model has more joints than kMaxJoints, so the
+     *  bound is checked once rather than trusted.
+     *
+     *  Each is written by exactly one callback and read only by the control loop,
+     *  which is what makes the single-producer/single-consumer requirement hold.
+     *  They are separate mailboxes, not one struct, because three different
+     *  callbacks produce them at three different rates. */
+    static constexpr std::size_t kMaxJoints = 32;
+
+    struct JointSnapshot {
+        double        q[kMaxJoints]{};
+        double        v[kMaxJoints]{};
+        std::uint32_t n{0};          //!< how many of q/v are populated
+    };
+    struct BaseSnapshot {
+        double x{0.0}, y{0.0}, yaw{0.0};
+        double vx{0.0}, vy{0.0}, omega{0.0};
+    };
+    struct SetpointSnapshot {
+        double x{0.0}, y{0.0};
+        double quat[4]{1.0, 0.0, 0.0, 0.0};   //!< [w, x, y, z]
+    };
+
+    /*! What the tick produces, queued for a non-realtime thread to publish.
+     *
+     *  `rclcpp::Publisher::publish` is not safe to call from a realtime thread:
+     *  depending on the middleware it can allocate, take a lock, or touch a
+     *  socket. These carry the numbers out as POD and the drain builds the
+     *  messages, so the tick's output costs one queue slot. */
+    struct TorqueOut {
+        double        effort[kMaxJoints]{};
+        std::uint32_t n{0};
+    };
+    struct EePoseOut {
+        double pos[3]{};
+        double quat[4]{1.0, 0.0, 0.0, 0.0};
+    };
+
+    /*! A control-mode transition, queued so the report can log each one exactly
+     *  once. The tick cannot log it itself -- RCLCPP_* formats and writes -- and
+     *  the report cannot infer it by sampling `mode()` at 1 Hz, which would miss
+     *  any transition that came and went inside a window. */
+    struct ModeEvent {
+        int  mode{0};              //!< pat_arm_nmpc::ArmNMPC::ControlMode
+        int  qp_status{0};
+        long tier1_ticks{0};
+        long safe_mode_ticks{0};
+        long tier1_entries{0};
+    };
+
     ArmNMPCNode();
     //! Writes the per-tick trace out, if one was requested. In the destructor so a
     //! Ctrl-C'd run still saves: nothing is written while the loop is running.
@@ -66,9 +123,12 @@ private:
     std::vector<std::string> model_joint_names_;  // ALL model joints, model order (6)
     std::vector<std::size_t> owned_model_idx_;    // joint_names_[k] → model index
 
-    std::vector<double> q_joints_, v_joints_;     // sized to model_joint_names_
-    std::vector<double> ee_quat_{1.0, 0.0, 0.0, 0.0};   // desired EE quat [w,x,y,z]
-    double ee_x_{0.0}, ee_y_{0.0};                      // desired EE position [m]
+    //! The joint-state callback's own running copy, sized to model_joint_names_.
+    //! Kept across messages because a JointState need not carry every joint --
+    //! applyNamedValues leaves the absent ones alone -- so the accumulated array
+    //! is the thing worth publishing, not the message. Touched only by that
+    //! callback; the control loop sees it through joint_mail_.
+    std::vector<double> q_joints_, v_joints_;
     // /chaser/odom reports chaser_x/y — the raw slide-joint values relative
     // to the chaser body's own MJCF anchor (air_bearing_table.xacro:
     // <body name="chaser" pos="-0.5 0 0.1525">), NOT the chaser's true
@@ -87,9 +147,68 @@ private:
     // 0,0 (backward compatible with a model whose chaser has no such
     // anchor).
     double base_anchor_x_{0.0}, base_anchor_y_{0.0};
-    double base_x_{0.0}, base_y_{0.0}, base_yaw_{0.0};
-    double base_vx_{0.0}, base_vy_{0.0}, base_omega_{0.0};
-    bool has_state_{false}, has_odom_{false}, has_setpoint_{false};
+
+    //! The hand-off itself. Written by onJointState / onOdom / onEeSetpoint,
+    //! read by controlLoop, with no lock between them -- see rt_mailbox.h.
+    pat_arm_nmpc::SeqlockMailbox<JointSnapshot>    joint_mail_;
+    pat_arm_nmpc::SeqlockMailbox<BaseSnapshot>     base_mail_;
+    pat_arm_nmpc::SeqlockMailbox<SetpointSnapshot> setpoint_mail_;
+
+    //! The control loop's private working copies: filled from the mailboxes at
+    //! the top of each tick and owned by that thread alone for the rest of it, so
+    //! the state cannot change underneath a tick that is halfway through using it.
+    //! Retained between ticks so a read that loses its race (or a producer that
+    //! has gone quiet) leaves the loop running on the last good value rather than
+    //! on a default-constructed one.
+    JointSnapshot    joints_{};
+    BaseSnapshot     base_{};
+    bool             have_joints_{false}, have_base_{false};
+
+    //! The desired pose the loop is tracking, also control-thread-private. Taken
+    //! from setpoint_mail_ when a setpoint has ever been published, and otherwise
+    //! seeded once from the measured pose so an unattended node holds station
+    //! instead of driving to the origin. Private state rather than the shared
+    //! setpoint, because the seeding is the control loop writing a value only it
+    //! should own -- writing it back into the subscription's slot would make the
+    //! loop a second producer on that mailbox.
+    double des_x_{0.0}, des_y_{0.0};
+    std::array<double, 4> des_quat_{1.0, 0.0, 0.0, 0.0};
+    bool   have_des_{false};
+
+    //! The state vectors the tick assembles. Members, not locals: a VectorXd per
+    //! tick is an allocation per tick on the one thread that must not make them.
+    Eigen::VectorXd q_, v_;
+
+    //! Outbound queues and the timer that drains them. The drain runs at twice
+    //! the control rate so a tick's output waits well under one period, and the
+    //! queues are deep enough that a late drain backs up rather than drops.
+    pat_arm_nmpc::SpscRing<TorqueOut, 16>  torque_out_;
+    pat_arm_nmpc::SpscRing<EePoseOut, 16>  ee_pose_out_;
+    pat_arm_nmpc::SpscRing<ModeEvent, 16>  mode_events_;
+    rclcpp::TimerBase::SharedPtr           drain_tmr_;
+    void drainOutputs();
+
+    /*! Things the tick must report but cannot log, since RCLCPP_* formats and
+     *  writes. Counted here and surfaced by the report instead. Atomic because
+     *  the control thread increments them and the report reads and clears them;
+     *  relaxed, because a diagnostic counter that is a tick out of date is still
+     *  a correct diagnostic. */
+    std::atomic<long> n_waiting_for_input_{0};   //!< ticks with no state yet
+    std::atomic<long> n_tick_threw_{0};          //!< exceptions out of computeControl
+    std::atomic<long> n_nonfinite_torque_{0};    //!< suppressed non-finite commands
+    std::atomic<long> n_torque_dropped_{0};      //!< outbound queue was full
+    std::atomic<long> n_ee_pose_dropped_{0};
+    std::atomic<long> n_mode_events_dropped_{0};
+    //! The last exception message, copied into a fixed buffer rather than a
+    //! std::string so the tick neither allocates nor formats. Written by the
+    //! control thread and read by the report, so a torn message would garble one
+    //! log line rather than cost correctness.
+    static constexpr std::size_t kMsgLen = 192;
+    char threw_msg_[kMsgLen]{};
+    //! Set once when the loop seeds its own hold pose, with the pose it chose, so
+    //! the report can log what the tick could not.
+    std::atomic<bool> seeded_hold_pose_{false};
+    double seeded_x_{0.0}, seeded_y_{0.0};
 
     // Last mode seen, so safe-mode entry and recovery are logged once per
     // transition rather than once per control tick.
@@ -156,5 +275,16 @@ private:
     long trace_written_{0};
     void flushTrace();
 
-    std::mutex mu_;
+    //! Guards the diagnostics statistics only -- the PhaseStats, the deadline
+    //! counters and the controller's profile, which the control tick accumulates
+    //! and reportDiagnostics reads and resets. The measurement path no longer
+    //! uses it; see the mailboxes above.
+    //!
+    //! This is the one cross-thread item the hand-off has not resolved. It is
+    //! harmless today, because every callback still runs on the one executor
+    //! thread, but a control loop moved to SCHED_FIFO must not take a lock that
+    //! the diagnostics timer holds. Resolving it belongs with the thread change:
+    //! the accumulation has to stay on the control thread, with the report
+    //! reading a published snapshot and requesting the reset.
+    std::mutex stats_mu_;
 };

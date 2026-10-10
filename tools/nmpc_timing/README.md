@@ -13,11 +13,26 @@ Both read the same instrumentation, so the numbers mean the same thing.
 
 ## Live trials
 
-Inside the dev container (`docker compose exec dev bash`):
+Pin the CPU governor **on the host** first, before attaching to the container.
+This box has been seen spread over 464–2113 MHz on `powersave`, and that shows up
+directly in the tail:
+
+```bash
+sudo cpupower frequency-set -g performance                   # host shell
+cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor     # confirm
+```
+
+It cannot be done from inside the container: `/sys` is mounted read-only there, so
+the write fails whatever is installed and whoever runs it — installing `cpupower`
+in the image would not help. `run_trial.sh` reads the governor, prints it, records
+it in the log header as `# cpu_governor:`, and with `-g` refuses to run unless it
+is `performance`.
+
+Then, inside the dev container (`docker compose exec dev bash`):
 
 ```bash
 # baseline, using the installed config
-./tools/nmpc_timing/run_trial.sh -d 300 -o /tmp/base.log
+./tools/nmpc_timing/run_trial.sh -g -d 300 -o /tmp/base.log
 
 # a variant: copy the config, change ONE knob, pass it -- no rebuild
 cp src/pat_arm_nmpc/config/nmpc.yaml /tmp/try.yaml
@@ -126,9 +141,10 @@ File I/O does land on the executor thread once a second, alongside the report li
 that was already being logged there. Tracing is a diagnostic mode; leave it off for
 a run whose absolute worst-case tick is the measurement.
 
-It does **not** inflate the ticks around it, measured rather than assumed — see
-the flush test below, which finds the tick right after each flush slightly
-*faster* than the rest.
+It does **not** produce expensive ticks, measured rather than assumed — see the
+flush test below. Across four 309 s traces the worst post-flush tick is 2.7–2.9 ms
+while the worst tick elsewhere is 6.2–11.1 ms, and the post-flush share of each
+run's p99 outliers sits inside Poisson noise every time.
 
 ### Where a tail comes from
 
@@ -143,9 +159,19 @@ tools/nmpc_timing/tail_source.py --pct 99.9 --top 15 data/nmpc_timing/trace_left
 Three tests, all on traces you already have:
 
 - **The 1 Hz flush**, the obvious suspect since it writes on the control
-  callback's executor. Compares the tick right after each flush against every
-  other tick, and histograms where in the second the slow ticks fall. A flush
+  callback's executor. Judged on the *outliers* — what share of the run's p99
+  ticks were post-flush, against what that group's size alone would give, with
+  Poisson error bars, plus the worst post-flush tick against the worst tick
+  elsewhere. It also histograms where in the second the slow ticks fall; a flush
   cause concentrates them in the first bin.
+
+  It deliberately does **not** rule on the difference in means. Across two 309 s
+  runs of one unchanged config the post-flush mean difference came out −37/−48 µs
+  and then +33/+57 µs, each time with a bootstrap interval excluding zero. A
+  systematic subsample can be significant within a run and reverse in the next,
+  because the machine's state drifts across a run and the 1 s-boundary ticks
+  sample that drift differently. The mean difference is printed, unruled, as a
+  reminder.
 - **Cross-arm co-occurrence.** The two arms are separate processes solving
   independent QPs, so outliers that coincide in wall-clock time have a cause
   outside both controllers. It scans ±1 s for the clock offset that aligns them
@@ -156,14 +182,31 @@ Three tests, all on traces you already have:
   that ran the *same* iterations at several times the median cost per iteration
   is the machine.
 
-On the 309 s / 30,692-tick-per-arm baseline all three agree, and none of them
-point at this package: flush-adjacent ticks average 1024 µs against 1061 µs for
-the rest, the two arms' p99 outliers co-occur within ±20 ms at **43% against 4%
-expected** (11× enrichment), and the worst ticks run 7–13 iterations at **9–16×
-the median 94 µs per iteration**. Same arithmetic, executed more slowly, in both
-processes at once — a CPU frequency dip or an external preemption, not a QP that
-got harder. Pin the governor to `performance` before reading anything into a
-tail, and compare paired and interleaved.
+Across two 309 s runs of the committed config (~30,700 ticks per arm each) all
+three tests agree, and none of them point at this package:
+
+- the worst post-flush tick is **2.7–2.9 ms** against **6.2–11.1 ms** elsewhere,
+  in all four traces, and the post-flush share of each run's p99 outliers is
+  inside Poisson noise every time;
+- the two arms' p99 outliers co-occur within ±20 ms at **43% and 52% against 4%
+  expected** — 11× and 13× enrichment, replicated;
+- the worst ticks run **7–13 iterations at 5–16× the median ~91 µs per
+  iteration**.
+
+Same arithmetic, executed more slowly, in two independent processes at once. That
+is the machine, not a QP that got harder. Run-to-run variation on the unchanged
+config is itself large — worst tick 10.9/11.1 ms in one run and 8.9/6.2 ms in the
+next, with 3 deadline misses and then 0 — so pin the governor to `performance`
+before reading anything into a tail, and compare paired and interleaved.
+
+Pin it **on the host**: `cpupower` is not installed in the dev image, and
+`/sys/devices/system/cpu/.../scaling_governor` is not writable from inside the
+container.
+
+```bash
+sudo cpupower frequency-set -g performance    # host shell, before the trial
+cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor   # confirm: performance
+```
 
 ### Reading the raw report
 
