@@ -43,6 +43,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 FROM base AS acados
 ARG ACADOS_REF
 ARG TARGETARCH
+# Defaults to 2 because this is the longest stage and the reference dev box is
+# RAM-tight (see Common failures in the root README). It is the dominant cost of a
+# cold build, so raise it on a machine with headroom -- a DGX Spark or any
+# many-core arm64 host doing the step-0 validation build wants --build-arg
+# ACADOS_JOBS=8 as much as it wants BUILD_JOBS, and only this one shortens the
+# wait.
+ARG ACADOS_JOBS=2
 # Override for max perf: X64_INTEL_HASWELL / ARMV8A_ARM_CORTEX_A76 (Orin) / ...
 ARG BLASFEO_TARGET=""
 # HPIPM_TARGET stays GENERIC by default, deliberately. Measured on an i7-13700H
@@ -72,7 +79,7 @@ RUN set -eux; \
         -DACADOS_PYTHON=OFF -DACADOS_EXAMPLES=OFF -DACADOS_UNIT_TESTS=OFF \
         -DBLASFEO_TARGET="$t" -DHPIPM_TARGET="${HPIPM_TARGET}" \
         -DCMAKE_BUILD_TYPE=Release; \
-    cmake --build /tmp/acados/build --target install -j2; \
+    cmake --build /tmp/acados/build --target install -j"${ACADOS_JOBS}"; \
     rm -rf /tmp/acados
 
 # ── mujoco (arch-specific release tarball) ──────────────────────────────────
@@ -155,7 +162,39 @@ USER dev
 FROM ws-base AS runtime
 ARG ROS_DISTRO
 ARG BUILD_JOBS
-RUN . /opt/ros/${ROS_DISTRO}/setup.sh \
- && MAKEFLAGS="-j${BUILD_JOBS}" colcon build --parallel-workers 1 \
+ARG TARGETARCH
+# Instruction set for THIS package's own compiled code (the rollout's small dense
+# Eigen algebra and nmpc_bench); MuJoCo and acados/BLASFEO are precompiled and
+# carry their own targets, set in their stages above.
+#
+# Never "native": this image is cross-built under QEMU, where native means the
+# builder's CPU and produces binaries that SIGILL on the target. Orin's cores are
+# Cortex-A78AE, so -mcpu=cortex-a78 is the closest GCC knows; it is a correctness
+# choice as much as a performance one, since without it the arm64 build targets
+# baseline ARMv8-A. Measured on x86 the equivalent flags moved the tick by nothing
+# (README's "Settled by measurement"), so do not expect much -- the point is not
+# leaving the target unstated.
+ARG PAT_ARCH_FLAGS=""
+# OFF for a deployment image: a gtest binary has no business in one, and before
+# this was set the runtime image was carrying it. ON is for validating a NEW
+# ARCHITECTURE -- build this target on an arm64 host, flip it, and run the suite
+# natively to check the numerics rather than trusting QEMU:
+#   docker build -f docker/Dockerfile --target runtime \
+#       --build-arg BUILD_TESTING=ON --build-arg BUILD_JOBS=8 -t pat:arm64-check .
+ARG BUILD_TESTING=OFF
+# set -e only, never -u: ROS's setup.sh reads unset variables, so -u aborts the
+# build the moment it is sourced.
+RUN set -e; \
+    f="${PAT_ARCH_FLAGS}"; \
+    if [ -z "$f" ]; then case "${TARGETARCH}" in \
+        arm64) f="-mcpu=cortex-a78" ;; \
+        amd64) f="" ;; \
+        *) echo "unsupported TARGETARCH=${TARGETARCH}" >&2; exit 1 ;; \
+    esac; fi; \
+    echo "PAT_ARCH_FLAGS=$f"; \
+    . /opt/ros/${ROS_DISTRO}/setup.sh; \
+    MAKEFLAGS="-j${BUILD_JOBS}" colcon build --parallel-workers 1 \
       --cmake-args -DCMAKE_BUILD_TYPE=Release \
+                   -DPAT_ARCH_FLAGS="$f" \
+                   -DBUILD_TESTING="${BUILD_TESTING}" \
       --packages-skip pat_simulation

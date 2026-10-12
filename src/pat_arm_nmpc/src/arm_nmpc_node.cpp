@@ -1,11 +1,19 @@
 #include "pat_arm_nmpc/arm_nmpc_node.h"
 
+#include <pthread.h>
+#include <sched.h>
+#include <sys/mman.h>
+#include <time.h>
+
 #include <algorithm>
+#include <cerrno>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <fstream>
 #include <iomanip>
+#include <sstream>
 #include <iterator>
 #include <stdexcept>
 
@@ -110,20 +118,22 @@ ArmNMPCNode::ArmNMPCNode() : Node("pat_arm_nmpc") {
         "/chaser/arm/torque_command", 10);
     ee_pose_pub_ = create_publisher<geometry_msgs::msg::PoseStamped>(
         "/chaser/arm/" + arm_side_ + "/ee_pose", 10);
-    ctrl_tmr_ = create_wall_timer(std::chrono::duration<double>(1.0 / ctrl_hz),
-                                  std::bind(&ArmNMPCNode::controlLoop, this));
+
+    // The control loop runs on its own thread (start()), not an executor timer.
+    period_ns_ = static_cast<long>(1e9 / ctrl_hz);
+
+    // 0 keeps the thread at normal priority, which is the default so that turning
+    // realtime scheduling on is a deliberate, measurable change rather than
+    // something a rebuild quietly alters. 70-80 sits above ordinary work and below
+    // the kernel's own threads, which run at 99.
+    rt_priority_ = declare_parameter<int>("rt_priority", 0);
+    lock_memory_ = declare_parameter<bool>("lock_memory", false);
+    rt_cpus_     = declare_parameter<std::vector<long>>("rt_cpus", std::vector<long>{});
                                   
-    // Publishing asynchronously costs actuation latency: a command computed at t
-    // is not published until the next drain, so the drain period IS added delay
-    // in the control loop. Ten times the control rate keeps the worst case at a
-    // tenth of a period (1 ms at 100 Hz) and the mean at half that, which is
-    // small against the solve itself. A timer that usually finds both queues
-    // empty is nearly free, so the rate is set by the latency, not by the cost.
-    //
-    // Polling is the simple version. Signalling a dedicated publisher thread
-    // from the tick would cut the delay to a thread wakeup, and belongs with the
-    // realtime-thread change rather than here.
-    drain_tmr_ = create_wall_timer(std::chrono::duration<double>(0.1 / ctrl_hz),
+    // Only ee_pose and the mode events come through here now, both of which
+    // tolerate a drain interval of delay, so this runs at the control rate rather
+    // than the ten-times-faster poll that the torque command needed.
+    drain_tmr_ = create_wall_timer(std::chrono::duration<double>(1.0 / ctrl_hz),
                                    std::bind(&ArmNMPCNode::drainOutputs, this));
     period_us_ = 1e6 / ctrl_hz;
     controller_->setTickBudgetUs(period_us_);
@@ -132,6 +142,11 @@ ArmNMPCNode::ArmNMPCNode() : Node("pat_arm_nmpc") {
     // fixed by the model the controller just loaded.
     q_.resize(7 + controller_->numArmJoints());
     v_.resize(6 + controller_->numArmJoints());
+
+    // The torque message's fixed parts, set once: the tick only writes efforts
+    // and the stamp into storage that already exists.
+    torque_msg_.name = joint_names_;
+    torque_msg_.effort.assign(joint_names_.size(), 0.0);
 
     // Per-tick trace. The default capacity is 10 minutes at the control rate; the
     // buffer is allocated now and recording simply stops when it is full, so a
@@ -392,6 +407,11 @@ void ArmNMPCNode::onEeSetpoint(geometry_msgs::msg::PoseStamped::SharedPtr msg) {
 }
 
 ArmNMPCNode::~ArmNMPCNode() {
+    // Stop and join the control thread FIRST: it touches the controller, the
+    // mailboxes and the trace buffer, all of which are about to be destroyed.
+    ctrl_running_.store(false, std::memory_order_release);
+    if (ctrl_thread_.joinable()) ctrl_thread_.join();
+
     // A destructor that lets an exception out during shutdown terminates the
     // process with no diagnostic, so swallow everything. The ofstream flushes
     // itself; this only catches the rows recorded since the last drain. Logging is
@@ -542,14 +562,16 @@ void ArmNMPCNode::controlLoop() {
     }
 
     {
-        TorqueOut out;
-        out.n = static_cast<std::uint32_t>(joint_names_.size());
+        // Into the member message's existing storage, then straight out: no
+        // allocation, and no queue between the command and the actuator.
         for (size_t k = 0; k < joint_names_.size(); ++k)
-            out.effort[k] = tau(static_cast<Eigen::Index>(owned_model_idx_[k]));
-        // A dropped torque leaves the actuator on the previous command for an
-        // extra period, so this is counted rather than ignored.
-        if (!torque_out_.push(out))
-            n_torque_dropped_.fetch_add(1, std::memory_order_relaxed);
+            torque_msg_.effort[k] = tau(static_cast<Eigen::Index>(owned_model_idx_[k]));
+        timespec ts{};
+        clock_gettime(CLOCK_REALTIME, &ts);
+        torque_msg_.header.stamp.sec     = static_cast<std::int32_t>(ts.tv_sec);
+        torque_msg_.header.stamp.nanosec = static_cast<std::uint32_t>(ts.tv_nsec);
+        pat_arm_nmpc::ScopedTimer timer(pub_torque_);
+        torque_pub_->publish(torque_msg_);
     }
 
     // Time the whole callback, not just computeControl: state assembly, both
@@ -558,36 +580,149 @@ void ArmNMPCNode::controlLoop() {
     // deadline accounting needs the value.
     const double body_us = std::chrono::duration<double, std::micro>(
         std::chrono::steady_clock::now() - wake).count();
-    {
-        std::lock_guard<std::mutex> lk(stats_mu_);
-        loop_.add(body_us);
-        cpu_.add(threadCpuUs() - cpu_0);
-        if (period_us_ > 0.0 && body_us > period_us_) {
-            ++deadline_misses_;
-            ++consecutive_misses_;
-            worst_consecutive_misses_ =
-                std::max(worst_consecutive_misses_, consecutive_misses_);
-        } else {
-            consecutive_misses_ = 0;
+    loop_.add(body_us);
+    cpu_.add(threadCpuUs() - cpu_0);
+    if (period_us_ > 0.0 && body_us > period_us_) {
+        ++deadline_misses_;
+        ++consecutive_misses_;
+        worst_consecutive_misses_ =
+            std::max(worst_consecutive_misses_, consecutive_misses_);
+    } else {
+        consecutive_misses_ = 0;
+    }
+
+    publishStats();
+}
+
+void ArmNMPCNode::publishStats() {
+    // One copy of everything the report needs, taken while this thread is the
+    // only one touching any of it.
+    StatsSnapshot s;
+    s.jitter                   = jitter_;
+    s.loop                     = loop_;
+    s.cpu                      = cpu_;
+    s.deadline_misses          = deadline_misses_;
+    s.worst_consecutive_misses = worst_consecutive_misses_;
+    s.skipped_periods          = skipped_periods_;
+    controller_->snapshotProfile(s.profile);
+    stats_mail_.write(s);
+
+    // Clear only once the copy above is published, so the window the report is
+    // about to read is the completed one rather than a half-cleared successor.
+    // Every statistic is per report window: cumulative means hide a late spike,
+    // since one 20 ms tick in an hour of 2 ms ticks moves the mean by nothing and
+    // the spike is the whole point.
+    if (stats_reset_.exchange(false, std::memory_order_acq_rel)) {
+        jitter_.reset();
+        loop_.reset();
+        cpu_.reset();
+        deadline_misses_          = 0;
+        consecutive_misses_       = 0;
+        worst_consecutive_misses_ = 0;
+        skipped_periods_          = 0;
+        controller_->resetProfile();
+    }
+}
+
+void ArmNMPCNode::start() {
+    // Locked before the thread starts, so a major fault cannot stall a tick.
+    // Process-wide, which is why it lives here and not on the thread.
+    //
+    // MCL_ONFAULT is what makes the limit affordable: MCL_CURRENT|MCL_FUTURE
+    // alone locks the whole ADDRESS SPACE, which for this node is ~620 MB of
+    // mostly-untouched reservation against ~33 MB actually resident, and it fails
+    // with ENOMEM against any sane RLIMIT_MEMLOCK. ONFAULT locks each page as it
+    // is first touched instead, so the locked set tracks the resident set. The
+    // cost is that the first touch of a page still faults -- the startup ticks
+    // pay it, and everything the loop reaches stays locked thereafter.
+    if (lock_memory_) {
+        const int flags = MCL_CURRENT | MCL_FUTURE | MCL_ONFAULT;
+        mlock_result_.store(mlockall(flags) == 0 ? 0 : errno,
+                            std::memory_order_relaxed);
+    }
+    ctrl_running_.store(true, std::memory_order_release);
+    ctrl_thread_ = std::thread(&ArmNMPCNode::controlThread, this);
+}
+
+int ArmNMPCNode::applyRealtimePolicy() {
+    if (rt_priority_ <= 0) return -1;         // not requested
+    sched_param sp{};
+    sp.sched_priority = rt_priority_;
+    // pthread_setschedparam returns the error rather than setting errno.
+    return pthread_setschedparam(pthread_self(), SCHED_FIFO, &sp);
+}
+
+int ArmNMPCNode::applyAffinity() {
+    if (rt_cpus_.empty()) return -1;          // not requested
+    cpu_set_t set;
+    CPU_ZERO(&set);
+    for (const long cpu : rt_cpus_) {
+        if (cpu >= 0 && cpu < CPU_SETSIZE) CPU_SET(static_cast<int>(cpu), &set);
+    }
+    if (CPU_COUNT(&set) == 0) return EINVAL;   // every entry was out of range
+    return pthread_setaffinity_np(pthread_self(), sizeof(set), &set);
+}
+
+void ArmNMPCNode::controlThread() {
+    // Both from inside the thread, so only this one is affected and nothing it
+    // later creates inherits either. Affinity first: it decides which cores the
+    // thread can use, and the realtime scheduler respects an affinity mask but
+    // will not choose a fast core on its own. The results are latched for the
+    // report, since this thread does no logging.
+    affinity_result_.store(applyAffinity(), std::memory_order_relaxed);
+    rt_result_.store(applyRealtimePolicy(), std::memory_order_relaxed);
+
+    // Advance `next` by exactly one period. Written out rather than using
+    // std::chrono so the deadline stays the timespec clock_nanosleep wants.
+    const auto addPeriod = [this](timespec& t) {
+        t.tv_nsec += period_ns_;
+        while (t.tv_nsec >= 1000000000L) {
+            t.tv_nsec -= 1000000000L;
+            ++t.tv_sec;
         }
+    };
+    const auto isBefore = [](const timespec& a, const timespec& b) {
+        return a.tv_sec < b.tv_sec ||
+               (a.tv_sec == b.tv_sec && a.tv_nsec < b.tv_nsec);
+    };
+
+    timespec next{};
+    clock_gettime(CLOCK_MONOTONIC, &next);
+    while (ctrl_running_.load(std::memory_order_acquire)) {
+        addPeriod(next);
+
+        // Only if that deadline is ALREADY past did the last tick overrun, and
+        // then the schedule steps forward to the next future one rather than
+        // firing back-to-back to catch up: those periods are lost either way, and
+        // running them at full rate only compounds the overrun. recordWake counts
+        // them as skipped. Checked here, after the advance and before the sleep --
+        // checking after the tick instead would always be true, since the deadline
+        // just woken for is by definition in the past, and would step the schedule
+        // twice per tick and halve the control rate.
+        timespec now{};
+        clock_gettime(CLOCK_MONOTONIC, &now);
+        while (isBefore(next, now)) addPeriod(next);
+
+        // An absolute deadline, so a late tick does not shift every tick after it:
+        // the schedule is fixed and lateness shows up as lateness. A relative
+        // sleep (or rclcpp's wall timer) re-anchors instead, which hides the
+        // overrun and reports the permanent offset as jitter.
+        while (clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &next, nullptr)
+               == EINTR) {
+            // A signal, not a deadline change: wait out the rest of the period.
+        }
+        if (!ctrl_running_.load(std::memory_order_acquire)) break;
+
+        controlLoop();
     }
 }
 
 void ArmNMPCNode::drainOutputs() {
-    // Everything the tick produced since the last drain, published from this
-    // thread so the control path never calls into the middleware. Drains the
+    // The measured EE pose only, and only because it is telemetry: delaying it by
+    // a drain interval costs nothing, where delaying the torque command costs
+    // actuation latency, so that one is published from the tick itself. Drains the
     // whole queue rather than one entry, so a late drain catches up instead of
     // falling further behind.
-    TorqueOut t;
-    while (torque_out_.pop(t)) {
-        sensor_msgs::msg::JointState cmd;
-        cmd.header.stamp = get_clock()->now();
-        cmd.name = joint_names_;
-        cmd.effort.resize(t.n);
-        for (std::uint32_t k = 0; k < t.n; ++k) cmd.effort[k] = t.effort[k];
-        torque_pub_->publish(cmd);
-    }
-
     EePoseOut p;
     while (ee_pose_out_.pop(p)) {
         geometry_msgs::msg::PoseStamped ps;
@@ -600,6 +735,7 @@ void ArmNMPCNode::drainOutputs() {
         ps.pose.orientation.x = p.quat[1];
         ps.pose.orientation.y = p.quat[2];
         ps.pose.orientation.z = p.quat[3];
+        pat_arm_nmpc::ScopedTimer timer(pub_eepose_);
         ee_pose_pub_->publish(ps);
     }
 }
@@ -615,9 +751,6 @@ void ArmNMPCNode::recordWake(std::chrono::steady_clock::time_point wake) {
     last_wake_ = wake;
     if (period_us_ <= 0.0) return;
 
-    // last_wake_/have_last_wake_ above belong to this thread alone; jitter_ and
-    // skipped_periods_ are what the report reads and resets.
-    std::lock_guard<std::mutex> lk(stats_mu_);
     jitter_.add(std::abs(dt_us - period_us_));
     // Round down, so an interval inside one period counts as nothing skipped.
     const long periods = static_cast<long>(dt_us / period_us_);
@@ -625,6 +758,56 @@ void ArmNMPCNode::recordWake(std::chrono::steady_clock::time_point wake) {
 }
 
 void ArmNMPCNode::reportDiagnostics() {
+    // What the control thread got, said once. Reported rather than enforced: a
+    // controller that will not start without a realtime policy is useless in a
+    // development container, so it runs either way and says which it is.
+    if (!rt_reported_.exchange(true, std::memory_order_acq_rel)) {
+        const int rt = rt_result_.load(std::memory_order_relaxed);
+        if (rt == 0) {
+            RCLCPP_INFO(get_logger(),
+                "pat_arm_nmpc[%s]: control thread at SCHED_FIFO priority %d",
+                arm_side_.c_str(), rt_priority_);
+        } else if (rt > 0) {
+            RCLCPP_WARN(get_logger(),
+                "pat_arm_nmpc[%s]: SCHED_FIFO priority %d refused (%s) — running at "
+                "normal priority. Needs RLIMIT_RTPRIO >= %d (docker-compose.yml's "
+                "ulimits.rtprio); this is NOT a realtime loop",
+                arm_side_.c_str(), rt_priority_, std::strerror(rt), rt_priority_);
+        } else {
+            RCLCPP_INFO(get_logger(),
+                "pat_arm_nmpc[%s]: control thread at normal priority "
+                "(rt_priority is 0)", arm_side_.c_str());
+        }
+        const int aff = affinity_result_.load(std::memory_order_relaxed);
+        if (aff == 0) {
+            std::string cpus;
+            for (const long c : rt_cpus_) cpus += std::to_string(c) + " ";
+            RCLCPP_INFO(get_logger(), "pat_arm_nmpc[%s]: control thread pinned to CPUs %s",
+                        arm_side_.c_str(), cpus.c_str());
+        } else if (aff > 0) {
+            RCLCPP_WARN(get_logger(),
+                "pat_arm_nmpc[%s]: CPU affinity failed (%s)",
+                arm_side_.c_str(), std::strerror(aff));
+        } else if (rt_result_.load(std::memory_order_relaxed) == 0) {
+            // FIFO without a mask is the case that measured as a regression.
+            RCLCPP_WARN(get_logger(),
+                "pat_arm_nmpc[%s]: SCHED_FIFO with no rt_cpus — on a host whose "
+                "cores differ in speed the realtime scheduler may park this thread "
+                "on the slowest ones. Set rt_cpus to the fast cores",
+                arm_side_.c_str());
+        }
+        const int ml = mlock_result_.load(std::memory_order_relaxed);
+        if (ml == 0) {
+            RCLCPP_INFO(get_logger(), "pat_arm_nmpc[%s]: memory locked (mlockall)",
+                        arm_side_.c_str());
+        } else if (ml > 0) {
+            RCLCPP_WARN(get_logger(),
+                "pat_arm_nmpc[%s]: mlockall failed (%s) — a page fault can still "
+                "stall a tick. Needs ulimits.memlock",
+                arm_side_.c_str(), std::strerror(ml));
+        }
+    }
+
     // Everything the control tick recorded but could not log. Drained first, so
     // a window that then returns early below still gets these out.
     if (seeded_hold_pose_.exchange(false, std::memory_order_acq_rel)) {
@@ -648,16 +831,16 @@ void ArmNMPCNode::reportDiagnostics() {
             "pat_arm_nmpc[%s]: non-finite torque suppressed %ld time(s), commanded zero",
             arm_side_.c_str(), n);
     }
-    // A drop here means the drain did not keep up with the tick, which costs a
-    // held-stale actuator command -- worth surfacing loudly, not as a statistic.
-    const long dropped_tau = n_torque_dropped_.exchange(0, std::memory_order_relaxed);
-    const long dropped_ee  = n_ee_pose_dropped_.exchange(0, std::memory_order_relaxed);
-    const long dropped_ev  = n_mode_events_dropped_.exchange(0, std::memory_order_relaxed);
-    if (dropped_tau || dropped_ee || dropped_ev) {
-        RCLCPP_ERROR(get_logger(),
-            "pat_arm_nmpc[%s]: outbound queue overflow — dropped %ld torque, "
-            "%ld ee_pose, %ld mode events; the publisher is not keeping up",
-            arm_side_.c_str(), dropped_tau, dropped_ee, dropped_ev);
+    // Only telemetry goes through a queue now, so a drop here costs a missing
+    // diagnostic rather than a stale actuator command -- still worth saying,
+    // because it means the drain is not keeping up with the tick.
+    const long dropped_ee = n_ee_pose_dropped_.exchange(0, std::memory_order_relaxed);
+    const long dropped_ev = n_mode_events_dropped_.exchange(0, std::memory_order_relaxed);
+    if (dropped_ee || dropped_ev) {
+        RCLCPP_WARN(get_logger(),
+            "pat_arm_nmpc[%s]: outbound queue overflow — dropped %ld ee_pose, "
+            "%ld mode events; the drain is not keeping up",
+            arm_side_.c_str(), dropped_ee, dropped_ev);
     }
 
     // Tier transitions, in the order the control loop saw them. Severity follows
@@ -695,33 +878,53 @@ void ArmNMPCNode::reportDiagnostics() {
         }
     }
 
-    std::lock_guard<std::mutex> lk(stats_mu_);
     // Before the early return below: a window with no completed tick still has a
     // previous window's rows to get out, and the trace should not stall on it.
     flushTrace();
-    if (loop_.count == 0) return;   // no tick completed in this window
+
+    StatsSnapshot s;
+    if (!stats_mail_.read(s)) return;   // no tick has published yet
+    if (s.loop.count == 0) return;      // no tick completed in this window
 
     RCLCPP_INFO(get_logger(),
         "pat_arm_nmpc[%s] %ld ticks @ %.0f us | period jitter mean %.0f max %.0f us | "
         "callback wall mean %.0f max %.0f / cpu mean %.0f max %.0f us | "
         "deadline misses %ld (longest run %ld) | skipped periods %ld\n%s",
-        arm_side_.c_str(), loop_.count, period_us_,
-        jitter_.mean(), jitter_.max_us,
-        loop_.mean(), loop_.max_us, cpu_.mean(), cpu_.max_us,
-        deadline_misses_, worst_consecutive_misses_, skipped_periods_,
-        controller_->profileReport().c_str());
+        arm_side_.c_str(), s.loop.count, period_us_,
+        s.jitter.mean(), s.jitter.max_us,
+        s.loop.mean(), s.loop.max_us, s.cpu.mean(), s.cpu.max_us,
+        s.deadline_misses, s.worst_consecutive_misses, s.skipped_periods,
+        pat_arm_nmpc::ArmNMPC::formatProfile(s.profile).c_str());
 
-    // Every statistic is per report window. Cumulative means hide a late spike:
-    // one 20 ms tick in an hour of 2 ms ticks moves the mean by nothing, and the
-    // spike is the whole point.
-    jitter_.reset();
-    loop_.reset();
-    cpu_.reset();
-    deadline_misses_          = 0;
-    consecutive_misses_       = 0;
-    worst_consecutive_misses_ = 0;
-    skipped_periods_          = 0;
-    controller_->resetProfile();
+    // What publish() costs, with the histogram: the mean decides nothing here, the
+    // worst case decides whether this call can go back on the control thread.
+    if (pub_torque_.count > 0 || pub_eepose_.count > 0) {
+        std::ostringstream pub;
+        pub.setf(std::ios::fixed);
+        pub.precision(1);
+        const std::pair<const char*, const pat_arm_nmpc::PhaseStat*> both[] = {
+            {"torque", &pub_torque_}, {"ee_pose", &pub_eepose_},
+        };
+        for (const auto& [name, st] : both) {
+            if (st->count == 0) continue;
+            pub << "  " << name << "(n=" << st->count << " mean=" << st->mean()
+                << " max=" << st->max_us << ") ";
+        }
+        pub << "\n  hist(publish_us) ";
+        for (int i = 0; i < pat_arm_nmpc::PhaseStat::kBins; ++i) {
+            if (i + 1 == pat_arm_nmpc::PhaseStat::kBins) pub << ">5000:";
+            else pub << "<=" << pat_arm_nmpc::PhaseStat::kEdgeUs[i] << ":";
+            pub << (pub_torque_.bins[i] + pub_eepose_.bins[i]) << " ";
+        }
+        RCLCPP_INFO(get_logger(), "pat_arm_nmpc[%s] publish us%s",
+                    arm_side_.c_str(), pub.str().c_str());
+        pub_torque_.reset();
+        pub_eepose_.reset();
+    }
+
+    // Ask the control thread to start a fresh window. It clears its own counters
+    // right after publishing the next snapshot, so the reset never races a read.
+    stats_reset_.store(true, std::memory_order_release);
 }
 
 int main(int argc, char** argv) {
@@ -738,6 +941,9 @@ int main(int argc, char** argv) {
         rclcpp::shutdown();
         return 1;
     }
+    // After construction, so DDS has already created its threads at normal
+    // priority and cannot inherit the control thread's policy.
+    node->start();
     rclcpp::spin(node);
     rclcpp::shutdown();
 }

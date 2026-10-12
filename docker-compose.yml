@@ -53,14 +53,22 @@ services:
     # at all. CAP_SYS_NICE is only needed to exceed the rlimit, to renice
     # negatively, or to change another process's policy - none of which this needs.
     #
-    # memlock covers mlockall(MCL_CURRENT|MCL_FUTURE), so a page fault cannot
-    # stall a control tick. Finite rather than unlimited: arm_nmpc_node measures
-    # ~33 MB RSS, so 256 MiB is ~8x headroom, and this box has a history of
-    # systemd-oomd killing the desktop session under memory pressure (two locked
-    # nodes at this ceiling are still only 512 MiB).
+    # memlock is for mlockall, so a page fault cannot stall a control tick. The
+    # number has to clear arm_nmpc_node's VIRTUAL size (~750 MB), not its ~33 MB
+    # resident set: the kernel admits an MCL_CURRENT mlockall by comparing
+    # RLIMIT_MEMLOCK against the process's total_vm, and it does that even with
+    # MCL_ONFAULT, which only changes how much memory ends up locked afterwards.
+    # So this is an admission threshold, not a reservation - with ONFAULT the node
+    # actually pins about its resident set, and /proc/meminfo's Mlocked shows ~45 MB
+    # for both arms together. Check Mlocked, not the process's VmLck: that counts
+    # the VMAs MARKED for locking, which with ONFAULT is the whole address space
+    # and reads as ~700 MB per node.
+    # Finite rather than unlimited because this box has a history of systemd-oomd
+    # killing the desktop session under memory pressure; if VmSize ever grows past
+    # this, mlockall fails and the node says so on its first report.
     ulimits:
       rtprio: 99
-      memlock: 268435456
+      memlock: 1073741824
     # ROS 2 DDS shared-memory discovery needs all three, or `ros2 node list`
     # comes up empty and `ros2 topic hz` segfaults across shells.
     network_mode: host

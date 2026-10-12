@@ -13,9 +13,11 @@ Both read the same instrumentation, so the numbers mean the same thing.
 
 ## Live trials
 
-Pin the CPU governor **on the host** first, before attaching to the container.
-This box has been seen spread over 464–2113 MHz on `powersave`, and that shows up
-directly in the tail:
+Two things about the machine have to be right before a run is worth quoting, and
+both are set **on the host**, before attaching to the container.
+
+**Pin the CPU governor.** This box has been seen spread over 464–2113 MHz on
+`powersave`, and that shows up directly in the tail:
 
 ```bash
 sudo cpupower frequency-set -g performance                   # host shell
@@ -24,9 +26,37 @@ cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor     # confirm
 
 It cannot be done from inside the container: `/sys` is mounted read-only there, so
 the write fails whatever is installed and whoever runs it — installing `cpupower`
-in the image would not help. `run_trial.sh` reads the governor, prints it, records
-it in the log header as `# cpu_governor:`, and with `-g` refuses to run unless it
-is `performance`.
+in the image would not help.
+
+**Plug the laptop into the FULL-POWER adapter.** Two separate traps here.
+
+On battery the reference box pins `performance` and still only reaches ~3.1 GHz of
+its 5.0 GHz under load. Nothing in cpufreq sysfs shows it: `scaling_max_freq` still
+reads 5.0 GHz, `energy_performance_preference` still reads `performance`, and RAPL's
+long-term limit still reads 200 W — the cap is applied by platform firmware below
+all of that.
+
+And **"on mains" is not the same as "enough power"**. A 15 W USB-C charger reports
+`AC online=1`, keeps the battery reading `Charging`, passes every check above — and
+still cost **1.5x the mean tick and 3x the tail** (p95 5410 vs 2166 us, which is
+over half the 10 ms period against about a fifth). Measured, same build and config,
+90 s each.
+
+| | mean L/R | p95 | max |
+|---|---|---|---|
+| full-power adapter | 966 / 948 | 2166 / 1638 | 2707 / 2094 |
+| 15 W USB-C supply | 1440 / 1464 | 5410 / 5420 | 7530 / 6472 |
+
+`run_trial.sh` records `# cpu_governor:`, `# on_ac_power:`, `# usb_pd_watts:`,
+`# cpu_mhz_peak:` and `# cpu_mhz_sustained:` in every log, and with `-g` refuses to
+start unless the governor is `performance`, the machine is on mains, **and** any
+USB-C supply has negotiated at least 60 W.
+
+Do not gate on the peak clock: it does not discriminate. The 15 W supply still let
+the package burst to 4800 of its 5000 MHz in one run (and only 3857 MHz in the
+next), because turbo can draw on the battery momentarily even when sustained power
+is capped. The sustained figure moves in the right direction and both are logged,
+but the negotiated wattage is the signal worth refusing on.
 
 Then, inside the dev container (`docker compose exec dev bash`):
 
@@ -92,13 +122,25 @@ happens. For the real distribution, record a trace instead.
 `trace_file:=` records **every** control tick and streams it to CSV, one file per
 arm, so the distribution is not limited to the report's eight fixed bins.
 
+**`plot_trace.py` needs a trace, and a trial only writes one when asked.** Run this
+first — the `-T` is what produces the file, and it is a capital T:
+
 ```bash
-./tools/nmpc_timing/run_trial.sh -d 300 -o /tmp/base.log -t data/nmpc_timing/trace.csv
-# or directly:
+# 1. produce the trace (-T), with the governor pinned (-g, see Live trials above)
+./tools/nmpc_timing/run_trial.sh -g -d 300 -o /tmp/base.log -T data/nmpc_timing/trace.csv
+
+# 2. then plot it. NOTE the _left / _right: one file per arm, spliced into the
+#    name you passed, so `-T .../trace.csv` writes trace_left.csv + trace_right.csv
+tools/nmpc_timing/plot_trace.py --bins 14 --phases --top 3 data/nmpc_timing/trace_left.csv
+```
+
+Without `-T` the run only produces the 1 Hz report log, which is what
+`summarise_timing.py` reads; `plot_trace.py` on that log, or on a trace file that
+was never written, fails with `FileNotFoundError`. Launching by hand works too:
+
+```bash
 ros2 launch launch/full_stack_nmpc.launch.py with_targets:=true \
     trace_file:=data/nmpc_timing/trace.csv
-
-tools/nmpc_timing/plot_trace.py --bins 14 --phases --top 3 data/nmpc_timing/trace_left.csv
 ```
 
 ```
@@ -119,8 +161,14 @@ tools/nmpc_timing/plot_trace.py --bins 14 --phases --top 3 data/nmpc_timing/trac
 how you find out what a spike actually was.
 
 The CSV columns are `t_us`, `tick_us`, the eleven phase durations, `hpipm_us`,
-`qp_iters`, `qp_status`, `mode`, `retried`. It is ordinary CSV, so pandas or
-gnuplot can take over for publication plots.
+`qp_iters`, `qp_status`, `qp_iters1`, `qp_status1`, `mode`, `retried` — the `1`
+pair is the FIRST solve of the tick on its own, where the unsuffixed pair is the
+tick as a whole, so a warm solve that burned the cap and a cold retry that
+converged are distinguishable. A `#` provenance line above the header records the
+arm and the configuration. It is ordinary CSV, so pandas or gnuplot can take over
+for publication plots; note the `#` line if you parse it yourself (`numpy`'s
+`genfromtxt` wants `skip_header=1`, not `comments='#'`, or it reads the comment
+as the header).
 
 ### What tracing costs the control loop
 
@@ -199,13 +247,16 @@ config is itself large — worst tick 10.9/11.1 ms in one run and 8.9/6.2 ms in 
 next, with 3 deadline misses and then 0 — so pin the governor to `performance`
 before reading anything into a tail, and compare paired and interleaved.
 
-Pin it **on the host**: `cpupower` is not installed in the dev image, and
-`/sys/devices/system/cpu/.../scaling_governor` is not writable from inside the
-container.
+Pin it **on the host**, and plug the laptop in: `cpupower` is not installed in the
+dev image, `/sys/devices/system/cpu/.../scaling_governor` is not writable from
+inside the container, and on battery the clock is capped by platform firmware
+whatever the governor says. `run_trial.sh -g` refuses to start unless both are
+right (see Live trials).
 
 ```bash
 sudo cpupower frequency-set -g performance    # host shell, before the trial
 cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor   # confirm: performance
+cat /sys/class/power_supply/AC*/online                      # confirm: 1
 ```
 
 ### Reading the raw report

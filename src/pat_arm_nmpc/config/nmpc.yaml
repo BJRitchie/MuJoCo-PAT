@@ -210,9 +210,41 @@
       relax_box_to_contain_x0: false   # hard box only; with a soft box it weakens
       relax_box_margin: 1.0e-3         #   the slack that does the restoring
 
+    # --- Realtime scheduling for the control thread ------------------------
+    # The control loop always runs on its own thread, woken against an absolute
+    # deadline. These only decide whether it also gets a realtime policy, and
+    # default to off so that turning it on is a deliberate, measurable change.
+    #
+    # rt_priority: 0 = normal priority. 70-80 is the useful band: above ordinary
+    #   work, below the kernel's own threads at 99. Needs RLIMIT_RTPRIO (see
+    #   docker-compose.yml's ulimits); if it is refused the node logs once and
+    #   keeps running at normal priority rather than failing to start.
+    # lock_memory: mlockall, so a page fault cannot stall a tick. Needs
+    #   ulimits.memlock to clear the node's VIRTUAL size, not its resident set.
+    #
+    # What this is worth, measured (README's "Realtime scheduling, measured"):
+    # with another normal-priority task competing for the same core, SCHED_FIFO
+    # HALVES the p95 tick and the max, 4 of 4 paired runs. With nothing competing
+    # it is ~6% WORSE on the mean. So it pays off only under load, which is the
+    # deployment case (vision + a planner alongside) and not the dev case -- hence
+    # 0 here, and 80 in whatever config the Jetson runs.
+    #
+    # ALWAYS set the per-node rt_cpus below when enabling rt_priority on a host
+    # whose cores differ in speed: the realtime scheduler ignores core capability,
+    # and on this box's E-cores under a battery cap that doubled the mean tick.
+    rt_priority: 0
+    lock_memory: false
+
 pat_arm_nmpc_left:
   ros__parameters:
     arm_side: "left"
+    # Fast cores for this arm only, so the two arms never share one.
+    # `lscpu -e=CPU,CORE,MAXMHZ` identifies them: on the reference box CPUs 0-11
+    # are P-cores and 12-19 E-cores. Left commented out rather than set to []
+    # because an empty YAML list has no inferable element type, so ROS cannot set
+    # the parameter at all and the node fails to construct; unset means the C++
+    # default, an empty mask, which leaves placement to the kernel.
+    # rt_cpus: [4, 5]      # one physical P-core's SMT pair
     ee_site_name: "ee_site_L"
     joint_names:  [joint2_L, joint3_L, joint5_L]
     owned_joints: [joint2_L, joint3_L, joint5_L]
@@ -228,6 +260,7 @@ pat_arm_nmpc_left:
 pat_arm_nmpc_right:
   ros__parameters:
     arm_side: "right"
+    # rt_cpus: [6, 7]      # see the left arm's note
     ee_site_name: "ee_site_R"
     joint_names:  [joint2_R, joint3_R, joint5_R]
     owned_joints: [joint2_R, joint3_R, joint5_R]

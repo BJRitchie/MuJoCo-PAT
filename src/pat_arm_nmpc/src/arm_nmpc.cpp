@@ -853,18 +853,52 @@ void ArmNMPC::recordTick(std::chrono::steady_clock::time_point start)
     trace_.push_back(r);
 }
 
+void ArmNMPC::snapshotProfile(ProfileSnapshot& out) const
+{
+    out.tick              = tick;
+    out.dynamics          = dynamics;
+    out.jdotqdot          = jdotqdot;
+    out.lambda            = lambda;
+    out.qpsolve           = qpsolve;
+    out.rollout_dynamics  = rollout_dynamics;
+    out.rollout_integrate = rollout_integrate;
+    out.pinv              = pinv;
+    out.build_model       = build_model;
+    out.defect            = defect;
+    out.trust_region      = trust_region;
+    out.finalize          = finalize;
+    out.qp_iters          = qp_iters;
+    out.qp_time_ms        = qp_time_ms;
+    out.qp_retries        = qp_retries;
+    out.spd_fallbacks     = spd_fallbacks_;
+    out.trace_size        = static_cast<long>(trace_.size());
+    out.trace_cap         = static_cast<long>(trace_cap_);
+    out.trace_full        = traceFull();
+    out.max_box_slack     = max_box_slack_;
+    out.max_tau_slack     = max_tau_slack_;
+    out.qp_max_iter       = params_.qp_max_iter;
+}
+
 std::string ArmNMPC::profileReport() const
+{
+    ProfileSnapshot s;
+    snapshotProfile(s);
+    return formatProfile(s);
+}
+
+std::string ArmNMPC::formatProfile(const ProfileSnapshot& s)
 {
     // Phases in execution order, so the report reads as a breakdown rather than a
     // bag of numbers. Both paths are listed; the inactive one shows count 0.
     const std::pair<const char*, const PhaseStat*> phases[] = {
-        {"dynamics",   &dynamics},   {"jdotqdot",     &jdotqdot},
-        {"roll_dyn",   &rollout_dynamics}, {"roll_intg", &rollout_integrate},
-        {"pinv",       &pinv},       {"lambda",       &lambda},
-        {"buildmodel", &build_model},{"defect",       &defect},
-        {"qpsolve",    &qpsolve},    {"trust",        &trust_region},
-        {"finalize",   &finalize},
+        {"dynamics",   &s.dynamics},   {"jdotqdot",     &s.jdotqdot},
+        {"roll_dyn",   &s.rollout_dynamics}, {"roll_intg", &s.rollout_integrate},
+        {"pinv",       &s.pinv},       {"lambda",       &s.lambda},
+        {"buildmodel", &s.build_model},{"defect",       &s.defect},
+        {"qpsolve",    &s.qpsolve},    {"trust",        &s.trust_region},
+        {"finalize",   &s.finalize},
     };
+    const PhaseStat& tick = s.tick;
 
     std::ostringstream os;
     os.setf(std::ios::fixed);
@@ -894,22 +928,24 @@ std::string ArmNMPC::profileReport() const
         os << "\n  unattributed=" << (tick.sum_us - attributed) / tick.count
            << " us/tick";
     }
-    if (qp_iters.count > 0) {
+    if (s.qp_iters.count > 0) {
         // Summed over the tick's solves, so a retry can push this past the cap --
         // which is the signature worth seeing: the warm solve burned the whole cap
         // and the cold retry converged in the remainder.
-        os << "\n  qp_iter/tick mean=" << qp_iters.mean() << " max=" << qp_iters.max
-           << " (cap " << params_.qp_max_iter << "/solve)"
-           << "  hpipm_us mean=" << qp_time_ms.mean() * 1e3
-           << " max=" << qp_time_ms.max * 1e3
-           << "  retries=" << qp_retries;
+        os << "\n  qp_iter/tick mean=" << s.qp_iters.mean()
+           << " max=" << s.qp_iters.max
+           << " (cap " << s.qp_max_iter << "/solve)"
+           << "  hpipm_us mean=" << s.qp_time_ms.mean() * 1e3
+           << " max=" << s.qp_time_ms.max * 1e3
+           << "  retries=" << s.qp_retries;
     }
     // Only printed when non-zero: it should never happen, so a permanent "=0"
     // column would just be noise on every report.
-    if (spd_fallbacks_ > 0) os << "  H_g NOT PD on " << spd_fallbacks_ << " solves";
-    if (trace_cap_ > 0) {
-        os << "  trace " << trace_.size() << "/" << trace_cap_
-           << (traceFull() ? " FULL" : "");
+    if (s.spd_fallbacks > 0)
+        os << "  H_g NOT PD on " << s.spd_fallbacks << " solves";
+    if (s.trace_cap > 0) {
+        os << "  trace " << s.trace_size << "/" << s.trace_cap
+           << (s.trace_full ? " FULL" : "");
     }
     // MuJoCo's own logging is redirected to counters, so this is the only place it
     // surfaces. Counts are since process start, not per window: an mj warning is a
@@ -922,7 +958,8 @@ std::string ArmNMPC::profileReport() const
         os << "\n  MuJoCo errors: " << mjErrorCount()
            << " (last: " << lastMjError() << ")";
     }
-    os << "  | peak slack: box=" << max_box_slack_ << " torque=" << max_tau_slack_;
+    os << "  | peak slack: box=" << s.max_box_slack
+       << " torque=" << s.max_tau_slack;
     return os.str();
 }
 

@@ -442,6 +442,24 @@ otherwise have to rediscover. None are regressions.
 trial runner, a log summariser, how to read the report line, and the ways a trial
 gets silently invalidated.
 
+**Where this stands.** The loop is hardened and instrumented: allocation-free on
+the hot path bar `computeControl`'s returned vector, no mutex anywhere in the node,
+the control loop on its own thread woken against an absolute deadline, `SCHED_FIFO`
+/ `mlockall` / core pinning available and off by default, and `nmpc_bench` for
+measuring a new machine without ROS. What the measurements say, repeatedly, is that
+**this loop is compute-bound and its tail is set by clocks and power, not by
+scheduling** — `cpu ~= wall` through every spike, and the governor, a battery cap
+and an underpowered charger each cost more than any scheduling change.
+`SCHED_FIFO`'s one demonstrated benefit is under contention, where it halves p95.
+
+Three gates remain, and only the middle one needs hardware:
+
+| gate | needs | status |
+|---|---|---|
+| aarch64 builds and computes correctly | any arm64 box | **doable now** — step 0 below |
+| the Orin is fast enough per QP iteration | an Orin + MAXN/`jetson_clocks` | blocked on hardware; `nmpc_bench` makes it one command |
+| a realtime kernel is necessary at all | evidence of preemption or wakeup latency | **no evidence yet**; revisit only if step 4 leaves a scheduling-shaped tail |
+
 Each node logs a timing report once a second (`reportDiagnostics`), covering
 period jitter, callback wall *and* thread-CPU time, deadline misses, per-phase
 durations with maxima and a histogram, QP iterations and HPIPM's own solve time.
@@ -605,11 +623,12 @@ problem pays both more iterations and somewhat dearer ones. Two consequences:
     `HPIPM_TARGET` build arg exists for a Jetson retest but defaults to `GENERIC`.
   - What is left for the solve is therefore `N: 40`, the RTI split, or a smaller
     QP -- not the toolchain.
-- **No realtime scheduling anywhere.** Default `rclcpp` executor, default-priority
-  DDS threads, no `SCHED_FIFO`, no `mlockall`, no core pinning. The dev container
-  also lacks `CAP_SYS_NICE`, so it cannot currently request an RT policy at all.
-  The control loop's *inputs* are now ready for it (see below); its statistics are
-  not.
+- **Realtime scheduling is available but off by default.** The control loop runs on
+  its own thread woken against an absolute deadline, and `rt_priority` /
+  `lock_memory` / `rt_cpus` in `nmpc.yaml` turn on `SCHED_FIFO`, `mlockall` and core
+  pinning. They default to off so enabling them stays a deliberate, measurable
+  change, and a refused policy logs once and keeps running rather than failing to
+  start. See "Realtime scheduling, measured" below.
 
 Cleared, and worth knowing about because each was invisible rather than noisy:
 
@@ -645,23 +664,92 @@ Cleared, and worth knowing about because each was invisible rather than noisy:
   transitions are queued for the same reason the report cannot just sample `mode()`
   at 1 Hz: a transition that came and went inside a window would be invisible.
 
-  **This costs actuation latency**, which is inherent to publishing
-  asynchronously: a command computed at *t* is published at the next drain. The
-  drain runs at 10x the control rate, so the added delay is at most a tenth of a
-  period (1 ms at 100 Hz) and on average half that. Signalling a dedicated
-  publisher thread from the tick would reduce it to a thread wakeup; polling is the
-  simple version and the rate is chosen by the latency, not the cost, since a timer
-  that finds both queues empty is nearly free.
+  **The torque command does NOT go through the queue — it is published from the
+  tick, because the queue was the wrong answer for it.** Publishing asynchronously
+  costs actuation latency: a command computed at *t* waits for the next drain. That
+  is inherent, and it is worse in kind than compute, because the NMPC models
+  neither but has ten times the headroom for one and none for the other.
 
-  **Not finished:** the diagnostics statistics. `stats_mu_` still covers the
-  `PhaseStat`s, the deadline counters and the controller's profile, which the tick
-  accumulates and the 1 Hz report reads and resets. It is harmless while both run on
-  the one executor thread, and it is the remaining cross-thread item to resolve
-  alongside the thread change — the accumulation has to stay on the control thread,
-  with the report reading a published snapshot and requesting the reset. `PhaseStat`
-  is trivially copyable, so that is a snapshot rather than an atomics refactor, but
-  it means regrouping the controller's profile members into one struct that can be
-  copied in a single go.
+  So `publish()` was measured instead of assumed. Over **61,711 calls on mains**
+  it costs **14.6 us on average and never exceeded 252 us** (`ee_pose`: 18.2 us,
+  worst 308 us); timed from the control thread after the change, 18-23 us mean and
+  88 us worst. Against that, queueing it cost 0-1000 us of delay on every single
+  command. Publishing inline is roughly fifteen times cheaper than the latency it
+  removes, so the rings, the fast poll and the planned semaphore-signalled
+  publisher thread were all solving a problem that did not exist.
+
+  `ee_pose` keeps its queue, drained at the control rate, because that one is
+  telemetry and a period of delay costs nothing. The output also became more
+  regular: inter-message spacing on the shared `torque_command` topic went from
+  `std dev 4.4 ms` (both arms bursting when a shared poll fired) to **0.24 ms**,
+  since each arm now publishes at its own tick instant.
+
+  Two things make the inline publish safe to do from the control thread. The
+  message is a reused member: the obvious version assigns `name`, which copies a
+  vector of `std::string` every tick. And the stamp comes from `clock_gettime`
+  rather than `get_clock()->now()`, because with `use_sim_time` the rclcpp clock
+  takes a mutex the `/clock` subscription also takes — the exact inversion this
+  work removes. That stamp is now real wall-clock time where it used to be frozen
+  at zero (nothing publishes `/clock`); no consumer reads it, since
+  `pat_simulation` and `pat_telemetry` both match on name.
+
+  The caveat worth keeping: these are Fast DDS, two small messages, this QoS, and a
+  subscriber on the same host reaching it over shared memory. A reliable-QoS
+  publish *can* block if the transport queue fills, which did not happen here
+  because `simulation_node` kept up. The `pub_torque_`/`pub_eepose_` statistics
+  stay on the report line so this is a number to read on the Orin, against a real
+  driver node, rather than one to assume carries over.
+
+  The statistics went the same way and **the node now holds no mutex at all**. The
+  tick owns the `PhaseStat`s, the deadline counters and the controller's profile,
+  publishes a copy of all of it each time round, and clears them when it sees the
+  report ask through an atomic flag — so every write stays on one thread and the
+  report can never print a window a reset half-cleared. `ArmNMPC::snapshotProfile`
+  and `formatProfile` split the old `profileReport()` into the copy (cheap, on the
+  control thread) and the formatting (allocates, off it).
+- **Realtime scheduling, measured: `SCHED_FIFO` is worth nothing on an idle box and
+  halves the tail on a contended one.** Which is the deployment case, so it earns
+  its place — but only once something else is competing for the core.
+
+  The experiment: each arm's control thread pinned to ONE logical CPU (`rt_cpus:
+  [4]` / `[6]`) with a `SCHED_OTHER` spinner pinned to that same CPU, so the two
+  must timeshare. The SMT sibling is left idle deliberately — a spinner there would
+  add SMT resource contention, which no scheduling policy can fix, and muddy an
+  experiment about scheduling. Governor `performance`, 130 W adapter, interleaved,
+  policy verified from each run's own log before reading its timings:
+
+  | | p95 L/R | max L/R |
+  |---|---|---|
+  | no load, normal priority | **2229 / 1685** | 3027 / 2072 |
+  | no load, FIFO 80 | 2334 / 2159 | 3778 / 2441 |
+  | load, normal priority (round 1) | **5120 / 6584** | 6735 / 9960 |
+  | load, FIFO 80 (round 1) | **3042 / 3374** | 3137 / 4084 |
+  | load, normal priority (round 2) | **7062 / 6376** | 8167 / 6855 |
+  | load, FIFO 80 (round 2) | **3127 / 3454** | 3549 / 4498 |
+
+  Contention costs **3.2x on p95** at normal priority (2229 -> 7062) and **1.3x**
+  under FIFO (2334 -> 3127). FIFO halves p95 and max in 4 of 4 pairs, both arms,
+  both rounds, and brings the loaded tail back to within ~35% of its unloaded
+  value. It also replicates on battery and on a 15 W supply, so it is not an
+  artefact of one power state.
+
+  It is not free: with nothing competing, FIFO is ~6% worse on the mean and 5-28%
+  worse on p95, presumably by giving up CFS's placement heuristics. So this is a
+  trade that pays off only under load — which is why `rt_priority` defaults to 0
+  and the deployment config, not the dev default, is where it should be set to 80.
+
+  **Core pinning matters for a different reason, and only on an asymmetric host.**
+  Linux's realtime scheduler places by priority and by which CPU is free, with no
+  notion of the core-capability asymmetry CFS handles through Thread Director, so an
+  unpinned FIFO thread lands wherever and stays. On battery that was CPUs 16-19,
+  all E-cores, for both arms, and the mean tick doubled (1080 -> 2118 us); pinning
+  recovered all of it. On mains the placement is just as arbitrary (one arm on an
+  E-core, one on a P-core) and costs nothing, because an E-core at its full 3.7 GHz
+  handles this tick about as well as a P-core. The 2x was the battery cap biting
+  the E-cores, not an E-core penalty on its own. The Orin's cores are homogeneous,
+  so that asymmetry does not transfer, but pinning and `isolcpus` there are the
+  same control, and `rt_cpus` is cheap insurance on any power- or thermally-limited
+  machine.
 - **The dev container can now request a realtime policy.** `docker-compose.yml`
   grants `ulimits: {rtprio: 99, memlock: 268435456}`. Deliberately **not**
   `cap_add: [SYS_NICE]`: `user:` runs the container as a non-root user, whose
@@ -670,10 +758,18 @@ Cleared, and worth knowing about because each was invisible rather than noisy:
   like it worked and do nothing. `RLIMIT_RTPRIO` is what works unprivileged, and
   `chrt -f 99 true` now succeeds with `CapEff: 0000000000000000`, which is the proof.
   `CAP_SYS_NICE` is only needed to exceed the rlimit, renice negatively, or change
-  another process's policy. memlock is sized from the measured ~33 MB RSS of
-  `arm_nmpc_node` (8x headroom) and kept finite, given this box's `systemd-oomd`
-  history. `CONFIG_RT_GROUP_SCHED` is unset on the host, so there is no cgroup RT
-  budget to fight; cgroups are v2, so `--cpu-rt-runtime` is unusable regardless.
+  another process's policy. `CONFIG_RT_GROUP_SCHED` is unset on the host, so there
+  is no cgroup RT budget to fight; cgroups are v2, so `--cpu-rt-runtime` is
+  unusable regardless.
+
+  `memlock` is 1 GiB, which has to clear the node's **virtual** size (~750 MB), not
+  its ~33 MB resident set: the kernel admits an `MCL_CURRENT` `mlockall` by testing
+  `RLIMIT_MEMLOCK` against `total_vm`, and it does that even with `MCL_ONFAULT`,
+  which only changes how much memory ends up pinned afterwards. So the limit is an
+  admission threshold rather than a reservation — with `ONFAULT` the two arms
+  together pin ~45 MB, per `/proc/meminfo`'s `Mlocked`. Check `Mlocked` and not the
+  process's `VmLck`: that counts the VMAs *marked* for locking, which with
+  `ONFAULT` is the whole address space and reads as ~700 MB per node.
 - **MuJoCo's own logging no longer runs from the tick.** Its default warning hook
   appends to `MUJOCO_LOG.TXT` -- a file write from a path that fires exactly when
   the solver is struggling -- and its default error hook calls `exit()`, killing a
@@ -687,13 +783,130 @@ Cleared, and worth knowing about because each was invisible rather than noisy:
   with `use_sim_time:=true` and nothing publishing `/clock`, so each fired once and
   then went silent for the rest of the run -- including "waiting for joint_states"
   and the dropped non-finite-measurement warnings. They now throttle against a
-  steady clock; the startup warning repeats every 2 s as intended. Note
-  `header.stamp` on everything published is still zero, which blocks any
-  subscriber-side latency measurement; fixing that needs `/clock` from
-  `pat_simulation` rather than a change here.
+  steady clock; the startup warning repeats every 2 s as intended. `header.stamp`
+  on `torque_command` is now real wall-clock time, set with `clock_gettime` by the
+  tick that computed it; `ee_pose` is still stamped from the ROS clock and so
+  still reads zero, since nothing publishes `/clock`.
 - **The trust-region loop allocated a 3-vector per stage**, i.e. N per tick.
   Hoisted to a member: 1850 -> 1809 allocations per tick, and paired runs put the
   mean 81 us lower with `qp_iter` and tracking unchanged.
+
+### Getting this onto the Orin, in this order
+
+Measure before changing anything. Every tail this loop has had turned out to be
+clocks or power -- the governor, a battery cap, a 15 W charger -- and none of it
+was visible without measuring. The kernel work is last because nothing yet
+observed justifies it.
+
+**0. Retire the arm64 risk first, on any arm64 box, before the Orin exists.**
+The deployment carries two independent unknowns -- *does this code build and
+compute correctly on aarch64*, and *is the Orin fast enough* -- and only the second
+one needs an Orin. The first can be settled now on anything arm64 (a DGX Spark, a
+Grace box, a Pi 5, a cloud arm64 instance), natively, which is both faster and more
+trustworthy than cross-building under QEMU.
+
+```bash
+# on the arm64 host. Orin's flags, NOT the host's -- see the warning below.
+docker build -f docker/Dockerfile --target runtime \
+    --build-arg BUILD_TESTING=ON --build-arg BUILD_JOBS=8 -t pat:arm64-check .
+docker run --rm pat:arm64-check bash -lc '/ws/build/pat_arm_nmpc/test_pat_arm_nmpc'
+docker run --rm pat:arm64-check bash -lc \
+  '/ws/install/pat_arm_nmpc/lib/pat_arm_nmpc/nmpc_bench --ticks 5000 --out /tmp/a.csv'
+```
+
+The test suite is the prize, not the benchmark. It is the only thing that checks
+the *numerics* on aarch64: the fidelity tests compare the linearised model against
+MuJoCo's own dynamics at tight tolerances, so NEON codegen or different FMA
+contraction would show up there and nowhere else. It also exercises the arm-only
+C++ hazards that are silent on x86 -- `char` is unsigned by default on ARM and
+signed on x86-64, and alignment assumptions are stricter. `BUILD_TESTING` is an
+ARG precisely so this is possible without editing the Dockerfile; it stays `OFF`
+for a deployment image, where a gtest binary has no business.
+
+**What this does NOT tell you is anything about speed.** A DGX Spark's GB10 is
+Cortex-X925/A725 (Armv9.2-A, ~140 W); the Orin is Cortex-A78AE (Armv8.2-A,
+15-60 W). A modern big core will likely beat the x86 dev laptop outright while the
+Orin lands well below it, so reading "fast enough" off a DGX run would be exactly
+backwards. It also says nothing about the thermal and power behaviour that this
+project has repeatedly found to dominate the tail, nor about the Jetson-only RT
+kernel. Build it, run the tests, note that `nmpc_bench` produced a parseable CSV,
+and throw the timings away.
+
+**The trap:** never let `-mcpu=native` or `-march=native` reach a build on a
+non-Orin arm64 host, and do not set a host-specific `BLASFEO_TARGET` there. Native
+on an Armv9 box emits instructions that **SIGILL on the Orin**. Building *for*
+Cortex-A78 and running that binary on a newer core is fine and is the test you
+want; the reverse is not. `PAT_ARCH_FLAGS` defaults to `-mcpu=cortex-a78` for
+arm64 and is never `native`, which is the whole reason it defaults that way.
+
+**1. Get the number.** `nmpc_bench` exists so this is one command with no ROS
+graph, no DDS, no simulator and no X11. It is in the `runtime` image already:
+
+```bash
+/ws/install/pat_arm_nmpc/lib/pat_arm_nmpc/nmpc_bench --ticks 20000 --out /tmp/orin.csv
+tools/nmpc_timing/plot_trace.py /tmp/orin.csv      # same CSV the node's trace writes
+```
+
+Compare against this laptop's figure from the same binary: **mean 971-977 us per
+tick, 7.0 QP iterations, ~105 us per iteration**. The research brief extrapolates
+an Orin at 1.5-3x a desktop; at 3x the mean becomes ~2.9 ms, which still fits a
+10 ms period, and this is the measurement that confirms or kills that. Set
+`jetson_clocks` and MAXN FIRST (step 2) or the number is meaningless.
+
+Caveat on what it measures: the plant is the controller's own model, the base is
+fixed, the setpoint does not move, and nothing competes. So it is steady-state
+compute cost -- ideal for comparing machines, and deliberately not the tail. QP
+iterations come out a flat 7.0 where the live node sees a mean of 8.1 with a max
+over 20, because the tail comes from setpoint transients and system interference
+that this does not reproduce. For that, run the full stack.
+
+**2. Clocks and power, before any timing.** `sudo nvpmodel -m 0` (MAXN) and
+`sudo jetson_clocks`, then confirm. This is the Orin's equivalent of the governor
+and the charger, and on this laptop those two were worth 1.5-3x on the tail
+between them. Re-run step 1 after.
+
+**3. Build the deployment image for the Orin specifically.** Step 0's build was
+deliberately conservative so the binary would run on any arm64 host; this is the
+one that targets this chip. `PAT_ARCH_FLAGS` already defaults to
+`-mcpu=cortex-a78` for arm64 (Orin is Cortex-A78AE), so the only thing to add is
+BLASFEO's target. Its arm64 default is deliberately left at
+`ARMV8A_ARM_CORTEX_A57`, which is ARMv8.0-A and runs anywhere; A76 is ARMv8.2-A
+and would SIGILL on an older arm64 board, so raising it is opt-in and belongs
+here rather than in step 0:
+
+```bash
+docker buildx build -f docker/Dockerfile --target runtime --platform linux/arm64 \
+    --build-arg BLASFEO_TARGET=ARMV8A_ARM_CORTEX_A76 \
+    -t mujoco-pat:runtime-arm64 .
+```
+
+Expect little: the same class of flags moved nothing measurable on x86 (see
+"Settled by measurement"). The point is not leaving the target unstated.
+
+**4. Realtime scheduling, which is a config change and not a kernel one.** Set
+`rt_priority: 80` and the per-arm `rt_cpus` in the deployment `nmpc.yaml`, and
+grant the limits -- `ulimits: {rtprio: 99, memlock: <clears VmSize>}`. It is
+`RLIMIT_RTPRIO` that permits `SCHED_FIFO` for an unprivileged user, NOT
+`CAP_SYS_NICE`, and `cap_add` is inert when the container runs as a non-root user.
+Confirm `grep RT_GROUP_SCHED /boot/config-$(uname -r)` is unset, as it is on the
+dev host, or a cgroup RT budget will fight the policy. Check the node's own first
+report line says `SCHED_FIFO priority 80` -- it degrades to normal priority and
+says so rather than failing to start.
+
+**5. Only then consider a realtime kernel.** Pin JetPack R36.4.x: R36.5 has no
+published RT packages. `sudo apt install nvidia-l4t-rt-kernel` via OTA, keep the
+generic kernel as a boot entry, and **validate Ethernet and USB on the RT kernel
+immediately** -- that is the known risk, and a headless board that loses its
+network is a reflash. `isolcpus` / `irqaffinity` / `kthread_cpus` on the kernel
+command line reserve the control cores properly, which `rt_cpus` only approximates
+from userspace. Then `cyclictest --mlockall -p 80` pinned to those cores, for
+hours, under representative load -- not idle, which measures nothing.
+
+The honest prior: on this laptop `SCHED_FIFO` is worth nothing idle and halves the
+p95 under contention, and `cpu ~= wall` through every spike, so there is still no
+evidence of preemption or wakeup latency costing anything. A kernel would address a
+problem not yet observed. Revisit it only if step 4 leaves a tail that `cpu` versus
+`wall` shows is scheduling rather than compute.
 
 ### Elsewhere
 

@@ -3,10 +3,11 @@
 #include <array>
 #include <chrono>
 #include <cstddef>
+#include <atomic>
 #include <fstream>
 #include <memory>
-#include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include <geometry_msgs/msg/pose_stamped.hpp>
@@ -28,6 +29,13 @@
 /// instances coexist on one topic).
 class ArmNMPCNode : public rclcpp::Node {
 public:
+    /*! Start the control thread. Called after construction and before spin(),
+     *  deliberately not from the constructor: a thread inherits the scheduling
+     *  policy of whichever thread created it, so this must run after the
+     *  publishers and subscriptions exist and DDS has made its own threads. Those
+     *  then stay SCHED_OTHER instead of being dragged onto the realtime policy by
+     *  a parent that already holds it. */
+    void start();
     /*! The measurements and the setpoint, handed from the subscription callbacks
      *  to the control loop one whole value at a time.
      *
@@ -63,10 +71,6 @@ public:
      *  depending on the middleware it can allocate, take a lock, or touch a
      *  socket. These carry the numbers out as POD and the drain builds the
      *  messages, so the tick's output costs one queue slot. */
-    struct TorqueOut {
-        double        effort[kMaxJoints]{};
-        std::uint32_t n{0};
-    };
     struct EePoseOut {
         double pos[3]{};
         double quat[4]{1.0, 0.0, 0.0, 0.0};
@@ -82,6 +86,23 @@ public:
         long tier1_ticks{0};
         long safe_mode_ticks{0};
         long tier1_entries{0};
+    };
+
+    /*! Everything the 1 Hz report prints, published by the tick that measured it.
+     *
+     *  The statistics are accumulated by the control thread and consumed by the
+     *  report, which also has to clear them for the next window. Neither a shared
+     *  lock nor a direct read works: a lock would let the report block a realtime
+     *  tick, and reading the live counters would race every field and could print
+     *  a window the reset had half-cleared. So the tick owns them outright,
+     *  publishes a copy each time round, and clears them when it sees the report
+     *  ask -- which keeps every write on one thread. */
+    struct StatsSnapshot {
+        pat_arm_nmpc::PhaseStat jitter, loop, cpu;
+        long deadline_misses{0};
+        long worst_consecutive_misses{0};
+        long skipped_periods{0};
+        pat_arm_nmpc::ArmNMPC::ProfileSnapshot profile;
     };
 
     ArmNMPCNode();
@@ -182,11 +203,47 @@ private:
     //! Outbound queues and the timer that drains them. The drain runs at twice
     //! the control rate so a tick's output waits well under one period, and the
     //! queues are deep enough that a late drain backs up rather than drops.
-    pat_arm_nmpc::SpscRing<TorqueOut, 16>  torque_out_;
     pat_arm_nmpc::SpscRing<EePoseOut, 16>  ee_pose_out_;
     pat_arm_nmpc::SpscRing<ModeEvent, 16>  mode_events_;
     rclcpp::TimerBase::SharedPtr           drain_tmr_;
     void drainOutputs();
+
+    /*! The torque command, published from the control thread itself.
+     *
+     *  Measured rather than assumed: over 61,711 calls on mains, publish costs
+     *  14.6 us on average and never exceeded 252 us. Queueing it for another
+     *  thread instead cost 0-1000 us of actuation latency on every command, which
+     *  is both larger than the publish and worse in kind -- compute is utilisation
+     *  the tick has ten times the headroom for, lag is unmodelled delay the NMPC
+     *  does not account for. So it goes out inline, and ee_pose_out_ above keeps
+     *  the queue because that one is telemetry and its latency does not matter.
+     *
+     *  Held as a member and reused, because the obvious version allocates on the
+     *  control thread: assigning `name` copies a vector of std::string every tick.
+     *  `name` is filled once at construction and `effort` sized once, so a tick
+     *  writes doubles into existing storage. The stamp comes from clock_gettime
+     *  rather than get_clock()->now(): with use_sim_time the rclcpp clock takes a
+     *  mutex that the /clock subscription also takes, which is the priority
+     *  inversion this phase exists to remove. No consumer reads this stamp
+     *  (pat_simulation and pat_telemetry both match on name), and it was frozen at
+     *  zero before, since nothing publishes /clock. */
+    sensor_msgs::msg::JointState torque_msg_;
+
+    /*! What rclcpp::Publisher::publish actually costs, per call, per topic.
+     *
+     *  The queue-and-drain design above exists because publish may allocate or
+     *  take a lock somewhere in the middleware, which a realtime tick cannot
+     *  afford. That is true in general and was never measured here, and it is
+     *  worth measuring, because the answer chooses the design: a publish that is
+     *  fast and bounded can go straight back onto the control thread, which costs
+     *  no latency and needs none of this machinery. One that spikes justifies the
+     *  queue and a thread woken by a semaphore. Until then the drain's polling
+     *  interval is pure added actuation delay.
+     *
+     *  Plain members, not atomics, and outside the control thread's snapshot:
+     *  drainOutputs and reportDiagnostics are both executor callbacks, so the same
+     *  thread writes and reads these. */
+    pat_arm_nmpc::PhaseStat pub_torque_, pub_eepose_;
 
     /*! Things the tick must report but cannot log, since RCLCPP_* formats and
      *  writes. Counted here and surfaced by the report instead. Atomic because
@@ -196,8 +253,7 @@ private:
     std::atomic<long> n_waiting_for_input_{0};   //!< ticks with no state yet
     std::atomic<long> n_tick_threw_{0};          //!< exceptions out of computeControl
     std::atomic<long> n_nonfinite_torque_{0};    //!< suppressed non-finite commands
-    std::atomic<long> n_torque_dropped_{0};      //!< outbound queue was full
-    std::atomic<long> n_ee_pose_dropped_{0};
+    std::atomic<long> n_ee_pose_dropped_{0};     //!< outbound queue was full
     std::atomic<long> n_mode_events_dropped_{0};
     //! The last exception message, copied into a fixed buffer rather than a
     //! std::string so the tick neither allocates nor formats. Written by the
@@ -215,12 +271,62 @@ private:
     pat_arm_nmpc::ArmNMPC::ControlMode prev_mode_{
         pat_arm_nmpc::ArmNMPC::ControlMode::Nominal};
 
+    // --- The control thread ------------------------------------------------
+    /*! The control loop runs on its own thread, woken by clock_nanosleep against
+     *  an absolute deadline rather than by an rclcpp wall timer. Two reasons, both
+     *  independent of whether it gets a realtime priority:
+     *
+     *  - An executor timer shares its thread with every subscription callback, so
+     *    the control cadence is coupled to whatever else the node handles. Today
+     *    that is cheap; it will not be once vision and a planner share the box.
+     *  - TIMER_ABSTIME holds the phase. rclcpp's wall timer re-anchors when it
+     *    fires late, which turns a single late tick into a permanently shifted
+     *    schedule and reports the shift as jitter forever.
+     *
+     *  `rt_priority_` > 0 additionally asks for SCHED_FIFO at that priority. That
+     *  part can fail -- the limit is RLIMIT_RTPRIO, which a container need not
+     *  grant -- and failing must not stop the controller: one that refuses to run
+     *  in the development environment is worse than one that reports it is not
+     *  realtime. The outcome is latched here and logged once by the report, since
+     *  this thread must not log.
+     *
+     *  Nothing on this thread may allocate, log, or call into rclcpp. */
+    std::thread       ctrl_thread_;
+    std::atomic<bool> ctrl_running_{false};
+    long              period_ns_{0};
+    int               rt_priority_{0};     //!< 0 leaves the thread at normal priority
+    bool              lock_memory_{false};
+    
+    /*! CPUs the control thread may run on; empty leaves placement to the kernel.
+     *
+     *  Not optional on a hybrid-core x86 host, and measured: with SCHED_FIFO and
+     *  no affinity, both arms' control threads ran exclusively on this box's
+     *  E-cores (3.7 GHz, lower IPC) and the mean tick doubled, 1080 -> 2118 us.
+     *  Linux's realtime scheduler places by priority and which CPU is free, with
+     *  no notion of the core-capability asymmetry that CFS handles through Thread
+     *  Director, so an unpinned FIFO thread can land on the slowest cores in the
+     *  machine and stay there. Pin it to the fast ones, and give each arm its own
+     *  so the two do not share a core. A homogeneous target (the Orin's cores all
+     *  match) does not have this failure mode, but isolating cores there is the
+     *  same control. */
+    std::vector<long> rt_cpus_;
+    void controlThread();
+    //! Restrict the calling thread to rt_cpus_. Returns 0 on success, an
+    //! errno-style code on failure, -1 if no affinity was asked for.
+    int  applyAffinity();
+    std::atomic<int> affinity_result_{-1};
+    //! Request SCHED_FIFO for the calling thread. Returns 0 on success, else the
+    //! errno-style code, which the report turns into one log line.
+    int  applyRealtimePolicy();
+    std::atomic<int>  rt_result_{-1};      //!< -1 = not attempted yet
+    std::atomic<int>  mlock_result_{-1};
+    std::atomic<bool> rt_reported_{false}; //!< so the report says it once
+
     rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr state_sub_;
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;
     rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr ee_setpoint_sub_;
     rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr torque_pub_;
     rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr ee_pose_pub_;  // measured EE pose (world)
-    rclcpp::TimerBase::SharedPtr ctrl_tmr_;
 
     // --- Loop-level timing -------------------------------------------------
     // Measured on steady_clock, never the ROS clock: launch files default
@@ -275,16 +381,12 @@ private:
     long trace_written_{0};
     void flushTrace();
 
-    //! Guards the diagnostics statistics only -- the PhaseStats, the deadline
-    //! counters and the controller's profile, which the control tick accumulates
-    //! and reportDiagnostics reads and resets. The measurement path no longer
-    //! uses it; see the mailboxes above.
-    //!
-    //! This is the one cross-thread item the hand-off has not resolved. It is
-    //! harmless today, because every callback still runs on the one executor
-    //! thread, but a control loop moved to SCHED_FIFO must not take a lock that
-    //! the diagnostics timer holds. Resolving it belongs with the thread change:
-    //! the accumulation has to stay on the control thread, with the report
-    //! reading a published snapshot and requesting the reset.
-    std::mutex stats_mu_;
+    //! The statistics hand-off: the tick publishes here, the report reads, and
+    //! `stats_reset_` is how the report asks the tick to start a fresh window.
+    //! No lock, for the reason in StatsSnapshot's comment.
+    pat_arm_nmpc::SeqlockMailbox<StatsSnapshot> stats_mail_;
+    std::atomic<bool>                          stats_reset_{false};
+    //! Publish the tick's statistics, then clear them if the report has asked.
+    //! Called at the end of every tick, from the control thread only.
+    void publishStats();
 };

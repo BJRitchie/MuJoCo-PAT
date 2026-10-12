@@ -232,8 +232,31 @@ public:
     /*! Human-readable timing breakdown: per phase, the mean, the max and the
      *  histogram, plus deadline misses against the tick budget and peak
      *  soft-constraint slack. Builds a string, so call it from a diagnostics
-     *  timer and never from the control tick. */
+     *  timer and never from the control tick.
+     *
+     *  snapshotProfile + formatProfile are the same report in two halves, for when
+     *  the thread that owns the counters is not the one allowed to format them:
+     *  the owner copies them out in one trivially copyable value, and whatever
+     *  logs formats its own copy. Reading the live members from another thread
+     *  instead would be a data race on every field, and resetProfile() racing a
+     *  reader would report a half-cleared window. */
     std::string profileReport() const;
+    struct ProfileSnapshot {
+        PhaseStat tick, dynamics, jdotqdot, lambda, qpsolve;
+        PhaseStat rollout_dynamics, rollout_integrate, pinv;
+        PhaseStat build_model, defect, trust_region, finalize;
+        Tally     qp_iters, qp_time_ms;
+        long      qp_retries    = 0;
+        long      spd_fallbacks = 0;
+        long      trace_size    = 0;
+        long      trace_cap     = 0;
+        bool      trace_full    = false;
+        double    max_box_slack = 0.0;
+        double    max_tau_slack = 0.0;
+        int       qp_max_iter   = 0;
+    };
+    void snapshotProfile(ProfileSnapshot& out) const;
+    static std::string formatProfile(const ProfileSnapshot& s);
 
     /*! Zero every phase statistic and the slack peaks. Call right after reporting:
      *  the statistics are per-interval, not cumulative, because a running average

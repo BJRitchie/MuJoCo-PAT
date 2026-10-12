@@ -96,6 +96,28 @@ add_custom_target(pat_arm_nmpc_models ALL DEPENDS "${_model_xml}")
 install(FILES "${_model_xml}" "${CMAKE_CURRENT_SOURCE_DIR}/models/platform.xml"
         DESTINATION share/${PROJECT_NAME}/models/)
 
+# ─── nmpc_bench: ROS-free closed-loop timing ──────────────────────────────
+# Built into the runtime image so the Orin can be characterised with one
+# command: no ROS graph, no DDS, no simulator, no X11. Links the algorithm lib
+# and yaml-cpp only -- yaml-cpp so it reads the REAL nmpc.yaml rather than
+# carrying a second copy of the configuration.
+#
+# The default params/model paths are compiled in because this deliberately has
+# no ROS: there is no FindPackageShare to resolve them at runtime. They point at
+# the INSTALLED copies, so the binary works from anywhere once installed, and
+# both are overridable with --params / --model.
+find_package(yaml-cpp REQUIRED)
+add_executable(nmpc_bench src/nmpc_bench.cpp)
+pat_arm_nmpc_arch_flags(nmpc_bench)
+add_dependencies(nmpc_bench pat_arm_nmpc_models)
+target_link_libraries(nmpc_bench pat_arm_nmpc_lib yaml-cpp)
+# The model too: nmpc.yaml ships mjcf_path as "" because the launch file fills it
+# from FindPackageShare, which a ROS-free binary cannot call.
+target_compile_definitions(nmpc_bench PRIVATE
+    PAT_NMPC_BENCH_PARAMS="${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME}/config/nmpc.yaml"
+    PAT_NMPC_BENCH_MODEL="${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME}/models/pat_platform_planar.xml")
+install(TARGETS nmpc_bench RUNTIME DESTINATION lib/${PROJECT_NAME})
+
 # ─── Tests ───────────────────────────────────────────────────────────────
 # The model-fidelity tests load the generated MJCF straight out of the build
 # tree (they run before install), so the path is compiled in rather than
