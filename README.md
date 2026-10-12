@@ -487,9 +487,15 @@ Three gates remain, and only the middle one needs hardware:
 
 | gate | needs | status |
 |---|---|---|
-| aarch64 builds and computes correctly | any arm64 box | **doable now** — step 0 below |
+| aarch64 builds and computes correctly | any arm64 box | **CLEARED** — 71/71 on a GB10 (Cortex-X925/A725), natively |
 | the Orin is fast enough per QP iteration | an Orin + MAXN/`jetson_clocks` | blocked on hardware; `nmpc_bench` makes it one command |
 | a realtime kernel is necessary at all | evidence of preemption or wakeup latency | **no evidence yet**; revisit only if step 4 leaves a scheduling-shaped tail |
+
+Clearing the first gate was not a formality: it found a real defect. The soft/soft
+constraint configuration collapsed on aarch64 where x86-64 passed, which is what
+led to hard torque rows becoming the default (see "Constraint configuration").
+Everything else — the model fidelity tests against MuJoCo's own dynamics, the
+lock-free mailbox and ring, the allocation bounds — passed on the first try.
 
 Each node logs a timing report once a second (`reportDiagnostics`), covering
 period jitter, callback wall *and* thread-CPU time, deadline misses, per-phase
@@ -856,9 +862,11 @@ for a deployment image, where a gtest binary has no business.
 
 **What this does NOT tell you is anything about speed.** A DGX Spark's GB10 is
 Cortex-X925/A725 (Armv9.2-A, ~140 W); the Orin is Cortex-A78AE (Armv8.2-A,
-15-60 W). A modern big core will likely beat the x86 dev laptop outright while the
-Orin lands well below it, so reading "fast enough" off a DGX run would be exactly
-backwards. It also says nothing about the thermal and power behaviour that this
+15-60 W). Measured, so the trap is concrete rather than hypothetical:
+`nmpc_bench` reports **753 us mean / 888 us max** on the GB10 against **977 /
+1630** on the x86 dev laptop. The modern big core beats the laptop, as expected,
+and the A78AE will not — so reading "fast enough" off a run like that would be
+exactly backwards. It also says nothing about the thermal and power behaviour that this
 project has repeatedly found to dominate the tail, nor about the Jetson-only RT
 kernel. Build it, run the tests, note that `nmpc_bench` produced a parseable CSV,
 and throw the timings away.
