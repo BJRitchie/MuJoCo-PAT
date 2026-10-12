@@ -2332,6 +2332,73 @@ TEST(DISABLED_ConstraintStudy, Ladder)
     }
 }
 
+/*! Why the soft/soft configuration falls apart on aarch64, and what fixes it.
+ *
+ *  `HardConstraints.SoftBoxCarriesRealSlackWhenTheArmIsOutsideItsLimit` passes on
+ *  x86-64 and fails on aarch64, with everything else in the suite green and the
+ *  same commit on both. Measured, same scenario, soft box + soft torque +
+ *  terminal_velocity_constraint:
+ *
+ *      x86-64   availability 96.7%, recovers 0.6994 -> 0.0000, status 0:231 2:9 3:60
+ *      aarch64  availability 21.7%, recovers 0.6994 -> 0.0749, status 0:60  3:240
+ *
+ *  It needs BOTH soft torque rows and the terminal velocity constraint: harden the
+ *  torque rows and aarch64 matches x86 exactly (96.7%, full recovery), and with
+ *  terminal_velocity_constraint off the two agree to the printed digit on every
+ *  column. So this is not a porting bug, it is an interior-point method sitting
+ *  near infeasibility where the iterate path depends on the BLAS kernels --
+ *  BLASFEO's ARMV8A_ARM_CORTEX_A57 set against X64_AUTOMATIC. x86 is not healthy
+ *  here either, just luckier: 60 NaN solves in 300.
+ *
+ *  This sweeps the knobs that could buy the solver margin, on the configuration
+ *  that fails. RUN IT ON THE FAILING ARCHITECTURE: x86 passes at 96.7%, so it
+ *  cannot tell a setting that fixes aarch64 from one that does nothing. Use an
+ *  x86 run only afterwards, to check the chosen value does not regress it.
+ *
+ *  Reads: availability and the recovery column are the outcome; the status
+ *  histogram is the mechanism, where 3:N is N NaN solves. */
+TEST(DISABLED_RegularisationStudy, SoftSoftNearInfeasibility)
+{
+    // The failing case exactly: arm parked ~0.7 rad outside joint 0's limit.
+    const Scenario sc{0.06, 1.60, 0, 0.0};
+
+    std::printf("\nsoft box + soft torque, terminal_velocity_constraint on, "
+                "arm 0.7 rad outside its limit\n"
+                "reg_prim is HPIPM's primal regularisation; tau_slack scales the "
+                "soft TORQUE row penalty\n"
+                "(linear and quadratic together), which is the fragile group here."
+                "\n\n");
+    std::printf("%-10s %-10s %7s %8s %-18s %8s  %s\n",
+                "reg_prim", "tau_slack", "avail", "maxdamp", "viol:init->final",
+                "tick_us", "status");
+
+    for (const double reg : {1.0e-8, 1.0e-6, 1.0e-4, 1.0e-2}) {
+        for (const double sc_mult : {1.0, 10.0, 100.0}) {
+            NMPCParams p = liveParams();
+            p.soft_joint_limits  = true;
+            p.soft_torque_limits = true;
+            p.terminal_velocity_constraint = true;
+            p.qp_reg_prim = reg;
+            p.torque_slack_linear    *= sc_mult;
+            p.torque_slack_quadratic *= sc_mult;
+
+            const RunMetrics m = runClosedLoop(p, sc, 300);
+            std::string hist;
+            for (const auto& [st, n] : m.status_hist)
+                hist += std::to_string(st) + ":" + std::to_string(n) + " ";
+            std::printf("%-10.0e %-10.0f %6.1f%% %8d  %6.4f->%-6.4f  %8.0f  %s\n",
+                        reg, sc_mult, 100.0 * m.availability,
+                        m.max_consecutive_damping, m.initial_pos_violation,
+                        m.final_pos_violation, m.mean_tick_us, hist.c_str());
+        }
+    }
+    std::printf("\nThe current defaults are reg_prim 1e-6, tau_slack 1. A row with "
+                "availability near\n100%% and a 'viol' column reaching 0.0000 is a "
+                "candidate; verify it on x86 before\nchanging nmpc.yaml, and re-run "
+                "DISABLED_ConstraintStudy.Ladder, since these knobs\nalso move the "
+                "nominal and aggressive-setpoint cases.\n");
+}
+
 // --- The control loop's input hand-off ------------------------------------ //
 
 namespace {
