@@ -925,6 +925,11 @@ NMPCParams liveParams()
     p.Rx = 1e-1;   p.Ry = 1e-1;   p.Rwz = 1e-1;
     p.qp_max_iter = 60;
     p.qp_tol = 1e-5;
+    // Soft box, HARD torque, stated here rather than left to the struct defaults
+    // because the pair is the measured decision and a harness that silently
+    // drifted off it would be measuring a configuration nobody deploys.
+    p.soft_joint_limits  = true;
+    p.soft_torque_limits = false;
     for (auto& jl : p.joint_lims) { jl.qd_max = 2.0; }
     p.joint_lims[0].q_min =  0.0;   p.joint_lims[0].q_max = 3.14;
     p.joint_lims[1].q_min = -2.967; p.joint_lims[1].q_max = 0.0;
@@ -1509,10 +1514,12 @@ TEST(HardConstraints, SoftBoxCarriesRealSlackWhenTheArmIsOutsideItsLimit)
     EXPECT_GT(m.max_box_slack, 1e-3)
         << "box slack " << m.max_box_slack << " is too small for an arm parked "
         << "0.7 rad outside its limit";
-    // A soft box does NOT come free here: straining it this hard costs both time
-    // and some availability (measured ~0.7-0.8, with a handful of NaN solves),
-    // because soft general rows are the fragile ones in HPIPM. Asserted loosely,
-    // as the point is that soft degrades gracefully where raw hard does not.
+    // Straining the box this hard still costs time, but with HARD torque rows it
+    // no longer costs much availability: ~96.7% on both x86-64 and aarch64, with
+    // the joint fully recovered. This assertion is the one that caught soft torque
+    // rows collapsing on aarch64 (21.7%, joint never recovered) while passing on
+    // x86-64 -- keep it, and keep it on availability, because that is the column
+    // that moved.
     EXPECT_GT(m.availability, 0.5)
         << "availability " << m.availability << ", longest damping run "
         << m.max_consecutive_damping;
@@ -1597,21 +1604,29 @@ TEST(HardConstraints, GuardIsNotNeededWhenTheArmIsInsideItsLimits)
     EXPECT_GT(m.availability, 0.99);
 }
 
-TEST(HardConstraints, HardTorqueDoesNotChangeTheNominalCommand)
+TEST(HardConstraints, TorqueRowHardnessDoesNotChangeTheNominalCommand)
 {
     // Hardening the torque rows changes the QP's PLAN, not the applied torque:
     // the controller already clamps per joint before publishing. Nominal
-    // behaviour should therefore be essentially unchanged.
-    NMPCParams soft = liveParams();
+    // behaviour is therefore essentially unchanged either way, which is what
+    // makes the hard default free -- it buys robustness near infeasibility
+    // without costing anything here.
+    //
+    // `hard` is the live configuration and `soft` the variant, the opposite way
+    // round from when soft torque was the default. Set explicitly rather than
+    // taken from liveParams(), so this keeps comparing two different things if
+    // the default moves again.
     NMPCParams hard = liveParams();
+    NMPCParams soft = liveParams();
     hard.soft_torque_limits = false;
+    soft.soft_torque_limits = true;
 
-    const RunMetrics ms = runClosedLoop(soft, Scenario{}, 100);
     const RunMetrics mh = runClosedLoop(hard, Scenario{}, 100);
+    const RunMetrics ms = runClosedLoop(soft, Scenario{}, 100);
 
     EXPECT_GT(mh.availability, 0.99) << "hard torque rows cost availability";
     EXPECT_NEAR(mh.mean_ee_err, ms.mean_ee_err, 0.25 * ms.mean_ee_err + 1e-4)
-        << "soft " << ms.mean_ee_err << " vs hard " << mh.mean_ee_err;
+        << "hard " << mh.mean_ee_err << " vs soft " << ms.mean_ee_err;
 }
 
 // --- Realtime profile ----------------------------------------------------- //

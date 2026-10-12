@@ -205,8 +205,26 @@
       # hard torque lengthens the worst outage 10 -> 68 ticks. Keep all three as
       # they are unless you have new numbers -- README "Settled by measurement",
       # DISABLED_ConstraintStudy.Ladder regenerates them.
+      # A soft BOX is what recovers a joint parked outside its limit -- the slack
+      # IS the restoring mechanism, and no hard variant brings the joint all the
+      # way back (README's "Constraint configuration").
       soft_joint_limits: true
-      soft_torque_limits: true
+      # Torque rows are HARD. Measured on current tuning, with a joint 0.70 rad
+      # outside its limit for 300 ticks, hard torque is better or equal on every
+      # column: same 96.7% availability, same 10-tick worst outage, same full
+      # recovery, less time outside (0.353 vs 0.372 rad*s), a 2.7x faster mean
+      # tick, 7.5x fewer deadline overruns and 12x fewer NaN solves (5 vs 60).
+      # Nominal and aggressive-setpoint runs are indistinguishable.
+      #
+      # It also matters for the Jetson. Soft torque rows are the fragile group in
+      # HPIPM near infeasibility, and HOW fragile depends on the BLAS kernels: on
+      # aarch64 the soft/soft combination collapsed to 21.7% availability with 240
+      # NaN solves in 300 and never fully recovered the joint, where hard torque
+      # gives 96.7% and full recovery, matching x86 exactly. Regularisation does
+      # not rescue soft/soft -- a reg_prim x torque-slack sweep on aarch64 peaked
+      # at 58% and was non-monotonic, i.e. scatter rather than a tunable optimum
+      # (DISABLED_RegularisationStudy).
+      soft_torque_limits: false
       relax_box_to_contain_x0: false   # hard box only; with a soft box it weakens
       relax_box_margin: 1.0e-3         #   the slack that does the restoring
 

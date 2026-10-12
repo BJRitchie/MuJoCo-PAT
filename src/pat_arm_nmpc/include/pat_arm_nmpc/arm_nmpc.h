@@ -90,7 +90,10 @@ struct NMPCParams {
     //! QuadProbSolverParams for the full rationale, including why hard is not
     //! automatically safer.
     bool   soft_joint_limits        = true;
-    bool   soft_torque_limits       = true;
+    //! False by default: measured better or equal on every column against soft
+    //! torque rows, and soft ones collapse on aarch64 near infeasibility. See
+    //! nmpc.yaml's soft_torque_limits and the README's "Constraint configuration".
+    bool   soft_torque_limits       = false;
     bool   relax_box_to_contain_x0  = false;
     double relax_box_margin         = 1e-3;
 

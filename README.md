@@ -391,16 +391,18 @@ otherwise have to rediscover. None are regressions.
   failed. Clamping to the mechanical range keeps the singularity protection the
   clamp exists for — that range *is* the reachable configuration space — while
   leaving the margin for the QP to enforce.
-- **Soft constraints are the default because they are the only variant that
-  recovers a joint, and that is measured.** With a joint parked 0.70 rad outside
-  its software limit for 300 ticks:
+- **Constraint configuration: a SOFT box with HARD torque rows.** The box is soft
+  because its slack is the only mechanism that recovers a joint; the torque rows
+  are hard because soft ones buy nothing on x86-64 and collapse on aarch64. With a
+  joint parked 0.70 rad outside its software limit for 300 ticks, on current
+  tuning:
 
-  | config | recovers | time outside (rad·s) | availability | worst outage | NaN |
-  |---|---|---|---|---|---|
-  | soft box, soft torque | **0.699 → 0.000** | 0.33 | 70% | 10 ticks | 9 |
-  | soft box, hard torque | 0.699 → 0.000 | 0.37 | 55% | **68 ticks** | 15 |
-  | hard box + guard | 0.699 → 0.547 | 0.91 | 100% | 0 | 0 |
-  | hard box, no guard | 0.699 → 0.593 | 0.96 | 0% | 300 ticks | 300 |
+  | config | recovers | time outside (rad·s) | availability | worst outage | tick mean | over | NaN |
+  |---|---|---|---|---|---|---|---|
+  | soft box, **hard torque** | **0.699 → 0.000** | **0.353** | 96.7% | 10 ticks | **2123** | **5.3%** | **5** |
+  | soft box, soft torque | 0.699 → 0.000 | 0.372 | 96.7% | 10 ticks | 5686 | 39.7% | 60 |
+  | hard box + guard | 0.699 → 0.547 | 0.91 | 100% | 0 | — | — | 0 |
+  | hard box, no guard | 0.699 → 0.593 | 0.96 | 0% | 300 ticks | — | — | 300 |
 
   The soft box's slack **is** the restoring mechanism: it brings the joint all the
   way back. Hard + guard looks best on availability and speed but recovers only
@@ -408,16 +410,45 @@ otherwise have to rediscover. None are regressions.
   on 100% of ticks and the box stops constraining anything. Raw hard is a total
   outage — the historical "fails every loop", reproduced.
 
-  **Hard torque is worse, not better.** It changes only the QP's plan (the applied
-  torque is clamped before publishing either way), and paired with a soft box it
-  forbids the large corrective torque the straining box is asking for: the worst
-  safe-mode outage grows from 10 ticks to 68, NaN solves from 9 to 15, and box
-  slack from 1.04 to 1.73. The "the plan should match what gets applied" argument
-  does not survive the measurement.
+  **Hard torque rows are better or equal on every column**, which inverts what this
+  section used to say. Same availability, same worst outage and the same full
+  recovery, plus less time outside the limit, a 2.7× faster mean tick in this
+  scenario, 7.5× fewer deadline overruns and 12× fewer NaN solves. Nominal and
+  aggressive-setpoint runs are indistinguishable between the two, and the live
+  stack is slightly faster with hard rows (mean 859/841 µs against 966/948, QP
+  iterations 7.58 against 8.17 — fewer soft rows is a smaller QP). Hardening
+  changes only the QP's *plan*; the applied torque is clamped per joint before
+  publishing either way.
 
-  Inside the margin all four are indistinguishable in tracking (`ee_err` 0.0359),
-  and hard is ~25% faster — so the choice is entirely about off-nominal behaviour.
-  `DISABLED_ConstraintStudy.Ladder` in `test/` regenerates the table.
+  **The decisive evidence came from a different architecture.** Soft general rows
+  are HPIPM's fragile group near infeasibility, and how fragile depends on the BLAS
+  kernels underneath. Same commit, same scenario, soft box + soft torque:
+
+  | | availability | recovery | QP status |
+  |---|---|---|---|
+  | x86-64 (`X64_AUTOMATIC`) | 96.7% | 0.699 → **0.000** | `0:231 2:9 3:60` |
+  | aarch64 (`ARMV8A_ARM_CORTEX_A57`) | **21.7%** | 0.699 → **0.075** | `0:60 3:240` |
+
+  Four fifths of solves returned NaN on aarch64 and the joint never came back.
+  Hardening the torque rows gives 96.7% and full recovery on aarch64, matching
+  x86-64 exactly; with `terminal_velocity_constraint` off the two agree to the
+  printed digit on every column, so the model and the QP are portable and only
+  this configuration was not. Regularisation does **not** rescue soft/soft: a
+  `reg_prim` × torque-slack sweep on aarch64 peaked at 58% and was non-monotonic in
+  both axes, which is scatter rather than a tunable optimum
+  (`DISABLED_RegularisationStudy.SoftSoftNearInfeasibility`, and run it on the
+  failing architecture — x86 passes every row, so it cannot rank them).
+
+  Inside the margin all variants are indistinguishable in tracking
+  (`ee_err` 0.0355). `DISABLED_ConstraintStudy.Ladder` regenerates the table.
+
+  **Worth knowing how this was missed.** The previous conclusion — "hard torque is
+  worse, not better", 55% availability and a 68-tick outage — was measured at
+  `N: 40`, before the `nx` reduction from 19 to 13, the Cholesky `H_g` inverse and
+  the warm-start retune. All of those changed the QP's conditioning, and none of
+  them prompted a re-run of the study that produced the default, even though the
+  study still existed and still took seconds. A measured decision outlived its
+  measurement, and it took a second architecture to expose it.
 - **A dedicated restoring cost term is not needed.** A box forbids being outside a
   limit and a cost term with an inward gradient looked like the missing piece, but
   the soft box already supplies one: `buildJointBoxBounds` sets
