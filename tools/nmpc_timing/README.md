@@ -11,6 +11,14 @@ rather than from feel.
 
 Both read the same instrumentation, so the numbers mean the same thing.
 
+**Where the output goes.** `data/nmpc_timing/` is a scratch directory for runs you
+want to keep around; its `.csv` and `.log` contents are gitignored, because a
+309 s two-arm trace is ~6 MB that the next run rewrites wholesale. Use `/tmp` for
+throwaway runs. Numbers worth keeping belong in the root README's realtime
+section, quoted with the machine state that produced them — a trace file on its
+own cannot tell you whether it came from a pinned governor, a weak charger or a
+battery.
+
 ## Live trials
 
 Two things about the machine have to be right before a run is worth quoting, and
@@ -89,7 +97,7 @@ per-window maxima. ASCII on purpose: it works over any shell into the container,
 and the image's matplotlib is broken (numpy 1.x/2.x ABI clash).
 
 ```bash
-tools/nmpc_timing/summarise_timing.py --per-arm --plot data/nmpc_timing/base.log
+tools/nmpc_timing/summarise_timing.py --per-arm --plot /tmp/base.log
 ```
 
 ```

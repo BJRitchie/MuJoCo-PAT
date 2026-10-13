@@ -730,12 +730,33 @@ Cleared, and worth knowing about because each was invisible rather than noisy:
   at zero (nothing publishes `/clock`); no consumer reads it, since
   `pat_simulation` and `pat_telemetry` both match on name.
 
-  The caveat worth keeping: these are Fast DDS, two small messages, this QoS, and a
-  subscriber on the same host reaching it over shared memory. A reliable-QoS
-  publish *can* block if the transport queue fills, which did not happen here
-  because `simulation_node` kept up. The `pub_torque_`/`pub_eepose_` statistics
-  stay on the report line so this is a number to read on the Orin, against a real
-  driver node, rather than one to assume carries over.
+  **A stalled subscriber does not stall the loop, and that is measured.** The
+  hazard is specific: a reliable writer blocks up to `max_blocking_time` (100 ms by
+  default, so ten missed deadlines) once its history fills and the reader stops
+  acking. With `simulation_node` SIGSTOPped for 12 s mid-run:
+
+  | | tick mean | publish mean | publish worst | deadline misses | skipped |
+  |---|---|---|---|---|---|
+  | before | ~840 µs | 17 µs | 76 µs | 0 | 0 |
+  | **subscriber frozen** | ~1200 µs | 60 µs | **418 µs** | **0** | **0** |
+  | after | ~860 µs | 18 µs | 67 µs | 0 | 0 |
+
+  The loop held 99 ticks every window throughout, and `deadline misses 0 (longest
+  run 0) | skipped periods 0` was the only value any window reported. Publish cost
+  roughly triples and the tick mean rises ~40%, both bounded and both well inside
+  the period.
+
+  **`KEEP_LAST` is what makes it safe**, so the torque publisher now states its QoS
+  explicitly instead of inheriting it: `KEEP_LAST` overwrites the oldest unacked
+  sample and never waits, where `KEEP_ALL` would block. The elevated cost under a
+  stall is reliability bookkeeping — heartbeats and retransmission tracking — not a
+  stall. Changing that publisher to `KEEP_ALL` would put a 100 ms block on the
+  control path.
+
+  The caveat that remains: these are Fast DDS, two small messages, and a subscriber
+  on the same host reaching it over shared memory. The `pub_torque_`/`pub_eepose_`
+  statistics stay on the report line so this is a number to read on the Orin,
+  against a real driver node, rather than one to assume carries over.
 
   The statistics went the same way and **the node now holds no mutex at all**. The
   tick owns the `PhaseStat`s, the deadline counters and the controller's profile,

@@ -114,8 +114,18 @@ ArmNMPCNode::ArmNMPCNode() : Node("pat_arm_nmpc") {
     ee_setpoint_sub_ = create_subscription<geometry_msgs::msg::PoseStamped>(
         "/chaser/arm/" + arm_side_ + "/ee_setpoint", 10,
         std::bind(&ArmNMPCNode::onEeSetpoint, this, std::placeholders::_1));
+        
+    // KEEP_LAST stated explicitly, because the control thread publishes this one
+    // itself and KEEP_LAST is what makes that safe. A reliable writer whose reader
+    // stops acking blocks up to max_blocking_time (100 ms by default) once its
+    // history fills -- which would be ten missed deadlines -- but only under
+    // KEEP_ALL. KEEP_LAST overwrites the oldest unacked sample instead and never
+    // waits. Measured with the subscriber SIGSTOPped for 10 s: publish rose from
+    // 17 to ~60 us mean, worst 209 us, and the loop held 99 ticks a window with
+    // zero missed deadlines. Do NOT change this to KEEP_ALL, and do not drop back
+    // to the bare `10` overload, whose depth-10 KEEP_LAST is only a default.
     torque_pub_ = create_publisher<sensor_msgs::msg::JointState>(
-        "/chaser/arm/torque_command", 10);
+        "/chaser/arm/torque_command", rclcpp::QoS(rclcpp::KeepLast(10)).reliable());
     ee_pose_pub_ = create_publisher<geometry_msgs::msg::PoseStamped>(
         "/chaser/arm/" + arm_side_ + "/ee_pose", 10);
 

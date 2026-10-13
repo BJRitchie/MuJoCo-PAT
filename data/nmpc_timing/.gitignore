@@ -1,0 +1,13 @@
+# Timing artifacts, not source. run_trial.sh writes logs and per-tick traces
+# here; a 309 s two-arm trace is ~6 MB of CSV that a later run rewrites
+# wholesale, so versioning them put 60,000-line diffs in the history for data
+# that `run_trial.sh -g -d 300 -T data/nmpc_timing/trace.csv` regenerates in five
+# minutes. Every number worth keeping is quoted, with its machine state, in the
+# root README's realtime section.
+#
+# This file is tracked so the directory exists in a fresh clone -- the tooling's
+# examples write straight into it, and the node's ofstream does not create
+# missing directories.
+*.csv
+*.log
+!.gitignore
