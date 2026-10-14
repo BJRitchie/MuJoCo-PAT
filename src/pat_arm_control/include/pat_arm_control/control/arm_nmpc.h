@@ -14,10 +14,10 @@
 #include <numeric>
 #include <mujoco/mujoco.h>
 
-#include "pat_arm_nmpc/arm_task_space_controller.h"
-#include "pat_arm_nmpc/quad_prob_solver.h"
+#include "pat_arm_control/dynamics/floating_base_dynamics.h"
+#include "pat_arm_control/solvers/quad_prob_solver.h"
 
-namespace pat_arm_nmpc {
+namespace pat_arm_control {
 
 /*! Position/velocity limits for a joint this controller OWNS -- i.e. whose
  *  Δq/qdot rows become box-constrained state. Torque limits are not here:
@@ -61,7 +61,7 @@ struct NMPCParams {
     // box-constrained state). Empty ⇒ owns all arm joints.
     std::vector<std::string> owned_joints;
 
-    //! DLS damping for H_g inversion (see ArmTaskSpaceController::pinvDLS).
+    //! DLS damping for H_g inversion (see FloatingBaseDynamics::pinvDLS).
     //! pinvDLS scales each singular value by s/(s²+λ²), so λ has to sit well
     //! below H_g's smallest singular value or the inverse is distorted rather
     //! than merely regularised. A planar Piper arm's smallest is ~5e-3, where
@@ -162,7 +162,7 @@ struct NMPCParams {
  *  optional full-nonlinear multiple-shooting SQP) with box constraints on
  *  joint position/velocity solved via acados/HPIPM. Port of VORTEX
  *  ArmConstrainedNMPController. */
-class ArmNMPC : public ArmTaskSpaceController {
+class ArmNMPC : public FloatingBaseDynamics {
 public:
     explicit ArmNMPC(const std::string& mjcf_path, const NMPCParams& params);
     ~ArmNMPC() override;
@@ -487,7 +487,7 @@ protected:
 
     // Per-joint limits, keyed by joint name as given in joint_lims, parsed
     // in the constructor. Values are validated against the loaded MJCF via
-    // ArmTaskSpaceController::jointIndexFromName() at construction time.
+    // FloatingBaseDynamics::jointIndexFromName() at construction time.
     std::unordered_map<std::string, std::pair<double, double>> qlims;       //!< [rad] (q-, q+)
     std::unordered_map<std::string, double>                    vlims;       //!< [rad/s] |qdot| limit
     std::unordered_map<std::string, double>                    torque_lims; //!< [N*m] |tau| limit
@@ -689,4 +689,4 @@ protected:
     Eigen::VectorXd slack_lo_, slack_hi_;
 };
 
-}  // namespace pat_arm_nmpc
+}  // namespace pat_arm_control

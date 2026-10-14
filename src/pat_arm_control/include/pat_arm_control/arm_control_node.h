@@ -15,8 +15,8 @@
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
 
-#include "pat_arm_nmpc/arm_nmpc.h"
-#include "pat_arm_nmpc/rt_mailbox.h"
+#include "pat_arm_control/control/arm_nmpc.h"
+#include "pat_arm_control/rt/rt_mailbox.h"
 
 /// One ArmNMPC instance per arm (run two node processes, left + right).
 ///
@@ -81,7 +81,7 @@ public:
      *  the report cannot infer it by sampling `mode()` at 1 Hz, which would miss
      *  any transition that came and went inside a window. */
     struct ModeEvent {
-        int  mode{0};              //!< pat_arm_nmpc::ArmNMPC::ControlMode
+        int  mode{0};              //!< pat_arm_control::ArmNMPC::ControlMode
         int  qp_status{0};
         long tier1_ticks{0};
         long safe_mode_ticks{0};
@@ -98,11 +98,11 @@ public:
      *  publishes a copy each time round, and clears them when it sees the report
      *  ask -- which keeps every write on one thread. */
     struct StatsSnapshot {
-        pat_arm_nmpc::PhaseStat jitter, loop, cpu;
+        pat_arm_control::PhaseStat jitter, loop, cpu;
         long deadline_misses{0};
         long worst_consecutive_misses{0};
         long skipped_periods{0};
-        pat_arm_nmpc::ArmNMPC::ProfileSnapshot profile;
+        pat_arm_control::ArmNMPC::ProfileSnapshot profile;
     };
 
     ArmNMPCNode();
@@ -112,7 +112,7 @@ public:
 
 private:
     // --- Parameter loading (nmpc.yaml → NMPCParams) ----------------------- //
-    pat_arm_nmpc::NMPCParams loadParams();
+    pat_arm_control::NMPCParams loadParams();
     std::vector<double> getJointArray(const std::string& name);   // length == joint_names_
     std::array<double, 3> getVec3(const std::string& name, std::array<double, 3> def);
 
@@ -137,8 +137,8 @@ private:
     rclcpp::Clock log_clock_{RCL_STEADY_TIME};
 
     std::string arm_side_;                        // "left" | "right"
-    pat_arm_nmpc::NMPCParams params_;
-    std::unique_ptr<pat_arm_nmpc::ArmNMPC> controller_;
+    pat_arm_control::NMPCParams params_;
+    std::unique_ptr<pat_arm_control::ArmNMPC> controller_;
 
     std::vector<std::string> joint_names_;        // this arm's joints (output, 3)
     std::vector<std::string> model_joint_names_;  // ALL model joints, model order (6)
@@ -171,9 +171,9 @@ private:
 
     //! The hand-off itself. Written by onJointState / onOdom / onEeSetpoint,
     //! read by controlLoop, with no lock between them -- see rt_mailbox.h.
-    pat_arm_nmpc::SeqlockMailbox<JointSnapshot>    joint_mail_;
-    pat_arm_nmpc::SeqlockMailbox<BaseSnapshot>     base_mail_;
-    pat_arm_nmpc::SeqlockMailbox<SetpointSnapshot> setpoint_mail_;
+    pat_arm_control::SeqlockMailbox<JointSnapshot>    joint_mail_;
+    pat_arm_control::SeqlockMailbox<BaseSnapshot>     base_mail_;
+    pat_arm_control::SeqlockMailbox<SetpointSnapshot> setpoint_mail_;
 
     //! The control loop's private working copies: filled from the mailboxes at
     //! the top of each tick and owned by that thread alone for the rest of it, so
@@ -203,8 +203,8 @@ private:
     //! Outbound queues and the timer that drains them. The drain runs at twice
     //! the control rate so a tick's output waits well under one period, and the
     //! queues are deep enough that a late drain backs up rather than drops.
-    pat_arm_nmpc::SpscRing<EePoseOut, 16>  ee_pose_out_;
-    pat_arm_nmpc::SpscRing<ModeEvent, 16>  mode_events_;
+    pat_arm_control::SpscRing<EePoseOut, 16>  ee_pose_out_;
+    pat_arm_control::SpscRing<ModeEvent, 16>  mode_events_;
     rclcpp::TimerBase::SharedPtr           drain_tmr_;
     void drainOutputs();
 
@@ -243,7 +243,7 @@ private:
      *  Plain members, not atomics, and outside the control thread's snapshot:
      *  drainOutputs and reportDiagnostics are both executor callbacks, so the same
      *  thread writes and reads these. */
-    pat_arm_nmpc::PhaseStat pub_torque_, pub_eepose_;
+    pat_arm_control::PhaseStat pub_torque_, pub_eepose_;
 
     /*! Things the tick must report but cannot log, since RCLCPP_* formats and
      *  writes. Counted here and surfaced by the report instead. Atomic because
@@ -268,8 +268,8 @@ private:
 
     // Last mode seen, so safe-mode entry and recovery are logged once per
     // transition rather than once per control tick.
-    pat_arm_nmpc::ArmNMPC::ControlMode prev_mode_{
-        pat_arm_nmpc::ArmNMPC::ControlMode::Nominal};
+    pat_arm_control::ArmNMPC::ControlMode prev_mode_{
+        pat_arm_control::ArmNMPC::ControlMode::Nominal};
 
     // --- The control thread ------------------------------------------------
     /*! The control loop runs on its own thread, woken by clock_nanosleep against
@@ -345,14 +345,14 @@ private:
     //! acquired during the slow first ticks would persist for the whole run and
     //! be reported forever as jitter it is not. The interval is also what the
     //! control law actually experiences, and what cyclictest measures.
-    pat_arm_nmpc::PhaseStat jitter_;
-    pat_arm_nmpc::PhaseStat loop_;        //!< whole controlLoop callback, wall us
+    pat_arm_control::PhaseStat jitter_;
+    pat_arm_control::PhaseStat loop_;        //!< whole controlLoop callback, wall us
     //! The same callback in thread CPU time. Paired with loop_ this separates the
     //! two causes of a long tick that wall time alone conflates: cpu ~= wall means
     //! the work really took that long, cpu << wall means the thread was off the
     //! CPU. Which one dominates decides whether the fix is a faster solver or a
     //! realtime scheduling policy.
-    pat_arm_nmpc::PhaseStat cpu_;
+    pat_arm_control::PhaseStat cpu_;
     static double threadCpuUs();
     long   deadline_misses_{0};
     long   consecutive_misses_{0};
@@ -377,14 +377,14 @@ private:
     std::string   trace_file_;
     std::ofstream trace_out_;
     //! Drain destination, reused so the swap inside drainTrace keeps its buffer.
-    std::vector<pat_arm_nmpc::ArmNMPC::TickTrace> trace_rows_;
+    std::vector<pat_arm_control::ArmNMPC::TickTrace> trace_rows_;
     long trace_written_{0};
     void flushTrace();
 
     //! The statistics hand-off: the tick publishes here, the report reads, and
     //! `stats_reset_` is how the report asks the tick to start a fresh window.
     //! No lock, for the reason in StatsSnapshot's comment.
-    pat_arm_nmpc::SeqlockMailbox<StatsSnapshot> stats_mail_;
+    pat_arm_control::SeqlockMailbox<StatsSnapshot> stats_mail_;
     std::atomic<bool>                          stats_reset_{false};
     //! Publish the tick's statistics, then clear them if the report has asked.
     //! Called at the end of every tick, from the control thread only.

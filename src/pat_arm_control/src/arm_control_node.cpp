@@ -1,4 +1,4 @@
-#include "pat_arm_nmpc/arm_nmpc_node.h"
+#include "pat_arm_control/arm_control_node.h"
 
 #include <pthread.h>
 #include <sched.h>
@@ -71,7 +71,7 @@ ArmNMPCNode::ArmNMPCNode() : Node("pat_arm_nmpc") {
     // apart, so the controller has to know the period. It comes from the timer rate
     // rather than the YAML so the two can never disagree.
     params_.control_period = 1.0 / ctrl_hz;
-    controller_ = std::make_unique<pat_arm_nmpc::ArmNMPC>(mjcf_path, params_);
+    controller_ = std::make_unique<pat_arm_control::ArmNMPC>(mjcf_path, params_);
 
     if (controller_->numArmJoints() != static_cast<int>(model_joint_names_.size()))
         throw std::runtime_error(
@@ -226,8 +226,8 @@ std::array<double, 3> ArmNMPCNode::getVec3(const std::string& name,
     return {v[0], v[1], v[2]};
 }
 
-pat_arm_nmpc::NMPCParams ArmNMPCNode::loadParams() {
-    pat_arm_nmpc::NMPCParams p;
+pat_arm_control::NMPCParams ArmNMPCNode::loadParams() {
+    pat_arm_control::NMPCParams p;
 
     p.ee_site_name  = declare_parameter<std::string>("ee_site_name", "arm_ee_site");
     p.owned_joints  = declare_parameter<std::vector<std::string>>(
@@ -580,7 +580,7 @@ void ArmNMPCNode::controlLoop() {
         clock_gettime(CLOCK_REALTIME, &ts);
         torque_msg_.header.stamp.sec     = static_cast<std::int32_t>(ts.tv_sec);
         torque_msg_.header.stamp.nanosec = static_cast<std::uint32_t>(ts.tv_nsec);
-        pat_arm_nmpc::ScopedTimer timer(pub_torque_);
+        pat_arm_control::ScopedTimer timer(pub_torque_);
         torque_pub_->publish(torque_msg_);
     }
 
@@ -745,7 +745,7 @@ void ArmNMPCNode::drainOutputs() {
         ps.pose.orientation.x = p.quat[1];
         ps.pose.orientation.y = p.quat[2];
         ps.pose.orientation.z = p.quat[3];
-        pat_arm_nmpc::ScopedTimer timer(pub_eepose_);
+        pat_arm_control::ScopedTimer timer(pub_eepose_);
         ee_pose_pub_->publish(ps);
     }
 }
@@ -856,7 +856,7 @@ void ArmNMPCNode::reportDiagnostics() {
     // Tier transitions, in the order the control loop saw them. Severity follows
     // the tier: a Tier 1 replay is a handled transient and should not read like a
     // fault.
-    using Mode = pat_arm_nmpc::ArmNMPC::ControlMode;
+    using Mode = pat_arm_control::ArmNMPC::ControlMode;
     ModeEvent ev;
     while (mode_events_.pop(ev)) {
         switch (static_cast<Mode>(ev.mode)) {
@@ -904,7 +904,7 @@ void ArmNMPCNode::reportDiagnostics() {
         s.jitter.mean(), s.jitter.max_us,
         s.loop.mean(), s.loop.max_us, s.cpu.mean(), s.cpu.max_us,
         s.deadline_misses, s.worst_consecutive_misses, s.skipped_periods,
-        pat_arm_nmpc::ArmNMPC::formatProfile(s.profile).c_str());
+        pat_arm_control::ArmNMPC::formatProfile(s.profile).c_str());
 
     // What publish() costs, with the histogram: the mean decides nothing here, the
     // worst case decides whether this call can go back on the control thread.
@@ -912,7 +912,7 @@ void ArmNMPCNode::reportDiagnostics() {
         std::ostringstream pub;
         pub.setf(std::ios::fixed);
         pub.precision(1);
-        const std::pair<const char*, const pat_arm_nmpc::PhaseStat*> both[] = {
+        const std::pair<const char*, const pat_arm_control::PhaseStat*> both[] = {
             {"torque", &pub_torque_}, {"ee_pose", &pub_eepose_},
         };
         for (const auto& [name, st] : both) {
@@ -921,9 +921,9 @@ void ArmNMPCNode::reportDiagnostics() {
                 << " max=" << st->max_us << ") ";
         }
         pub << "\n  hist(publish_us) ";
-        for (int i = 0; i < pat_arm_nmpc::PhaseStat::kBins; ++i) {
-            if (i + 1 == pat_arm_nmpc::PhaseStat::kBins) pub << ">5000:";
-            else pub << "<=" << pat_arm_nmpc::PhaseStat::kEdgeUs[i] << ":";
+        for (int i = 0; i < pat_arm_control::PhaseStat::kBins; ++i) {
+            if (i + 1 == pat_arm_control::PhaseStat::kBins) pub << ">5000:";
+            else pub << "<=" << pat_arm_control::PhaseStat::kEdgeUs[i] << ":";
             pub << (pub_torque_.bins[i] + pub_eepose_.bins[i]) << " ";
         }
         RCLCPP_INFO(get_logger(), "pat_arm_nmpc[%s] publish us%s",

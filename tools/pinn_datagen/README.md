@@ -2,7 +2,7 @@
 
 Generates dual-arm planar point-to-point trajectories on the real
 `pat_simulation` plant (3-DOF planar base + 6 arm joints — the actual
-hardware-faithful system, not `pat_arm_nmpc`'s internal 6-DOF free-floating
+hardware-faithful system, not `pat_arm_control`'s internal 6-DOF free-floating
 approximation), validates each one (collision-free replay, joint-limit
 compliance, convergence), and — only for accepted trajectories — extracts
 ground-truth full-system dynamics (mass matrix, Coriolis/bias, qddot) to
@@ -36,7 +36,7 @@ exec dev bash`) — the raw Python `mujoco` bindings, `numpy`, `pandas`,
 
 ```bash
 source /opt/ros/humble/setup.bash
-source /ws/install/setup.bash   # pat_simulation + pat_arm_nmpc must already be built
+source /ws/install/setup.bash   # pat_simulation + pat_arm_control must already be built
 ```
 
 ## Quickstart
@@ -136,5 +136,5 @@ Run either script with `--help` for the full list with rationale in-line.
 - **Leftover ROS processes after a crash**: `pinn_datagen.launch.py` wires
   the whole tree to shut down when the recorder exits, but a hard crash mid-
   episode can leave orphans — `pkill -f simulation_node; pkill -f
-  arm_nmpc_node; pkill -f ee_target_publisher; pkill -f pinn_recorder` before
+  arm_control_node; pkill -f ee_target_publisher; pkill -f pinn_recorder` before
   retrying.

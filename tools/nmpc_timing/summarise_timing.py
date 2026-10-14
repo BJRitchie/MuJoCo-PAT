@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Aggregate pat_arm_nmpc's per-second timing reports into one comparable row.
+"""Aggregate pat_arm_control's per-second timing reports into one comparable row.
 
 The node already prints everything; what it cannot do is summarise across a run.
 A 300 s trial is ~300 windows per arm, and reading them by eye hides exactly the
@@ -32,9 +32,17 @@ from collections import defaultdict
 
 # One window per arm. The node line names the side; the profile lines that follow
 # carry no side of their own, so they are attached by the launch prefix
-# ([arm_nmpc_node-2] etc.) that both share.
+# ([arm_control_node-2] etc.) that both share. Either executable name is
+# accepted, so logs recorded before the package rename still group per arm
+# rather than collapsing into one window.
+#
+# The log tag is pat_arm_nmpc[side], not the package name: the package is
+# pat_arm_control, but the node's logger tag identifies the control law and is
+# held fixed so this parser, plot_trace.py and tail_source.py keep reading
+# traces recorded before the package was renamed.
+PREFIX = r'\[arm_(?:control|nmpc)_node-\d+\]'
 RE_NODE = re.compile(
-    r'(\[arm_nmpc_node-\d+\])?.*?pat_arm_nmpc\[(?P<side>\w+)\]\s+'
+    r'(' + PREFIX + r')?.*?pat_arm_nmpc\[(?P<side>\w+)\]\s+'
     r'(?P<ticks>\d+) ticks @ (?P<period>[\d.]+) us'
     r'.*?jitter mean (?P<jit_mean>[\d.]+) max (?P<jit_max>[\d.]+)'
     r'.*?misses (?P<misses>\d+) \(longest run (?P<miss_run>\d+)\)'
@@ -45,7 +53,7 @@ RE_QP = re.compile(r'qp_iter/tick mean=(?P<it_mean>[\d.]+) max=(?P<it_max>[\d.]+
                    r'.*?retries=(?P<retries>\d+)')
 RE_HIST = re.compile(r'hist\(tick\)\s+(.*)')
 RE_BIN = re.compile(r'(<=|>)([\d.]+):(\d+)')
-RE_PREFIX = re.compile(r'^(\[arm_nmpc_node-\d+\])')
+RE_PREFIX = re.compile(r'^(' + PREFIX + r')')
 
 
 def prefix_of(line):

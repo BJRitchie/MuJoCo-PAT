@@ -27,7 +27,7 @@ else
     export LD_LIBRARY_PATH="$MUJOCO_DIR/lib:${LD_LIBRARY_PATH:-}"
 fi
 
-# acados (+ HPIPM + BLASFEO) — required by pat_arm_nmpc's constrained QP.
+# acados (+ HPIPM + BLASFEO) — required by pat_arm_control's constrained QP.
 ACADOS_SOURCE_DIR="${ACADOS_SOURCE_DIR:-$HOME/acados}"
 if [ -e "$ACADOS_SOURCE_DIR/include/acados_c/ocp_qp_interface.h" ]; then
     export ACADOS_SOURCE_DIR
@@ -35,7 +35,7 @@ if [ -e "$ACADOS_SOURCE_DIR/include/acados_c/ocp_qp_interface.h" ]; then
     export LD_LIBRARY_PATH="$ACADOS_SOURCE_DIR/lib:${LD_LIBRARY_PATH:-}"
 else
     echo "WARNING: acados not found at ACADOS_SOURCE_DIR=$ACADOS_SOURCE_DIR"
-    echo "  pat_arm_nmpc will fail to configure. Build acados from source, or"
+    echo "  pat_arm_control will fail to configure. Build acados from source, or"
     echo "  use the container (docker/Dockerfile / .devcontainer/)."
 fi
 

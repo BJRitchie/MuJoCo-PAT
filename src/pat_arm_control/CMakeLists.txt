@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.14)
-project(pat_arm_nmpc CXX)
+project(pat_arm_control CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -25,7 +25,7 @@ set(PAT_ARCH_FLAGS "" CACHE STRING
 # with AVX and an executable built without disagree about the layout of the Eigen
 # types they hand each other -- an ODR violation that corrupts data rather than
 # failing to link.
-function(pat_arm_nmpc_arch_flags target)
+function(pat_arm_control_arch_flags target)
     if(PAT_ARCH_FLAGS)
         separate_arguments(_flags UNIX_COMMAND "${PAT_ARCH_FLAGS}")
         target_compile_options(${target} PRIVATE ${_flags})
@@ -45,28 +45,28 @@ find_package(mujoco REQUIRED)
 find_package(acados REQUIRED)
 
 # ─── Algorithm library — Eigen + MuJoCo + acados, zero ROS ─────────────────
-add_library(pat_arm_nmpc_lib STATIC
-    src/arm_task_space_controller.cpp
+add_library(pat_arm_control_lib STATIC
+    src/floating_base_dynamics.cpp
     src/quad_prob_solver.cpp
     src/arm_nmpc.cpp)
-target_include_directories(pat_arm_nmpc_lib PUBLIC
+target_include_directories(pat_arm_control_lib PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>)
-target_link_libraries(pat_arm_nmpc_lib PUBLIC
+target_link_libraries(pat_arm_control_lib PUBLIC
     Eigen3::Eigen mujoco::mujoco acados::acados)
-target_compile_options(pat_arm_nmpc_lib PRIVATE -Wall -Wextra -Wpedantic)
-pat_arm_nmpc_arch_flags(pat_arm_nmpc_lib)
+target_compile_options(pat_arm_control_lib PRIVATE -Wall -Wextra -Wpedantic)
+pat_arm_control_arch_flags(pat_arm_control_lib)
 
 # ─── ROS 2 node wrapper ───────────────────────────────────────────────────
 find_package(rclcpp        REQUIRED)
 find_package(sensor_msgs   REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(nav_msgs      REQUIRED)
-add_executable(arm_nmpc_node src/arm_nmpc_node.cpp)
-pat_arm_nmpc_arch_flags(arm_nmpc_node)
-target_link_libraries(arm_nmpc_node pat_arm_nmpc_lib)
-ament_target_dependencies(arm_nmpc_node rclcpp sensor_msgs geometry_msgs nav_msgs)
-install(TARGETS arm_nmpc_node RUNTIME DESTINATION lib/${PROJECT_NAME})
+add_executable(arm_control_node src/arm_control_node.cpp)
+pat_arm_control_arch_flags(arm_control_node)
+target_link_libraries(arm_control_node pat_arm_control_lib)
+ament_target_dependencies(arm_control_node rclcpp sensor_msgs geometry_msgs nav_msgs)
+install(TARGETS arm_control_node RUNTIME DESTINATION lib/${PROJECT_NAME})
 
 # Fixed-waypoint task-space setpoint source (stand-in mission node). ROS-only,
 # no algorithm lib — just cycles PoseStamped targets onto ee_setpoint.
@@ -77,7 +77,7 @@ ament_target_dependencies(ee_target_publisher_node rclcpp geometry_msgs)
 install(TARGETS ee_target_publisher_node RUNTIME DESTINATION lib/${PROJECT_NAME})
 
 # ─── MuJoCo model: expand the xacro to a self-contained MJCF at build time ──
-# ArmTaskSpaceController mj_loadXML's the installed .xml; the .xacro sources
+# FloatingBaseDynamics mj_loadXML's the installed .xml; the .xacro sources
 # the shared PAT bus + Piper arms from pat_platform_description.
 find_program(XACRO_EXECUTABLE xacro REQUIRED)
 set(_desc_xacro "${pat_platform_description_DIR}/../xacro")
@@ -92,7 +92,7 @@ add_custom_command(
             "${_desc_xacro}/piper_planar_arm.xacro"
     COMMENT "xacro -> pat_platform_planar.xml"
     VERBATIM)
-add_custom_target(pat_arm_nmpc_models ALL DEPENDS "${_model_xml}")
+add_custom_target(pat_arm_control_models ALL DEPENDS "${_model_xml}")
 install(FILES "${_model_xml}" "${CMAKE_CURRENT_SOURCE_DIR}/models/platform.xml"
         DESTINATION share/${PROJECT_NAME}/models/)
 
@@ -108,9 +108,9 @@ install(FILES "${_model_xml}" "${CMAKE_CURRENT_SOURCE_DIR}/models/platform.xml"
 # both are overridable with --params / --model.
 find_package(yaml-cpp REQUIRED)
 add_executable(nmpc_bench src/nmpc_bench.cpp)
-pat_arm_nmpc_arch_flags(nmpc_bench)
-add_dependencies(nmpc_bench pat_arm_nmpc_models)
-target_link_libraries(nmpc_bench pat_arm_nmpc_lib yaml-cpp)
+pat_arm_control_arch_flags(nmpc_bench)
+add_dependencies(nmpc_bench pat_arm_control_models)
+target_link_libraries(nmpc_bench pat_arm_control_lib yaml-cpp)
 # The model too: nmpc.yaml ships mjcf_path as "" because the launch file fills it
 # from FindPackageShare, which a ROS-free binary cannot call.
 target_compile_definitions(nmpc_bench PRIVATE
@@ -124,17 +124,17 @@ install(TARGETS nmpc_bench RUNTIME DESTINATION lib/${PROJECT_NAME})
 # resolved via FindPackageShare the way the node does it.
 if(BUILD_TESTING)
     find_package(ament_cmake_gtest REQUIRED)
-    ament_add_gtest(test_pat_arm_nmpc test/test_pat_arm_nmpc.cpp)
-    pat_arm_nmpc_arch_flags(test_pat_arm_nmpc)
-    add_dependencies(test_pat_arm_nmpc pat_arm_nmpc_models)
+    ament_add_gtest(test_pat_arm_control test/test_pat_arm_control.cpp)
+    pat_arm_control_arch_flags(test_pat_arm_control)
+    add_dependencies(test_pat_arm_control pat_arm_control_models)
     # ${CMAKE_DL_LIBS}: DISABLED_AllocStudy.Attribution resolves allocation call
     # sites to their shared object with dladdr.
-    target_link_libraries(test_pat_arm_nmpc pat_arm_nmpc_lib ${CMAKE_DL_LIBS})
-    target_compile_definitions(test_pat_arm_nmpc PRIVATE
+    target_link_libraries(test_pat_arm_control pat_arm_control_lib ${CMAKE_DL_LIBS})
+    target_compile_definitions(test_pat_arm_control PRIVATE
         PAT_NMPC_TEST_MJCF="${_model_xml}")
 endif()
 
-install(TARGETS pat_arm_nmpc_lib
+install(TARGETS pat_arm_control_lib
     ARCHIVE DESTINATION lib LIBRARY DESTINATION lib
     RUNTIME DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY include/ DESTINATION include/)

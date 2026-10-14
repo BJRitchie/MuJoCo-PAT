@@ -1,4 +1,4 @@
-#include "pat_arm_nmpc/quad_prob_solver.h"
+#include "pat_arm_control/solvers/quad_prob_solver.h"
 
 #include <iostream>
 

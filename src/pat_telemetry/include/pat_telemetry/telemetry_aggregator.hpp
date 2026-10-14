@@ -30,7 +30,7 @@ public:
     // Merges (names_in, values_in) into a persistent (names, values) cache
     // IN PLACE - existing names are updated, new names appended. Needed
     // because /chaser/arm/torque_command carries only one side's joints per
-    // message (each pat_arm_nmpc instance publishes independently onto the
+    // message (each pat_arm_control instance publishes independently onto the
     // shared topic, per CLAUDE.md) - a wholesale cache replacement on every
     // message would lose the other side's last-known torque.
     static void updateByName(

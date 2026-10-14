@@ -4,7 +4,7 @@
 #include <cstdint>
 #include <type_traits>
 
-namespace pat_arm_nmpc {
+namespace pat_arm_control {
 
 /*! Single-producer / single-consumer snapshot hand-off for a small trivially
  *  copyable value, where the consumer must never block.
@@ -142,4 +142,4 @@ private:
     std::atomic<std::size_t>  tail_{0};   //!< consumer's cursor
 };
 
-}  // namespace pat_arm_nmpc
+}  // namespace pat_arm_control

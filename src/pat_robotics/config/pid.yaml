@@ -1,7 +1,7 @@
 pat_robotics:
   ros__parameters:
     # Dual planar Piper 3R arms (see pat_simulation air_bearing_table.xacro).
-    # Alternative to pat_arm_nmpc for the same joints — run one or the other.
+    # Alternative to pat_arm_control for the same joints — run one or the other.
     joint_names: ["joint2_L", "joint3_L", "joint5_L", "joint2_R", "joint3_R", "joint5_R"]
     control_hz: 50.0
     pid:

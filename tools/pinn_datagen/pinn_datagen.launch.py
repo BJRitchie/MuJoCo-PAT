@@ -42,9 +42,9 @@ def generate_launch_description() -> LaunchDescription:
     sim_cfg = PathJoinSubstitution([FindPackageShare("pat_simulation"), "config", "simulation.yaml"])
     model_path_default = PathJoinSubstitution(
         [FindPackageShare("pat_simulation"), "models", "environment", "air_bearing_table.xml"])
-    nmpc_params_default = PathJoinSubstitution([FindPackageShare("pat_arm_nmpc"), "config", "nmpc.yaml"])
+    nmpc_params_default = PathJoinSubstitution([FindPackageShare("pat_arm_control"), "config", "nmpc.yaml"])
     mjcf_path_default = PathJoinSubstitution(
-        [FindPackageShare("pat_arm_nmpc"), "models", "pat_platform_planar.xml"])
+        [FindPackageShare("pat_arm_control"), "models", "pat_platform_planar.xml"])
 
     use_sim_time = LaunchConfiguration("use_sim_time")
     trial_params_file = LaunchConfiguration("trial_params_file")
@@ -57,7 +57,7 @@ def generate_launch_description() -> LaunchDescription:
         output="screen", emulate_tty=True,
     )
 
-    nmpc_common = dict(package="pat_arm_nmpc", executable="arm_nmpc_node",
+    nmpc_common = dict(package="pat_arm_control", executable="arm_control_node",
                         output="screen", emulate_tty=True)
     nmpc_left = Node(name="pat_arm_nmpc_left", parameters=[
         LaunchConfiguration("nmpc_params_file"),
@@ -71,7 +71,7 @@ def generate_launch_description() -> LaunchDescription:
     # fixed absolute target this episode wants. trial_params_file supplies
     # only left.waypoints/right.waypoints on top of this.
     ee_target = Node(
-        package="pat_arm_nmpc", executable="ee_target_publisher_node", name="ee_target_publisher",
+        package="pat_arm_control", executable="ee_target_publisher_node", name="ee_target_publisher",
         parameters=[trial_params_file,
                     {"sides": ["left", "right"], "mode": "absolute", "loop": False,
                      "republish_hz": 5.0, "frame_id": "map", "use_sim_time": use_sim_time}],

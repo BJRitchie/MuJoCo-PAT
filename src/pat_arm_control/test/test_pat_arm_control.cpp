@@ -30,8 +30,8 @@
 #include <utility>
 #include <vector>
 
-#include "pat_arm_nmpc/arm_nmpc.h"
-#include "pat_arm_nmpc/rt_mailbox.h"
+#include "pat_arm_control/control/arm_nmpc.h"
+#include "pat_arm_control/rt/rt_mailbox.h"
 
 // --- Heap-allocation counter ---------------------------------------------- //
 // Interposes glibc's malloc family so a test can count the heap operations of a
@@ -91,7 +91,7 @@ extern "C" void* realloc(void* p, std::size_t n) {
     return __libc_realloc(p, n);
 }
 
-namespace pat_arm_nmpc {
+namespace pat_arm_control {
 namespace {
 
 /*! Counts allocations for as long as it is in scope. Read `n` after it closes:
@@ -214,22 +214,22 @@ public:
     using ArmNMPC::buildTorqueGeneralConstraint;
     using ArmNMPC::computeInertiaProducts;
     using ArmNMPC::finalizeJointTorques;
-    using ArmTaskSpaceController::BaseElim;
-    using ArmTaskSpaceController::computeBaseElim;
-    using ArmTaskSpaceController::computeSiteJacobian;
-    using ArmTaskSpaceController::dynamicsAt;
-    using ArmTaskSpaceController::getDynamics;
-    using ArmTaskSpaceController::gjm6;
-    using ArmTaskSpaceController::integrateStep;
-    using ArmTaskSpaceController::jdotQdot6;
-    using ArmTaskSpaceController::modelJointRanges;
-    using ArmTaskSpaceController::n_joints_;
-    using ArmTaskSpaceController::lastMjError;
-    using ArmTaskSpaceController::lastMjWarning;
-    using ArmTaskSpaceController::mjErrorCount;
-    using ArmTaskSpaceController::mjWarningCount;
-    using ArmTaskSpaceController::pinvDLS;
-    using ArmTaskSpaceController::solveSpd;
+    using FloatingBaseDynamics::BaseElim;
+    using FloatingBaseDynamics::computeBaseElim;
+    using FloatingBaseDynamics::computeSiteJacobian;
+    using FloatingBaseDynamics::dynamicsAt;
+    using FloatingBaseDynamics::getDynamics;
+    using FloatingBaseDynamics::gjm6;
+    using FloatingBaseDynamics::integrateStep;
+    using FloatingBaseDynamics::jdotQdot6;
+    using FloatingBaseDynamics::modelJointRanges;
+    using FloatingBaseDynamics::n_joints_;
+    using FloatingBaseDynamics::lastMjError;
+    using FloatingBaseDynamics::lastMjWarning;
+    using FloatingBaseDynamics::mjErrorCount;
+    using FloatingBaseDynamics::mjWarningCount;
+    using FloatingBaseDynamics::pinvDLS;
+    using FloatingBaseDynamics::solveSpd;
 };
 
 constexpr const char* kMjcf = PAT_NMPC_TEST_MJCF;
@@ -2289,7 +2289,7 @@ TEST(DISABLED_ConstraintStudy, BoxIsActuallyEnforced)
 }
 
 /*! The experiment. Disabled so it never runs in CI:
- *    ./build/pat_arm_nmpc/test_pat_arm_nmpc \
+ *    ./build/pat_arm_control/test_pat_arm_control \
  *        --gtest_also_run_disabled_tests --gtest_filter='DISABLED_ConstraintStudy.*'
  */
 TEST(DISABLED_ConstraintStudy, Ladder)
@@ -2676,4 +2676,4 @@ TEST(RtRing, PushingDoesNotAllocate)
 }
 
 }  // namespace
-}  // namespace pat_arm_nmpc
+}  // namespace pat_arm_control

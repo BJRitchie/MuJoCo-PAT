@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <mujoco xmlns:xacro="http://www.ros.org/wiki/xacro" model="pat_platform_planar">
   <!--
-    Internal dynamics model for pat_arm_nmpc's ArmTaskSpaceController / ArmNMPC.
+    Internal dynamics model for pat_arm_control's FloatingBaseDynamics / ArmNMPC.
     NOT the simulator plant — MuJoCo is used here only as a rigid-body dynamics
     library (mass matrix, generalized Jacobian, bias forces).
 

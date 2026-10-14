@@ -13,7 +13,7 @@
 struct mjData_;
 typedef struct mjData_ mjData;
 
-namespace pat_arm_nmpc {
+namespace pat_arm_control {
 
 /*! Opaque MuJoCo model + data bundle. Fully defined in the .cpp so raw MuJoCo
  *  headers never leak into this heade
@@ -111,16 +111,16 @@ struct ScopedTimer {
  *
  *  Loads its own MJCF and uses MuJoCo purely as a rigid-body dynamics library
  *  (mass matrix, generalized Jacobian, bias forces) — it is NOT the simulator.
- *  Subclasses implement controlLaw(). Ported from VORTEX ArmTaskSpaceController
+ *  Subclasses implement controlLaw(). Ported from VORTEX FloatingBaseDynamics
  *  with the Basilisk SysModel / message-port plumbing removed; ROS I/O lives
  *  in the node wrapper, never here. */
-class ArmTaskSpaceController {
+class FloatingBaseDynamics {
 public:
-    explicit ArmTaskSpaceController(const std::string& mjcf_path);
-    virtual ~ArmTaskSpaceController();
+    explicit FloatingBaseDynamics(const std::string& mjcf_path);
+    virtual ~FloatingBaseDynamics();
 
-    ArmTaskSpaceController(const ArmTaskSpaceController&) = delete;
-    ArmTaskSpaceController& operator=(const ArmTaskSpaceController&) = delete;
+    FloatingBaseDynamics(const FloatingBaseDynamics&) = delete;
+    FloatingBaseDynamics& operator=(const FloatingBaseDynamics&) = delete;
 
     /*! Arm DOF of the loaded model (mjModel.nv - 6). Valid immediately after
      *  construction. The q/v the caller feeds must be sized 7+this / 6+this. */
@@ -413,4 +413,4 @@ protected:
     double desiredAngAcc[3] = {0.0, 0.0, 0.0};       //!< [rad/s²]  EE angular acceleration setpoint
 };
 
-}  // namespace pat_arm_nmpc
+}  // namespace pat_arm_control

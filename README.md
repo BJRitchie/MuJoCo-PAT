@@ -10,7 +10,7 @@ Planar Air-bearing Table simulator for ISAM GNC and manipulation research.
 - **GNC** — PID controller (`IController`) + direct or EKF navigation (`INavigator`)
 - **Arm control**
   - `pat_robotics` — per-joint PID (`IJointController`)
-  - `pat_arm_nmpc` — dual-arm task-space NMPC: planar (x, y, θz) receding-horizon
+  - `pat_arm_control` — dual-arm task-space NMPC: planar (x, y, θz) receding-horizon
     control with joint position/velocity/torque limits solved by an acados/HPIPM
     QP, soft (penalised) or hard per constraint group. On a failed or non-finite
     solve it enters a sticky safe mode commanding pure joint damping, so the arm
@@ -35,7 +35,7 @@ Planar Air-bearing Table simulator for ISAM GNC and manipulation research.
 | `pat_simulation` | MuJoCo sim node + viewer — the hardware stand-in |
 | `pat_gnc` | PID controller, direct/EKF navigation |
 | `pat_robotics` | per-joint arm PID |
-| `pat_arm_nmpc` | dual-arm task-space NMPC |
+| `pat_arm_control` | dual-arm task-space NMPC |
 | `pat_telemetry` | merges joint state/torque, publishes EE-to-setpoint distance |
 
 `tools/pinn_datagen/` (offline training-data generator, not a ROS package) and
@@ -80,7 +80,7 @@ attached with `exec`. `up -d` starts one persistent, named container
 many terminals into it as you like. `docker compose down` stops it when you're
 done; leaving it running is also fine.
 
-Rebuild one package: `colcon build --packages-select pat_arm_nmpc` (`MAKEFLAGS=-j2`
+Rebuild one package: `colcon build --packages-select pat_arm_control` (`MAKEFLAGS=-j2`
 is preset so it won't OOM). Rebuild after editing anything under `src/`
 (including YAML configs and xacro models — installed files are copies, and
 xacro is expanded to MJCF at build time). Only the top-level `launch/*.py`
@@ -138,7 +138,7 @@ All launch files take `use_sim_time:=true` by default.
 | Launch | Brings up |
 |---|---|
 | `full_stack.launch.py` | sim + GNC (PID) + arm PID (`pat_robotics`) |
-| `full_stack_nmpc.launch.py` | sim + dual-arm NMPC (`pat_arm_nmpc`), chaser **undriven** — `with_gnc:=true` also runs GNC; `with_targets:=true` also runs `ee_target_publisher`; `telemetry:=true` adds `pat_telemetry`; `plotjuggler:=true` also opens PlotJuggler with the saved layout |
+| `full_stack_nmpc.launch.py` | sim + dual-arm NMPC (`pat_arm_control`), chaser **undriven** — `with_gnc:=true` also runs GNC; `with_targets:=true` also runs `ee_target_publisher`; `telemetry:=true` adds `pat_telemetry`; `plotjuggler:=true` also opens PlotJuggler with the saved layout |
 | `simulation.launch.py` | MuJoCo sim only |
 | `gnc.launch.py` | GNC only (against the sim or real hardware) — choose the EKF with `navigator: "ekf"` in `src/pat_gnc/config/pid.yaml` |
 | `arm_control.launch.py` | per-joint arm PID (`pat_robotics`) only |
@@ -179,10 +179,10 @@ reachable by construction:
 ```bash
 ros2 launch launch/full_stack_nmpc.launch.py with_targets:=true
 # or, against an already-running stack:
-ros2 launch pat_arm_nmpc ee_targets.launch.py
+ros2 launch pat_arm_control ee_targets.launch.py
 ```
 
-Edit `src/pat_arm_nmpc/config/ee_targets.yaml` (or pass
+Edit `src/pat_arm_control/config/ee_targets.yaml` (or pass
 `ee_targets_params_file:=...` — NOT `params_file`, which belongs to
 `arm_nmpc.launch.py`'s `nmpc.yaml` and would silently take over if the two
 collided in `full_stack_nmpc.launch.py`'s shared launch-argument namespace)
@@ -222,7 +222,7 @@ target_frictionloss: [0.0, 0.0, 0.0]
 
 The platforms never contact the table geometry (gravity is off and they sit in a
 different collision group), so these joint terms are the only drag they feel.
-`pat_arm_nmpc`'s internal model has no such drag, so raising them appears to the
+`pat_arm_control`'s internal model has no such drag, so raising them appears to the
 controller as unmodelled disturbance.
 
 ### Live telemetry
@@ -245,11 +245,11 @@ PlotJuggler is installed in the `dev` image only.
 ## Test
 
 ```bash
-colcon test --packages-select pat_gnc pat_robotics pat_simulation pat_arm_nmpc pat_telemetry
+colcon test --packages-select pat_gnc pat_robotics pat_simulation pat_arm_control pat_telemetry
 colcon test-result --verbose
 ```
 
-`pat_arm_nmpc`'s suite is the one worth knowing about, since it asserts things
+`pat_arm_control`'s suite is the one worth knowing about, since it asserts things
 that are otherwise invisible until the arm misbehaves. It links the algorithm lib
 only (no ROS, no launch) and checks the prediction model against MuJoCo's own
 forward dynamics at a known state: that the generalised inertia reduction is
@@ -271,7 +271,7 @@ guard makes it solvable again without moving the pin).
 Two `DISABLED_` tests are experiments rather than assertions, excluded from CI:
 
 ```bash
-./build/pat_arm_nmpc/test_pat_arm_nmpc --gtest_also_run_disabled_tests \
+./build/pat_arm_control/test_pat_arm_control --gtest_also_run_disabled_tests \
     --gtest_filter='DISABLED_ConstraintStudy.*' 2>&1 | grep -v 'ArmNMPC profile'
 ```
 
@@ -287,7 +287,7 @@ profile line is filtered out because it interleaves with the table.
 `/target/odom`, `/chaser/arm/joint_states` and subscribes to
 `/chaser/thruster_command`, `/chaser/arm/torque_command` — exactly the topics a
 real hardware driver stack would use. The algorithm packages (`pat_gnc`,
-`pat_robotics`, `pat_arm_nmpc`) only ever see those topic names.
+`pat_robotics`, `pat_arm_control`) only ever see those topic names.
 
 To deploy: bring up hardware driver nodes on the same topics and drop
 `pat_simulation` (the `runtime` container image does exactly this —
@@ -307,7 +307,7 @@ To deploy: bring up hardware driver nodes on the same topics and drop
 Standing debt in the current implementation — open items a contributor would
 otherwise have to rediscover. None are regressions.
 
-### NMPC formulation (`pat_arm_nmpc`)
+### NMPC formulation (`pat_arm_control`)
 
 - **The arm's real torque limit is unsettled, and the two models disagree.**
   `nmpc.yaml`'s `model_tau_max` is 0.25 N·m per joint; `air_bearing_table.xacro`'s
@@ -867,9 +867,9 @@ trustworthy than cross-building under QEMU.
 # on the arm64 host. Orin's flags, NOT the host's -- see the warning below.
 docker build -f docker/Dockerfile --target runtime \
     --build-arg BUILD_TESTING=ON --build-arg BUILD_JOBS=8 -t pat:arm64-check .
-docker run --rm pat:arm64-check bash -lc '/ws/build/pat_arm_nmpc/test_pat_arm_nmpc'
+docker run --rm pat:arm64-check bash -lc '/ws/build/pat_arm_control/test_pat_arm_control'
 docker run --rm pat:arm64-check bash -lc \
-  '/ws/install/pat_arm_nmpc/lib/pat_arm_nmpc/nmpc_bench --ticks 5000 --out /tmp/a.csv'
+  '/ws/install/pat_arm_control/lib/pat_arm_control/nmpc_bench --ticks 5000 --out /tmp/a.csv'
 ```
 
 The test suite is the prize, not the benchmark. It is the only thing that checks
@@ -903,7 +903,7 @@ arm64 and is never `native`, which is the whole reason it defaults that way.
 graph, no DDS, no simulator and no X11. It is in the `runtime` image already:
 
 ```bash
-/ws/install/pat_arm_nmpc/lib/pat_arm_nmpc/nmpc_bench --ticks 20000 --out /tmp/orin.csv
+/ws/install/pat_arm_control/lib/pat_arm_control/nmpc_bench --ticks 20000 --out /tmp/orin.csv
 tools/nmpc_timing/plot_trace.py /tmp/orin.csv      # same CSV the node's trace writes
 ```
 
@@ -979,6 +979,11 @@ problem not yet observed. Revisit it only if step 4 leaves a tail that `cpu` ver
   intended replacement; the topic contract already accommodates it.
 - **PID gains and `planar_dynamics.hpp` are still tuned for a 15 kg chaser**,
   where the modelled bus is 49.22 kg.
+- Trajectory tracking in NMPC 
+- Define trajectory 
+- Sliding Mode Control and OMPC ports from VORTEX as baseline comparisons 
+- EKF/Observer implementation 
+  - Consider a disturbance observer for unmodelled disturbances?
 
 ## Phase roadmap
 

@@ -1,4 +1,4 @@
-#include "pat_arm_nmpc/arm_task_space_controller.h"
+#include "pat_arm_control/dynamics/floating_base_dynamics.h"
 
 #include <algorithm>
 #include <atomic>
@@ -6,7 +6,7 @@
 #include <stdexcept>
 #include <string>
 
-namespace pat_arm_nmpc {
+namespace pat_arm_control {
 
 // === MuJoCo error / warning hooks ===========================================
 // MuJoCo's defaults are both unacceptable inside a control tick: mju_warning
@@ -48,19 +48,19 @@ void patMjError(const char* msg) {
 }
 }  // namespace
 
-void ArmTaskSpaceController::installMujocoHooks() {
+void FloatingBaseDynamics::installMujocoHooks() {
     mju_user_warning = &patMjWarning;
     mju_user_error   = &patMjError;
 }
 
-long ArmTaskSpaceController::mjWarningCount() {
+long FloatingBaseDynamics::mjWarningCount() {
     return g_mj_warnings.load(std::memory_order_relaxed);
 }
-long ArmTaskSpaceController::mjErrorCount() {
+long FloatingBaseDynamics::mjErrorCount() {
     return g_mj_errors.load(std::memory_order_relaxed);
 }
-const char* ArmTaskSpaceController::lastMjWarning() { return g_mj_last_warning; }
-const char* ArmTaskSpaceController::lastMjError()   { return g_mj_last_error; }
+const char* FloatingBaseDynamics::lastMjWarning() { return g_mj_last_warning; }
+const char* FloatingBaseDynamics::lastMjError()   { return g_mj_last_error; }
 
 // === MjImpl — MuJoCo model + data bundle ====================================
 struct MjImpl {
@@ -82,7 +82,7 @@ struct MjScratchData {
 };
 
 // === Construction ============================================================
-ArmTaskSpaceController::ArmTaskSpaceController(
+FloatingBaseDynamics::FloatingBaseDynamics(
     const std::string& mjcf_path)
     : mj_(std::make_unique<MjImpl>())
 {
@@ -99,7 +99,7 @@ ArmTaskSpaceController::ArmTaskSpaceController(
     // TODO - should constrained joints be allowed 
     if (mj_->model->jnt_type[0] != mjJNT_FREE) {
         throw std::runtime_error(
-            "ArmTaskSpaceController: root joint is not a free joint — "
+            "FloatingBaseDynamics: root joint is not a free joint — "
             "check the MJCF/URDF root <joint type=\"floating\">.");
     }
 
@@ -114,17 +114,17 @@ ArmTaskSpaceController::ArmTaskSpaceController(
     initNodeScratch();   // needs the model and n_joints_, so last
 }
 
-ArmTaskSpaceController::~ArmTaskSpaceController() = default;
+FloatingBaseDynamics::~FloatingBaseDynamics() = default;
 
 // === Live-state load (de-Basilisk'd UpdateState) =============================
-void ArmTaskSpaceController::loadLiveState(
+void FloatingBaseDynamics::loadLiveState(
     const Eigen::VectorXd& q, const Eigen::VectorXd& v)
 {
     const int nq = mj_->model->nq;
     const int nv = mj_->model->nv;
     if (q.size() != nq || v.size() != nv) {
         throw std::runtime_error(
-            "ArmTaskSpaceController::loadLiveState: q/v size mismatch — got q=" +
+            "FloatingBaseDynamics::loadLiveState: q/v size mismatch — got q=" +
             std::to_string(q.size()) + " v=" + std::to_string(v.size()) +
             ", model needs nq=" + std::to_string(nq) + " nv=" + std::to_string(nv));
     }
@@ -134,19 +134,19 @@ void ArmTaskSpaceController::loadLiveState(
 }
 
 // === Protected dynamics helpers =========================================================
-int ArmTaskSpaceController::siteIdFromName(const std::string& name) const
+int FloatingBaseDynamics::siteIdFromName(const std::string& name) const
 {
     int id = mj_name2id(mj_->model, mjOBJ_SITE, name.c_str());
     if (id < 0) {
         throw std::runtime_error(
-            "ArmTaskSpaceController: no <site> named \"" + name +
+            "FloatingBaseDynamics: no <site> named \"" + name +
             "\" found in the MJCF. Check spelling and that the site is "
             "defined in the loaded model file.");
     }
     return id;
 }
 
-std::vector<std::pair<double, double>> ArmTaskSpaceController::modelJointRanges() const
+std::vector<std::pair<double, double>> FloatingBaseDynamics::modelJointRanges() const
 {
     std::vector<std::pair<double, double>> ranges(
         n_joints_, std::make_pair(-M_PI, M_PI));
@@ -166,19 +166,19 @@ std::vector<std::pair<double, double>> ArmTaskSpaceController::modelJointRanges(
     return ranges;
 }
 
-int ArmTaskSpaceController::jointIndexFromName(const std::string& name) const
+int FloatingBaseDynamics::jointIndexFromName(const std::string& name) const
 {
     int jnt_id = mj_name2id(mj_->model, mjOBJ_JOINT, name.c_str());
     if (jnt_id < 0) {
         throw std::runtime_error(
-            "ArmTaskSpaceController: no <joint> named \"" + name +
+            "FloatingBaseDynamics: no <joint> named \"" + name +
             "\" found in the MJCF. Check spelling and that the joint is "
             "defined in the loaded model file.");
     }
     int jnt_type = mj_->model->jnt_type[jnt_id];
     if (jnt_type != mjJNT_HINGE && jnt_type != mjJNT_SLIDE) {
         throw std::runtime_error(
-            "ArmTaskSpaceController: joint \"" + name + "\" is not a "
+            "FloatingBaseDynamics: joint \"" + name + "\" is not a "
             "single-DOF hinge/slide joint — cannot map it to an arm-local "
             "control index.");
     }
@@ -188,7 +188,7 @@ int ArmTaskSpaceController::jointIndexFromName(const std::string& name) const
     int idx = mj_->model->jnt_dofadr[jnt_id] - 6;
     if (idx < 0 || idx >= n_joints_) {
         throw std::runtime_error(
-            "ArmTaskSpaceController: joint \"" + name + "\" resolved to "
+            "FloatingBaseDynamics: joint \"" + name + "\" resolved to "
             "arm-local index " + std::to_string(idx) + ", outside "
             "[0, n_joints_) — is it part of the free-floating base or a "
             "different kinematic branch?");
@@ -196,14 +196,14 @@ int ArmTaskSpaceController::jointIndexFromName(const std::string& name) const
     return idx;
 }
 
-Eigen::Vector3d ArmTaskSpaceController::eePosition(int site_id, mjData* data) const
+Eigen::Vector3d FloatingBaseDynamics::eePosition(int site_id, mjData* data) const
 {
     mjData* d = data ? data : mj_->data;
     const mjtNum* p = d->site_xpos + 3 * site_id;
     return Eigen::Vector3d(p[0], p[1], p[2]);
 }
 
-Eigen::Vector4d ArmTaskSpaceController::eeOrientation(int site_id, mjData* data) const
+Eigen::Vector4d FloatingBaseDynamics::eeOrientation(int site_id, mjData* data) const
 {
     mjData* d = data ? data : mj_->data;
     mjtNum quat[4];
@@ -211,7 +211,7 @@ Eigen::Vector4d ArmTaskSpaceController::eeOrientation(int site_id, mjData* data)
     return Eigen::Vector4d(quat[0], quat[1], quat[2], quat[3]);
 }
 
-void ArmTaskSpaceController::initNodeScratch()
+void FloatingBaseDynamics::initNodeScratch()
 {
     const int nv = mj_->model->nv;
     ns_.J_full.resize(6, nv);
@@ -225,7 +225,7 @@ void ArmTaskSpaceController::initNodeScratch()
     ns_.v_mid.resize(nv);
 }
 
-void ArmTaskSpaceController::computeBaseElim(mjData* data, BaseElim& be) const
+void FloatingBaseDynamics::computeBaseElim(mjData* data, BaseElim& be) const
 {
     mjData* d = data ? data : mj_->data;
     const int nv = mj_->model->nv;
@@ -237,7 +237,7 @@ void ArmTaskSpaceController::computeBaseElim(mjData* data, BaseElim& be) const
     be.H_bb_inv_H_bm = be.H_bb_ldlt.solve(be.H_bm);
 }
 
-void ArmTaskSpaceController::computeSiteJacobian(
+void FloatingBaseDynamics::computeSiteJacobian(
     int site_id, mjData* data, BaseElim& be) const
 {
     mjData* d = data ? data : mj_->data;
@@ -247,7 +247,7 @@ void ArmTaskSpaceController::computeSiteJacobian(
     mj_jacSite(mj_->model, d, be.jacp.data(), be.jacr.data(), site_id);
 }
 
-void ArmTaskSpaceController::getDynamics(
+void FloatingBaseDynamics::getDynamics(
     Eigen::MatrixXd& H_g, Eigen::VectorXd& Cv_joints, mjData* data) const
 {
     BaseElim be;
@@ -255,7 +255,7 @@ void ArmTaskSpaceController::getDynamics(
     getDynamics(H_g, Cv_joints, data, be);
 }
 
-void ArmTaskSpaceController::getDynamics(
+void FloatingBaseDynamics::getDynamics(
     Eigen::MatrixXd& H_g, Eigen::VectorXd& Cv_joints, mjData* data,
     const BaseElim& be) const
 {
@@ -281,7 +281,7 @@ void ArmTaskSpaceController::getDynamics(
     Cv_joints.noalias() -= be.H_bm.transpose() * ns_.hbb_solve_vec;
 }
 
-Eigen::Matrix3Xd ArmTaskSpaceController::gjm(int site_id, mjData* data) const
+Eigen::Matrix3Xd FloatingBaseDynamics::gjm(int site_id, mjData* data) const
 {
     mjData* d = data ? data : mj_->data;
     const int nv = mj_->model->nv;
@@ -302,7 +302,7 @@ Eigen::Matrix3Xd ArmTaskSpaceController::gjm(int site_id, mjData* data) const
     return J_m - J_b * M.topLeftCorner(6, 6).ldlt().solve(M.topRightCorner(6, n_joints_));
 }
 
-Eigen::MatrixXd ArmTaskSpaceController::gjm6(int site_id, mjData* data) const
+Eigen::MatrixXd FloatingBaseDynamics::gjm6(int site_id, mjData* data) const
 {
     BaseElim be;
     computeBaseElim(data, be);
@@ -310,7 +310,7 @@ Eigen::MatrixXd ArmTaskSpaceController::gjm6(int site_id, mjData* data) const
     return gjm6(be);
 }
 
-void ArmTaskSpaceController::gjm6(const BaseElim& be, Eigen::MatrixXd& out) const
+void FloatingBaseDynamics::gjm6(const BaseElim& be, Eigen::MatrixXd& out) const
 {
     ns_.J_full.topRows(3)    = be.jacp;
     ns_.J_full.bottomRows(3) = be.jacr;
@@ -324,14 +324,14 @@ void ArmTaskSpaceController::gjm6(const BaseElim& be, Eigen::MatrixXd& out) cons
                     - ns_.J_full.leftCols(6) * be.H_bb_inv_H_bm;
 }
 
-Eigen::MatrixXd ArmTaskSpaceController::gjm6(const BaseElim& be) const
+Eigen::MatrixXd FloatingBaseDynamics::gjm6(const BaseElim& be) const
 {
     Eigen::MatrixXd out;
     gjm6(be, out);
     return out;
 }
 
-Eigen::Vector3d ArmTaskSpaceController::jdotQdot(int site_id, mjData* data) const
+Eigen::Vector3d FloatingBaseDynamics::jdotQdot(int site_id, mjData* data) const
 {
     mjData* d = data ? data : mj_->data;
     const int nv = mj_->model->nv;
@@ -363,7 +363,7 @@ Eigen::Vector3d ArmTaskSpaceController::jdotQdot(int site_id, mjData* data) cons
     return bias - J_0 * M.topLeftCorner(6, 6).ldlt().solve(Cv_base);
 }
 
-Eigen::Matrix<double, 6, 1> ArmTaskSpaceController::jdotQdot6(int site_id, mjData* data) const
+Eigen::Matrix<double, 6, 1> FloatingBaseDynamics::jdotQdot6(int site_id, mjData* data) const
 {
     BaseElim be;
     computeBaseElim(data, be);
@@ -371,7 +371,7 @@ Eigen::Matrix<double, 6, 1> ArmTaskSpaceController::jdotQdot6(int site_id, mjDat
     return jdotQdot6(site_id, data, be);
 }
 
-Eigen::Matrix<double, 6, 1> ArmTaskSpaceController::jdotQdot6(
+Eigen::Matrix<double, 6, 1> FloatingBaseDynamics::jdotQdot6(
     int site_id, mjData* data, const BaseElim& be) const
 {
     mjData* d = data ? data : mj_->data;
@@ -395,7 +395,7 @@ Eigen::Matrix<double, 6, 1> ArmTaskSpaceController::jdotQdot6(
     return bias - ns_.J_0 * ns_.hbb_solve_vec;
 }
 
-NodeDynamics ArmTaskSpaceController::dynamicsAt(
+NodeDynamics FloatingBaseDynamics::dynamicsAt(
     const Eigen::VectorXd& q, const Eigen::VectorXd& v, int site_id) const
 {
     NodeDynamics nd;
@@ -403,7 +403,7 @@ NodeDynamics ArmTaskSpaceController::dynamicsAt(
     return nd;
 }
 
-void ArmTaskSpaceController::dynamicsAt(
+void FloatingBaseDynamics::dynamicsAt(
     const Eigen::VectorXd& q, const Eigen::VectorXd& v, int site_id,
     NodeDynamics& out) const
 {
@@ -430,7 +430,7 @@ void ArmTaskSpaceController::dynamicsAt(
     out.jdot_qdot6 = jdotQdot6(site_id, d, be_scratch_);
 }
 
-void ArmTaskSpaceController::integrateStep(
+void FloatingBaseDynamics::integrateStep(
     const Eigen::VectorXd& q, const Eigen::VectorXd& v,
     const Eigen::VectorXd& tau_joints_generalized, double Ts,
     Eigen::VectorXd& q_next, Eigen::VectorXd& v_next) const
@@ -475,12 +475,12 @@ void ArmTaskSpaceController::integrateStep(
     mj_integratePos(mj_->model, q_next.data(), ns_.v_mid.data(), Ts);
 }
 
-Eigen::Vector3d ArmTaskSpaceController::sat(const Eigen::Vector3d& x)
+Eigen::Vector3d FloatingBaseDynamics::sat(const Eigen::Vector3d& x)
 {
     return x.cwiseMax(-1.0).cwiseMin(1.0);
 }
 
-bool ArmTaskSpaceController::solveSpd(
+bool FloatingBaseDynamics::solveSpd(
     const Eigen::MatrixXd& A, const Eigen::MatrixXd& B, Eigen::MatrixXd& X)
 {
     // Via LLT, not LDLT. 
@@ -498,7 +498,7 @@ bool ArmTaskSpaceController::solveSpd(
     return solveSpd(A, B, X, llt);
 }
 
-bool ArmTaskSpaceController::solveSpd(
+bool FloatingBaseDynamics::solveSpd(
     const Eigen::MatrixXd& A, const Eigen::MatrixXd& B, Eigen::MatrixXd& X,
     Eigen::LLT<Eigen::MatrixXd>& llt)
 {
@@ -508,7 +508,7 @@ bool ArmTaskSpaceController::solveSpd(
     return true;
 }
 
-Eigen::MatrixXd ArmTaskSpaceController::pinvDLS(
+Eigen::MatrixXd FloatingBaseDynamics::pinvDLS(
     const Eigen::MatrixXd& A, double damping)
 {
     // Thin, not Full: for a non-square A (m x n) the thin factors are
@@ -527,14 +527,14 @@ Eigen::MatrixXd ArmTaskSpaceController::pinvDLS(
     return svd.matrixV() * sv_inv.asDiagonal() * svd.matrixU().transpose();
 }
 
-void ArmTaskSpaceController::checkNaN(bool hasNaN, const char* label)
+void FloatingBaseDynamics::checkNaN(bool hasNaN, const char* label)
 {
     if (hasNaN) {
         throw std::runtime_error(std::string("NaN in ") + label);
     }
 }
 
-const Eigen::VectorXd& ArmTaskSpaceController::nle() const
+const Eigen::VectorXd& FloatingBaseDynamics::nle() const
 {
     static thread_local Eigen::VectorXd bias;
     bias.resize(mj_->model->nv);

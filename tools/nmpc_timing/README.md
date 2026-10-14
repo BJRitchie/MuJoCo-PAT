@@ -1,6 +1,6 @@
 # nmpc_timing — measuring the NMPC control loop
 
-Two ways to get timing numbers out of `pat_arm_nmpc`, for choosing `control_hz`,
+Two ways to get timing numbers out of `pat_arm_control`, for choosing `control_hz`,
 `qp.warm_start`, `qp.max_iter`, `N`, `Ts` and the slack weights from measurement
 rather than from feel.
 
@@ -73,7 +73,7 @@ Then, inside the dev container (`docker compose exec dev bash`):
 ./tools/nmpc_timing/run_trial.sh -g -d 300 -o /tmp/base.log
 
 # a variant: copy the config, change ONE knob, pass it -- no rebuild
-cp src/pat_arm_nmpc/config/nmpc.yaml /tmp/try.yaml
+cp src/pat_arm_control/config/nmpc.yaml /tmp/try.yaml
 #   ... edit /tmp/try.yaml ...
 ./tools/nmpc_timing/run_trial.sh -d 300 -o /tmp/try.log /tmp/try.yaml
 
@@ -320,8 +320,8 @@ Faster, repeatable, and they take the knob directly in C++ rather than through
 YAML — one process, one arm, no ROS, no simulator.
 
 ```bash
-colcon build --packages-select pat_arm_nmpc --cmake-args -DBUILD_TESTING=ON
-./build/pat_arm_nmpc/test_pat_arm_nmpc \
+colcon build --packages-select pat_arm_control --cmake-args -DBUILD_TESTING=ON
+./build/pat_arm_control/test_pat_arm_control \
     --gtest_also_run_disabled_tests --gtest_filter='DISABLED_WarmStartStudy.*'
 ```
 
@@ -332,7 +332,7 @@ mode  tick_mean  tick_max  over_bud  it_mean   it_max retries    avail    ee_err
 0          1838      3855     0.000     7.41       14       0    1.000   0.09585
 ```
 
-The studies live in `src/pat_arm_nmpc/test/test_pat_arm_nmpc.cpp`:
+The studies live in `src/pat_arm_control/test/test_pat_arm_control.cpp`:
 
 - `DISABLED_WarmStartStudy.Ladder` — `qp.warm_start` across a setpoint step.
 - `DISABLED_ConstraintStudy.Ladder` / `.BoxIsActuallyEnforced` — soft vs hard

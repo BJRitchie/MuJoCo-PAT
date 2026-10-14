@@ -39,12 +39,12 @@
 #include <string>
 #include <vector>
 
-#include "pat_arm_nmpc/arm_nmpc.h"
+#include "pat_arm_control/control/arm_nmpc.h"
 
 namespace {
 
-using pat_arm_nmpc::ArmNMPC;
-using pat_arm_nmpc::NMPCParams;
+using pat_arm_control::ArmNMPC;
+using pat_arm_control::NMPCParams;
 
 /*! Reaches integrateStep, which is protected because nothing outside the control
  *  law should be advancing a plant with it. Same pattern, and the same reason, as
@@ -233,7 +233,7 @@ Loaded loadConfig(const std::string& yaml_path, const std::string& arm,
                                  "per owned joint");
     }
     for (std::size_t i = 0; i < p.owned_joints.size(); ++i) {
-        pat_arm_nmpc::JointLimit jl;
+        pat_arm_control::JointLimit jl;
         jl.name   = p.owned_joints[i];
         jl.q_min  = q_min[i];
         jl.q_max  = q_max[i];

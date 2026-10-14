@@ -1,14 +1,14 @@
-#include "pat_arm_nmpc/arm_nmpc.h"
+#include "pat_arm_control/control/arm_nmpc.h"
 
 #include <cmath>
 #include <numeric>
 #include <stdexcept>
 
-namespace pat_arm_nmpc {
+namespace pat_arm_control {
 
 ArmNMPC::ArmNMPC(
     const std::string& mjcf_path, const NMPCParams& params) 
-    : ArmTaskSpaceController(mjcf_path)
+    : FloatingBaseDynamics(mjcf_path)
     , params_(params) 
 {
     // --- Check Controller Parameters --------------------------------- // 
@@ -1339,4 +1339,4 @@ Eigen::VectorXd ArmNMPC::solveNonlinearMPC(
     return finalizeJointTorques(J_task0, tau_task_result, Cv_joints0);
 }
 
-} // namespace pat_arm_nmpc
+} // namespace pat_arm_control

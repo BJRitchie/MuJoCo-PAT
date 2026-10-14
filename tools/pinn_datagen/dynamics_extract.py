@@ -18,7 +18,7 @@ that has already passed the collision-free check (see
 helpers.build_full_qpos_qvel's docstring), so it's dropped rather than
 shipped as physically-meaningless padding. This 9-dof system (3 planar base
 + 6 arm joints) is the actual real-hardware-faithful dynamics this dataset
-targets -- see pat_arm_nmpc's own internal model (pat_platform_planar.xacro,
+targets -- see pat_arm_control's own internal model (pat_platform_planar.xacro,
 a 6-dof free-floating base) for the idealized approximation the controller
 uses instead, which this dataset is deliberately NOT reproducing.
 

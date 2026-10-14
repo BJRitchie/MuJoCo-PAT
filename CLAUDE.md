@@ -13,11 +13,11 @@ Physics: MuJoCo 3. Control: PID (MVP) → LQR → MPC. Navigation: direct (MVP) 
 | Package | Status | Notes |
 |---|---|---|
 | `pat_msgs` | ✅ | ThrusterCommand, ControlError |
-| `pat_platform_description` | ✅ | shared xacro macros: `pat_platform_bus` (real PAT bus) + `piper_planar_arm` (planar 3R). Consumed by `pat_simulation` and `pat_arm_nmpc`; expanded to MJCF at build time. |
+| `pat_platform_description` | ✅ | shared xacro macros: `pat_platform_bus` (real PAT bus) + `piper_planar_arm` (planar 3R). Consumed by `pat_simulation` and `pat_arm_control`; expanded to MJCF at build time. |
 | `pat_simulation` | ✅ | MuJoCo simulation node (the hardware stand-in) |
 | `pat_gnc` | ✅ | IController + INavigator; PID, DirectNav, EKF. **PID gains / `planar_dynamics.hpp` still tuned for a 15 kg chaser — the bus is now 49 kg; retune pending.** |
 | `pat_robotics` | ✅ | IJointController + JointPID + ArmController, arm_control_node. IManipulator (FK/IK/Jacobian) still a stub |
-| `pat_arm_nmpc` | 🟡 | Dual-arm task-space NMPC (port of VORTEX `fswAlgorithms/jointControl`). Both planar (x,y,θz) paths are functional against the acados/HPIPM QP — iterative linearization (`nmpc.yaml`'s `full_nonlinear: false`) and multiple-shooting SQP (`full_nonlinear: true`); tuning is in progress, so the active `nmpc.yaml` block moves. Weights `Q_pos`/`Q_vel`/`R` are `[x, y, θz]` and **all three components apply**; `Q_ori`/`Q_angvel`/`R_ori` are unused. A failed or non-finite solve enters a sticky joint-damping safe mode (`safe_mode.*`) rather than substituting an approximate command; the joint and torque constraint groups are independently soft or hard (`qp.soft_joint_limits`/`soft_torque_limits`). The default is a **soft box with hard torque rows**: the box's slack is the only thing that recovers a joint parked outside its limit, while soft torque rows are HPIPM's fragile group near infeasibility and collapse on aarch64 (21.7% availability against 96.7%) — see the README's "Constraint configuration", and do not change either without re-running `DISABLED_ConstraintStudy.Ladder` on both architectures. `relax_box_to_contain_x0` applies to a hard BOX only — never make the box hard without it, and leave it off with a soft box, where it weakens the slack that does the restoring. The rollout's position clamp goes to the MJCF range, NOT the configured margin: clamping to the margin makes the joint box vacuous (see the README's "Settled by measurement"). The control path is allocation-free apart from `computeControl`'s returned vector (one per tick), which matters for the realtime Jetson deployment; keep it that way — `RealtimeProfile.ControlTickAllocationCountIsBounded` and `SteadyStateTicksDoNotKeepAllocating` fail if a per-node allocation comes back, and `DISABLED_AllocStudy.Attribution` locates it. Still open: solve time can exceed the control period at high `control_hz`. `ee_target_publisher` is a stand-in mission node (fixed reachable-waypoint loop); a real planner is still future work. |
+| `pat_arm_control` | 🟡 | Dual-arm task-space NMPC (port of VORTEX `fswAlgorithms/jointControl`). Both planar (x,y,θz) paths are functional against the acados/HPIPM QP — iterative linearization (`nmpc.yaml`'s `full_nonlinear: false`) and multiple-shooting SQP (`full_nonlinear: true`); tuning is in progress, so the active `nmpc.yaml` block moves. Weights `Q_pos`/`Q_vel`/`R` are `[x, y, θz]` and **all three components apply**; `Q_ori`/`Q_angvel`/`R_ori` are unused. A failed or non-finite solve enters a sticky joint-damping safe mode (`safe_mode.*`) rather than substituting an approximate command; the joint and torque constraint groups are independently soft or hard (`qp.soft_joint_limits`/`soft_torque_limits`). The default is a **soft box with hard torque rows**: the box's slack is the only thing that recovers a joint parked outside its limit, while soft torque rows are HPIPM's fragile group near infeasibility and collapse on aarch64 (21.7% availability against 96.7%) — see the README's "Constraint configuration", and do not change either without re-running `DISABLED_ConstraintStudy.Ladder` on both architectures. `relax_box_to_contain_x0` applies to a hard BOX only — never make the box hard without it, and leave it off with a soft box, where it weakens the slack that does the restoring. The rollout's position clamp goes to the MJCF range, NOT the configured margin: clamping to the margin makes the joint box vacuous (see the README's "Settled by measurement"). The control path is allocation-free apart from `computeControl`'s returned vector (one per tick), which matters for the realtime Jetson deployment; keep it that way — `RealtimeProfile.ControlTickAllocationCountIsBounded` and `SteadyStateTicksDoNotKeepAllocating` fail if a per-node allocation comes back, and `DISABLED_AllocStudy.Attribution` locates it. Still open: solve time can exceed the control period at high `control_hz`. `ee_target_publisher` is a stand-in mission node (fixed reachable-waypoint loop); a real planner is still future work. |
 | `pat_vision` | ❌ Phase 3 | Not created |
 | `pat_telemetry` | ✅ | Merges `joint_states`/`torque_command` by name and publishes each arm's EE distance from setpoint (`/chaser/telemetry/*`) for live plotting (PlotJuggler, dev image only — see `docker/Dockerfile`'s `dev` stage). Builds for `runtime` too; touches only existing sim/hardware-boundary topics, so it works unchanged against real hardware. |
 
@@ -30,7 +30,7 @@ data comes from MuJoCo or real sensors.
 
 At deployment, `pat_simulation` is removed and replaced by physical driver
 nodes that expose the same topic interface. The algorithm packages (`pat_gnc`,
-`pat_robotics`, `pat_arm_nmpc`, `pat_vision`) are deployed unchanged — the
+`pat_robotics`, `pat_arm_control`, `pat_vision`) are deployed unchanged — the
 `runtime` container image is literally `colcon build --packages-skip pat_simulation`.
 
 **Consequence for development:** Never add simulation-specific topics,
@@ -97,7 +97,7 @@ to `~/.bashrc`.
 source setup.sh                 # or work inside the container
 colcon build --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_TESTING=ON
 source install/setup.bash
-colcon test --packages-select pat_gnc pat_robotics pat_simulation pat_arm_nmpc
+colcon test --packages-select pat_gnc pat_robotics pat_simulation pat_arm_control
 colcon test-result --verbose
 ```
 
@@ -115,18 +115,18 @@ identical in both cases.
 | `/target/odom` | `pat_simulation` | motion capture driver | `pat_gnc` |
 | `/chaser/thruster_command` | `pat_gnc` | `pat_gnc` | `pat_simulation` / thruster driver |
 | `/chaser/gnc/control_error` | `pat_gnc` | `pat_gnc` | logging / diagnostics |
-| `/chaser/arm/joint_states` | `pat_simulation` | arm encoder driver | `pat_robotics`, `pat_arm_nmpc` |
+| `/chaser/arm/joint_states` | `pat_simulation` | arm encoder driver | `pat_robotics`, `pat_arm_control` |
 | `/chaser/arm/joint_setpoint` | mission/teleop node (not built) | mission/teleop node | `pat_robotics` (joint-space PID) |
-| `/chaser/arm/<side>/ee_setpoint` | `ee_target_publisher` (`pat_arm_nmpc`) or a mission/teleop node | mission/teleop node | `pat_arm_nmpc` (task-space, `geometry_msgs/PoseStamped`, planar — x, y, yaw) |
-| `/chaser/arm/<side>/ee_pose` | `pat_arm_nmpc` (measured EE pose, `geometry_msgs/PoseStamped`, world) | `pat_arm_nmpc` | mission/teleop node, diagnostics |
-| `/chaser/arm/torque_command` | `pat_robotics` **or** `pat_arm_nmpc` | same | `pat_simulation` / arm motor driver |
+| `/chaser/arm/<side>/ee_setpoint` | `ee_target_publisher` (`pat_arm_control`) or a mission/teleop node | mission/teleop node | `pat_arm_control` (task-space, `geometry_msgs/PoseStamped`, planar — x, y, yaw) |
+| `/chaser/arm/<side>/ee_pose` | `pat_arm_control` (measured EE pose, `geometry_msgs/PoseStamped`, world) | `pat_arm_control` | mission/teleop node, diagnostics |
+| `/chaser/arm/torque_command` | `pat_robotics` **or** `pat_arm_control` | same | `pat_simulation` / arm motor driver |
 
 The three `JointState` arm topics are matched **by name** (not array position)
 — `joint_states` populates `name`+`position`+`velocity`; `joint_setpoint`
 populates `name`+`position`; `torque_command` populates `name`+`effort`.
-`pat_robotics` and `pat_arm_nmpc` are alternatives on `torque_command` (run one
+`pat_robotics` and `pat_arm_control` are alternatives on `torque_command` (run one
 or the other for a given set of joints); the name-matching lets two
-`pat_arm_nmpc` node instances (left/right arm) coexist on the one topic. This,
+`pat_arm_control` node instances (left/right arm) coexist on the one topic. This,
 plus `pat_simulation`'s `arm_joint_names`/`arm_actuator_names` params and each
 controller's `joint_names` param, is what lets joints — or a whole second arm —
 be added via model + YAML config only: see "Adding an arm joint" below.
@@ -169,7 +169,7 @@ by name in `sensor_msgs/msg/JointState` messages) — no source changes:
    `arm_actuator_names` in `config/simulation.yaml`
 3. Update the controller config:
    - PID: `pat_robotics/config/pid.yaml` `joint_names`/`pid.*`
-   - NMPC: `pat_arm_nmpc/config/nmpc.yaml` — the per-node `joint_names` /
+   - NMPC: `pat_arm_control/config/nmpc.yaml` — the per-node `joint_names` /
      `owned_joints` / `limits.*` (this arm's joints) and the shared
      `model_joint_names` (ALL model joints, MuJoCo body-tree order)
 
@@ -184,15 +184,32 @@ per-joint control law.
 Every C++ package follows this exactly — do not deviate:
 
 1. `{pkg}_lib` — static library, **zero ROS dependency**. Eigen3 for `pat_gnc`
-   / `pat_robotics`; `pat_arm_nmpc_lib` additionally links MuJoCo (rigid-body
+   / `pat_robotics`; `pat_arm_control_lib` additionally links MuJoCo (rigid-body
    dynamics) and acados/HPIPM (the QP) — numerical libs, still no ROS.
 2. `{pkg}_node.cpp` — thin ROS 2 wrapper: subscribe → call lib → publish
 3. `test/` — GTest tests that link only against `{pkg}_lib`
 
-Algorithm logic in the lib. ROS I/O in the node. `pat_arm_nmpc` exposes the
+Algorithm logic in the lib. ROS I/O in the node. `pat_arm_control` exposes the
 lib entrypoints `ArmNMPC::computeControl(q,v)` and `currentEePose(q,v)`; the
 node assembles the free-base MuJoCo `q`/`v` from `/chaser/odom` + all joints of
 `/chaser/arm/joint_states` and publishes only its own joints' effort.
+
+`pat_arm_control` groups its headers by role, since the package is meant to hold
+more than one control law: `dynamics/` (`FloatingBaseDynamics` — the mass matrix,
+generalised Jacobian, base elimination and `integrateStep`, i.e. the plant, not a
+controller), `control/` (`ArmNMPC`), `solvers/` (acados/HPIPM, NMPC-specific),
+`rt/` (the lock-free mailboxes), and the two node headers at the top level.
+
+**The package is `pat_arm_control`, but the ROS node instances are still
+`pat_arm_nmpc_left` / `_right` and the log tag is still `pat_arm_nmpc[side]`.**
+That is deliberate, not a leftover: those names identify the control *law*, they
+key the per-node blocks in `nmpc.yaml`, and `run_trial.sh`,
+`summarise_timing.py`, `plot_trace.py` and `tail_source.py` all parse the log
+tag. Renaming them means changing the four parsers and every archived log in the
+same commit. Do it when the controller becomes a YAML choice, not before. The
+executable, by contrast, *is* `arm_control_node` — note `pat_robotics` has an
+executable of the same name (they are alternatives on `torque_command`), so
+always qualify by package in launch files.
 
 ## MuJoCo XML conventions
 
@@ -201,7 +218,7 @@ node assembles the free-base MuJoCo `q`/`v` from `/chaser/odom` + all joints of
   the node `mj_loadXML`s the generated `.xml`):
   - `src/pat_simulation/models/environment/air_bearing_table.xacro` → the sim
     scene (chaser on `chaser_x/y/yaw` + thrusters + target + walls)
-  - `src/pat_arm_nmpc/models/pat_platform_planar.xacro` → the NMPC's *internal*
+  - `src/pat_arm_control/models/pat_platform_planar.xacro` → the NMPC's *internal*
     dynamics model (same bus + arms on a `<freejoint>`, no scene furniture)
   - shared macros in `src/pat_platform_description/xacro/`: `pat_platform_bus`
     (real PAT bus: 0.6×0.5×0.305 m, 49.22 kg, real inertia) and
@@ -235,13 +252,13 @@ State vector: `[px, py, theta, vx, vy, omega]`
 
 - Do not modify `~/.bashrc` for MuJoCo / acados paths — use `setup.sh` or the container
 - Do not add ROS headers to `pat_gnc/include/`, `pat_robotics/include/`, or
-  `pat_arm_nmpc/include/` (MuJoCo + acados/Eigen are allowed there — they are
+  `pat_arm_control/include/` (MuJoCo + acados/Eigen are allowed there — they are
   numerical libraries, not the simulator)
 - Do not use MuJoCo's runtime `<include>` in the generated MJCF
 - Do not use `fmod` for angle arithmetic — use `std::remainder`
-- Do not add simulation-specific logic to `pat_gnc` / `pat_robotics` / `pat_arm_nmpc`
+- Do not add simulation-specific logic to `pat_gnc` / `pat_robotics` / `pat_arm_control`
 - Do not hardcode machine paths — use `FindPackageShare` in launch files
-- Do not run GNC station-keeping alongside `pat_arm_nmpc` (it models a
+- Do not run GNC station-keeping alongside `pat_arm_control` (it models a
   free-floating base; thrusting to hold the chaser double-counts arm reaction)
 - Do not bump the acados pin off `v0.4.2` without checking `d_ocp_qp_dim_set_nsbx/_nsg`
   still exist — `v0.5.x`'s HPIPM dropped them

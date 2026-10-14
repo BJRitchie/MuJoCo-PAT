@@ -41,7 +41,7 @@ services:
     group_add:
       - "44"   # video (host GID - `getent group video`)
       - "110"  # render (host GID - `getent group render`)
-    # Realtime scheduling for pat_arm_nmpc's control thread. These are RLIMITS,
+    # Realtime scheduling for pat_arm_control's control thread. These are RLIMITS,
     # deliberately NOT cap_add: [SYS_NICE] - `user:` above runs the container as a
     # non-root user, which has an empty effective capability set (CapEff: 0), and
     # a capability added to the bounding set is not granted to a non-root process
@@ -54,7 +54,7 @@ services:
     # negatively, or to change another process's policy - none of which this needs.
     #
     # memlock is for mlockall, so a page fault cannot stall a control tick. The
-    # number has to clear arm_nmpc_node's VIRTUAL size (~750 MB), not its ~33 MB
+    # number has to clear arm_control_node's VIRTUAL size (~750 MB), not its ~33 MB
     # resident set: the kernel admits an MCL_CURRENT mlockall by comparing
     # RLIMIT_MEMLOCK against the process's total_vm, and it does that even with
     # MCL_ONFAULT, which only changes how much memory ends up locked afterwards.

@@ -3,10 +3,10 @@
   <!--
     piper_planar_arm — one planar (X-Y) Piper 3R arm as MuJoCo <body> tree.
 
-    Shared by pat_arm_nmpc's controller model and pat_simulation's plant so the
+    Shared by pat_arm_control's controller model and pat_simulation's plant so the
     arm dynamics cannot drift apart. The R arm is NOT a mirror image of L -
     it's the exact same physical part, mounted rotated 180deg about the
-    mount's own local X axis. Confirmed directly against src/pat_arm_nmpc/
+    mount's own local X axis. Confirmed directly against src/pat_arm_control/
     models/platform.xml's own arm1/arm2 (same "chaser" frame, no rotation
     ambiguity): the rotation relating L's mount to R's mount is exactly
     Rx(180deg), to numerical precision. Consequence: link1 through link6
@@ -174,7 +174,7 @@
                   <geom name="gripper_base_visual_${side}" type="mesh" mesh="gripper_base"
                         rgba="0.79 0.82 0.93 1" contype="0" conaffinity="0" mass="0"/>
                 </xacro:if>
-                <!-- Functional (pat_arm_nmpc's FK reads this site), not
+                <!-- Functional (pat_arm_control's FK reads this site), not
                      purely decorative - can't be removed. Sized small and
                      tagged group="3" (see mujoco_vis.cpp's 'C' key) since
                      the real gripper_base mesh now shows this same point;

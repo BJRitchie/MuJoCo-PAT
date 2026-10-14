@@ -1,4 +1,4 @@
-#include "pat_arm_nmpc/ee_target_publisher_node.h"
+#include "pat_arm_control/ee_target_publisher_node.h"
 
 #include <chrono>
 #include <cmath>

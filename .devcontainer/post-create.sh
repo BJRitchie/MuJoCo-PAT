@@ -20,5 +20,5 @@ jq -s 'map(.[])' build/*/compile_commands.json > compile_commands.json 2>/dev/nu
 rosdep update 2>/dev/null || true
 
 echo
-echo "dev container ready. Rebuild one package: colcon build --packages-select pat_arm_nmpc"
+echo "dev container ready. Rebuild one package: colcon build --packages-select pat_arm_control"
 echo "(MAKEFLAGS=-j${BUILD_JOBS:-2} is set). Launch files live in /ws/launch."

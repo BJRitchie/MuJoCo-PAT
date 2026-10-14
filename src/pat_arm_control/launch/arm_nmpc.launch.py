@@ -21,11 +21,11 @@ from launch_ros.substitutions import FindPackageShare
 
 def generate_launch_description() -> LaunchDescription:
     params_file = PathJoinSubstitution(
-        [FindPackageShare("pat_arm_nmpc"), "config", "nmpc.yaml"])
+        [FindPackageShare("pat_arm_control"), "config", "nmpc.yaml"])
     mjcf_path = PathJoinSubstitution(
-        [FindPackageShare("pat_arm_nmpc"), "models", "pat_platform_planar.xml"])
+        [FindPackageShare("pat_arm_control"), "models", "pat_platform_planar.xml"])
 
-    common = dict(package="pat_arm_nmpc", executable="arm_nmpc_node",
+    common = dict(package="pat_arm_control", executable="arm_control_node",
                   output="screen", emulate_tty=True)
 
     return LaunchDescription([

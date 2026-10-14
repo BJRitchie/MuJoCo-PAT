@@ -66,7 +66,7 @@ def default_mjcf_path() -> str:
 
 
 def default_nmpc_yaml_path() -> str:
-    return os.path.join(get_package_share_directory("pat_arm_nmpc"),
+    return os.path.join(get_package_share_directory("pat_arm_control"),
                          "config", "nmpc.yaml")
 
 

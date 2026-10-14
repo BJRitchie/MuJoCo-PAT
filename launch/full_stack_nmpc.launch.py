@@ -1,6 +1,6 @@
 """Simulation + dual-arm task-space NMPC, with a FREE-FLOATING chaser.
 
-pat_arm_nmpc's ArmNMPC models a free base (generalized-Jacobian reaction
+pat_arm_control's ArmNMPC models a free base (generalized-Jacobian reaction
 dynamics), so the chaser is left undriven — its base drifts under arm
 reaction, which is exactly what the controller expects. GNC station-keeping
 is intentionally NOT included: thrusting to hold the chaser still would make
@@ -16,7 +16,7 @@ joint_states/torque_command by name, publishes each side's EE distance from
 its setpoint - see /chaser/telemetry/*).
 
 `params_file:=/path/to/nmpc.yaml` swaps the NMPC tuning set, forwarded to
-arm_nmpc.launch.py. Defaults to pat_arm_nmpc's installed config/nmpc.yaml.
+arm_nmpc.launch.py. Defaults to pat_arm_control's installed config/nmpc.yaml.
 
 `trace_file:=/path/to/trace.csv` records every control tick's timing and writes
 it at exit, one file per arm (trace_left.csv / trace_right.csv). Off by default.
@@ -46,7 +46,7 @@ def generate_launch_description() -> LaunchDescription:
     # string: launch_arguments is fixed when the description is built, so there is
     # no way to omit the argument conditionally on its value.
     nmpc_params = PathJoinSubstitution(
-        [FindPackageShare("pat_arm_nmpc"), "config", "nmpc.yaml"])
+        [FindPackageShare("pat_arm_control"), "config", "nmpc.yaml"])
     return LaunchDescription([
         DeclareLaunchArgument("use_sim_time", default_value="true"),
         DeclareLaunchArgument("params_file", default_value=nmpc_params),
@@ -66,11 +66,11 @@ def generate_launch_description() -> LaunchDescription:
             condition=IfCondition(LaunchConfiguration("with_gnc"))),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(PathJoinSubstitution(
-                [FindPackageShare("pat_arm_nmpc"), "launch", "arm_nmpc.launch.py"])),
+                [FindPackageShare("pat_arm_control"), "launch", "arm_nmpc.launch.py"])),
             launch_arguments=nmpc_args),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(PathJoinSubstitution(
-                [FindPackageShare("pat_arm_nmpc"), "launch", "ee_targets.launch.py"])),
+                [FindPackageShare("pat_arm_control"), "launch", "ee_targets.launch.py"])),
             launch_arguments=use_sim_time,
             condition=IfCondition(LaunchConfiguration("with_targets"))),
         Node(package="pat_telemetry", executable="telemetry_node", output="screen",
@@ -81,7 +81,7 @@ def generate_launch_description() -> LaunchDescription:
             # ROS2 Topic Subscriber only sees topics that already exist at
             # the moment it starts (it doesn't retroactively pick up ones
             # that appear later), so starting it in the same instant as
-            # pat_simulation/pat_arm_nmpc/etc. is a race - some publishers
+            # pat_simulation/pat_arm_control/etc. is a race - some publishers
             # may not have come up yet.
             period=0.5,
             actions=[ExecuteProcess(

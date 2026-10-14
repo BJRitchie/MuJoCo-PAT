@@ -35,7 +35,7 @@ pat_simulation:
     # N or N*m) - the bodies never contact the table geom (separate collision
     # group, gravity disabled), so this is the only drag they feel. Defaults
     # match the values previously hardcoded in air_bearing_table.xacro.
-    # NOTE: pat_arm_nmpc's internal model has no such drag, so raising these
+    # NOTE: pat_arm_control's internal model has no such drag, so raising these
     # shows up to the controller as unmodelled disturbance.
     chaser_damping:      [0.05, 0.05, 0.02]
     chaser_frictionloss: [0.0, 0.0, 0.0]

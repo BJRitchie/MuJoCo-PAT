@@ -30,7 +30,7 @@ usage: $(basename "$0") [-d SECONDS] [-o LOGFILE] [-T FILE] [-e] [-g] [PARAMS_FI
                clock well below what the governor requests.
   -e           also bring up pat_telemetry, for EE-tracking plots
   PARAMS_FILE  an nmpc.yaml to use instead of the installed default. Copy
-               src/pat_arm_nmpc/config/nmpc.yaml, change one knob, pass it here --
+               src/pat_arm_control/config/nmpc.yaml, change one knob, pass it here --
                no rebuild needed, since the launch forwards it as params_file.
 USAGE
 }
@@ -77,7 +77,7 @@ fi
 
 # A trial measures microseconds, so anything else running on the box lands in the
 # numbers. Refuse rather than quietly produce a contaminated log.
-if pgrep -x arm_nmpc_node >/dev/null 2>&1 || pgrep -x simulation_node >/dev/null 2>&1; then
+if pgrep -x arm_control_node >/dev/null 2>&1 || pgrep -x simulation_node >/dev/null 2>&1; then
     echo "a sim or NMPC node is already running -- stop it first, or this trial" >&2
     echo "will share the CPU (and the topics) with it" >&2
     exit 1
@@ -87,19 +87,19 @@ fi
 # FindPackageShare, i.e. the INSTALLED copy -- which is a build-time copy of the
 # source one, so editing src/ without rebuilding silently measures the old
 # config. Resolve it here, report it, and refuse if the two have diverged.
-SRC_PARAMS="$ROOT/src/pat_arm_nmpc/config/nmpc.yaml"
+SRC_PARAMS="$ROOT/src/pat_arm_control/config/nmpc.yaml"
 if [ -n "$PARAMS" ]; then
     EFFECTIVE=$(readlink -f "$PARAMS")
 else
-    PREFIX=$(ros2 pkg prefix pat_arm_nmpc 2>/dev/null)
-    EFFECTIVE="$PREFIX/share/pat_arm_nmpc/config/nmpc.yaml"
+    PREFIX=$(ros2 pkg prefix pat_arm_control 2>/dev/null)
+    EFFECTIVE="$PREFIX/share/pat_arm_control/config/nmpc.yaml"
     if [ -f "$SRC_PARAMS" ] && [ -f "$EFFECTIVE" ] \
        && ! diff -q "$SRC_PARAMS" "$EFFECTIVE" >/dev/null 2>&1; then
         echo "REFUSING: the installed nmpc.yaml differs from src/." >&2
         echo "  installed (what this run would use): $EFFECTIVE" >&2
         echo "  source   (what you have been editing): $SRC_PARAMS" >&2
         diff "$SRC_PARAMS" "$EFFECTIVE" | sed 's/^/    /' >&2
-        echo "  Either rebuild:  colcon build --packages-select pat_arm_nmpc" >&2
+        echo "  Either rebuild:  colcon build --packages-select pat_arm_control" >&2
         echo "  or pass it:      $(basename "$0") ... $SRC_PARAMS" >&2
         exit 1
     fi
@@ -228,7 +228,7 @@ fi
 # whatever comparison it gets used in. A log that cannot say which config it came
 # from is worth very little a day later.
 {
-    echo "# pat_arm_nmpc trial: $(date -Is), ${DURATION}s"
+    echo "# pat_arm_control trial: $(date -Is), ${DURATION}s"
     echo "# params_file: $EFFECTIVE"
     echo "# cpu_governor: $GOVERNORS"
     [ -n "$EPP" ] && echo "# energy_perf_pref: $EPP"
@@ -278,9 +278,9 @@ FREQ_MEAN=0
 rm -f "$FREQ_FILE"
 
 sleep 3
-if pgrep -x arm_nmpc_node >/dev/null 2>&1; then
+if pgrep -x arm_control_node >/dev/null 2>&1; then
     echo "WARNING: nodes survived teardown; kill them before the next trial" >&2
-    pgrep -ax arm_nmpc_node >&2
+    pgrep -ax arm_control_node >&2
 fi
 
 WINDOWS=$(grep -c 'ticks @' "$LOGFILE" 2>/dev/null || echo 0)

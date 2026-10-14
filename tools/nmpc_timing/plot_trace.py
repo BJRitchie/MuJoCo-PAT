@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Plot a per-tick trace written by pat_arm_nmpc's `trace_file` parameter.
+"""Plot a per-tick trace written by pat_arm_control's `trace_file` parameter.
 
 summarise_timing.py reads the node's once-a-second report, so its histogram is the
 eight fixed bins the C++ carries and its percentiles are over per-window maxima.
