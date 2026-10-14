@@ -68,6 +68,87 @@ public:
     /// passed to step()). Throws if not found, matching jointId().
     int actuatorId(const std::string& name) const;
 
+    /// Resolve a `<sensor>`'s index by name. Throws if not found, matching
+    /// jointId(): a caller asking for a sensor the MJCF does not declare has a
+    /// configuration error, and silently publishing zeros would be worse.
+    int sensorId(const std::string& name) const;
+
+    /// How many scalars the given sensor produces (3 for an accelerometer, 4
+    /// for a framequat, and so on).
+    int sensorDim(int sensor_id) const;
+
+    /// Pointer to the sensor's values inside mjData::sensordata -- no copy, and
+    /// valid only until the next step(). MuJoCo computes these exactly; any
+    /// imperfection is applied afterwards by SensorModel, since MuJoCo 3.7 has
+    /// no way to switch its own sensor_noise field on.
+    ///
+    /// Call refreshSensors() first if a step() has happened since the last one.
+    const double* sensorData(int sensor_id) const;
+
+    /// Recompute every derived quantity, sensors included, at the CURRENT
+    /// qpos/qvel.
+    ///
+    /// Needed because mj_step evaluates the dynamics at the start of the step
+    /// and integrates afterwards, so on return mjData's derived quantities
+    /// describe the state the step began from, not the one it ended at. With
+    /// this model's RK4 integrator it is worse than a one-step lag: the last
+    /// internal evaluation is an intermediate RK stage, so sensordata matches
+    /// no particular instant. Measured on the scene model, reading the gyro
+    /// straight after step() disagrees with the yaw joint's own velocity by
+    /// about 6%.
+    ///
+    /// That matters here specifically because odom is published from qpos/qvel
+    /// while the IMU comes from sensordata; left unsynchronised the two
+    /// describe slightly different vehicles, and an observer would read the
+    /// inconsistency as a real disturbance. Any sensor lag worth modelling
+    /// should be asked for explicitly through SensorModel's delay_s, where it
+    /// is a stated number rather than an integrator artefact.
+    ///
+    /// Costs one extra forward dynamics evaluation, so call it once per publish
+    /// rather than once per physics step.
+    void refreshSensors();
+
+    /// Resolve a body's index by name. Throws if not found, matching jointId().
+    int bodyId(const std::string& name) const;
+
+    /// Apply a planar external wrench to a body, in WORLD coordinates, acting
+    /// at the body's centre of mass. Writes mjData::xfrc_applied, which MuJoCo
+    /// keeps applying until it is changed again, so this must be called every
+    /// step a time-varying disturbance is wanted.
+    ///
+    /// This is the one disturbance whose value is known exactly, which is what
+    /// makes it the instrument for scoring a disturbance observer.
+    void setExternalWrench(int body_id, double fx, double fy, double tz);
+
+    /// Clear every body's applied wrench.
+    void clearExternalWrenches();
+
+    /// MuJoCo's constraint force in generalised coordinates (nv long) -- the
+    /// exact contact force the solver found, which no algorithm could know.
+    ///
+    /// Ground truth for scoring a contact estimate, and therefore strictly
+    /// simulation-only: it may be published on a diagnostic topic but must
+    /// never be consumed by pat_gnc, pat_robotics or pat_arm_control, which
+    /// have to work on real hardware where nothing like it exists.
+    const double* constraintForce() const noexcept;
+
+    int nv() const noexcept;
+
+    /// Scale the mass and rotational inertia of the named bodies.
+    ///
+    /// A uniform density change, so mass and inertia scale together. Intended
+    /// to be called once after construction, from config, to make the
+    /// simulated vehicle genuinely different from the model the controller
+    /// carries -- which is the realistic ISAM case (an unknown grappled
+    /// payload, a link mass taken from a CAD model that was never weighed).
+    /// Perturbing the scene this way and leaving pat_arm_control's own MJCF
+    /// alone is what makes the controller's model wrong rather than merely
+    /// coarse.
+    ///
+    /// Throws on size mismatch, unknown body, or a non-positive factor.
+    void setBodyMassScale(const std::vector<std::string>& bodies,
+                          const std::vector<double>& factors);
+
     /// Resolve a mocap body's index (into mocap_pos/mocap_quat, for
     /// setMocapPose() below) by name. Returns -1 if no such body exists, or
     /// it exists but isn't a mocap body — deliberately lenient, unlike

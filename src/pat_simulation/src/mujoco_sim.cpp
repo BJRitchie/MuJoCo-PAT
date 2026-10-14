@@ -131,6 +131,70 @@ int MuJoCoSim::actuatorId(const std::string& name) const {
     return id;
 }
 
+int MuJoCoSim::sensorId(const std::string& name) const {
+    const int id = mj_name2id(model_, mjOBJ_SENSOR, name.c_str());
+    if (id < 0) throw std::runtime_error("sensor '" + name + "' not found");
+    return id;
+}
+
+int MuJoCoSim::sensorDim(int sensor_id) const {
+    return model_->sensor_dim[sensor_id];
+}
+
+const double* MuJoCoSim::sensorData(int sensor_id) const {
+    return data_->sensordata + model_->sensor_adr[sensor_id];
+}
+
+void MuJoCoSim::refreshSensors() {
+    mj_forward(model_, data_);
+}
+
+int MuJoCoSim::bodyId(const std::string& name) const {
+    const int id = mj_name2id(model_, mjOBJ_BODY, name.c_str());
+    if (id < 0) throw std::runtime_error("body '" + name + "' not found");
+    return id;
+}
+
+void MuJoCoSim::setExternalWrench(int body_id, double fx, double fy, double tz) {
+    // xfrc_applied is [nbody x 6]: force xyz then torque xyz, world frame.
+    double* w = data_->xfrc_applied + 6 * body_id;
+    w[0] = fx;  w[1] = fy;  w[2] = 0.0;
+    w[3] = 0.0; w[4] = 0.0; w[5] = tz;
+}
+
+void MuJoCoSim::clearExternalWrenches() {
+    for (int i = 0; i < 6 * model_->nbody; ++i) data_->xfrc_applied[i] = 0.0;
+}
+
+const double* MuJoCoSim::constraintForce() const noexcept {
+    return data_->qfrc_constraint;
+}
+
+int MuJoCoSim::nv() const noexcept { return model_->nv; }
+
+void MuJoCoSim::setBodyMassScale(const std::vector<std::string>& bodies,
+                                 const std::vector<double>& factors) {
+    if (bodies.size() != factors.size()) {
+        throw std::runtime_error(
+            "setBodyMassScale: one factor per body name is required");
+    }
+    for (std::size_t i = 0; i < bodies.size(); ++i) {
+        if (!(factors[i] > 0.0)) {
+            throw std::runtime_error("setBodyMassScale: factor for '" +
+                                     bodies[i] + "' must be positive");
+        }
+        const int id = bodyId(bodies[i]);
+        model_->body_mass[id] *= factors[i];
+        for (int k = 0; k < 3; ++k) model_->body_inertia[3 * id + k] *= factors[i];
+    }
+    // body_mass and body_inertia feed derived constants (subtree masses among
+    // them), so those have to be rebuilt or the model is internally
+    // inconsistent. mj_forward then puts mjData back in step with the new
+    // model before anything reads a mass matrix off it.
+    mj_setConst(model_, data_);
+    mj_forward(model_, data_);
+}
+
 int MuJoCoSim::mocapId(const std::string& name) const {
     const int body_id = mj_name2id(model_, mjOBJ_BODY, name.c_str());
     if (body_id < 0) return -1;

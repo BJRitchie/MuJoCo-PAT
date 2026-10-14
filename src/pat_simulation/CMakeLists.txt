@@ -20,7 +20,11 @@ find_package(pat_platform_description REQUIRED)   # shared piper_planar_arm.xacr
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 find_package(mujoco        REQUIRED)
 
-add_library(mujoco_sim STATIC src/mujoco_sim.cpp src/mujoco_vis.cpp)
+add_library(mujoco_sim STATIC
+    src/mujoco_sim.cpp
+    src/mujoco_vis.cpp
+    src/sensor_model.cpp
+    src/disturbance_model.cpp)
 target_include_directories(mujoco_sim PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>)
@@ -49,6 +53,23 @@ add_custom_command(
     COMMENT "xacro -> air_bearing_table.xml"
     VERBATIM)
 add_custom_target(pat_simulation_models ALL DEPENDS "${_abt_xml}")
+
+if(BUILD_TESTING)
+    find_package(ament_cmake_gtest REQUIRED)
+    ament_add_gtest(test_pat_simulation
+        test/test_sensor_model.cpp
+        test/test_scene_sensors.cpp
+        test/test_disturbance_model.cpp)
+    # test_scene_sensors loads the real generated scene, so it has to wait for
+    # xacro. It loads the INSTALLED copy, not the one in the build tree: the
+    # MJCF's mesh paths are relative to its own directory ("../manipulators/"),
+    # which only resolves under share/. That also makes the test load the exact
+    # file the node loads via FindPackageShare.
+    add_dependencies(test_pat_simulation pat_simulation_models)
+    target_link_libraries(test_pat_simulation mujoco_sim)
+    target_compile_definitions(test_pat_simulation PRIVATE
+        PAT_SIM_TEST_MJCF="${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME}/models/environment/air_bearing_table.xml")
+endif()
 
 install(TARGETS mujoco_sim simulation_node
     ARCHIVE DESTINATION lib  LIBRARY DESTINATION lib

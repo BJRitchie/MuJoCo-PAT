@@ -139,4 +139,35 @@
     <motor name="motor3_R" joint="joint3_R" gear="1" ctrlrange="-10 10" ctrllimited="true"/>
     <motor name="motor5_R" joint="joint5_R" gear="1" ctrlrange="-5 5"   ctrllimited="true"/>
   </actuator>
+
+  <!-- Flight-representative sensing on the existing chaser_imu site. These are
+       the signals a satellite actually has; the lab's motion capture is not one
+       of them, so pat_gnc's navigator has to work from these to be meaningful
+       off the table.
+
+       MuJoCo computes all four exactly. The imperfections (noise, bias, bias
+       random walk, scale error, quantisation, delay, rate, dropout) are applied
+       on top by pat_simulation's SensorModel, because MuJoCo 3.7's
+       mjModel.sensor_noise is vestigial: the field exists but there is no
+       mjENBL_SENSORNOISE flag to switch it on, so the simulator will not apply
+       sensor noise for us.
+
+       accelerometer: proper acceleration in the site frame. With gravity
+         disabled this is pure linear acceleration, which is also what a real
+         IMU reads in free fall, so the correspondence is exact rather than
+         approximate.
+       gyro: angular velocity in the site frame. Only the z component is
+         meaningful on a planar table.
+       framequat: absolute attitude, the star tracker's analogue. Low rate and
+         noisy on real hardware, which is what the SensorModel's rate_hz and
+         noise_std are for.
+       framepos: absolute position. NOT a flight sensor, it is the motion
+         capture / relative navigation stand-in, and it is the channel to
+         degrade first when asking what the estimator is really carrying. -->
+  <sensor>
+    <accelerometer name="chaser_accel"     site="chaser_imu"/>
+    <gyro          name="chaser_gyro"      site="chaser_imu"/>
+    <framequat     name="chaser_attitude"  objtype="site" objname="chaser_imu"/>
+    <framepos      name="chaser_position"  objtype="site" objname="chaser_imu"/>
+  </sensor>
 </mujoco>

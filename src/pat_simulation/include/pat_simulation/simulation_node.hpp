@@ -5,7 +5,6 @@
 #include <array>
 #include <memory>
 #include <mutex>
-#include <random>
 #include <string>
 #include <vector>
 
@@ -20,6 +19,8 @@
 #include <pat_msgs/msg/thruster_command.hpp>
 
 #include "pat_simulation/mujoco_sim.hpp"
+#include "pat_simulation/sensors/sensor_model.hpp"
+#include "pat_simulation/sensors/disturbance_model.hpp"
 #include "pat_simulation/header.h"
 
 using namespace std::chrono_literals;
@@ -37,11 +38,15 @@ public:
 private:
     void publish(); 
 
+    /// `h_pose` is the first of three consecutive SensorModel handles for
+    /// x/y/theta, `h_vel` the first of three for vx/vy/omega. Pass -1 for
+    /// either to publish that part as exact truth.
     void publishOdom(rclcpp::Publisher<nav_msgs::msg::Odometry>& pub,
                      const std::string& frame, const std::string& child,
-                     const pat_simulation::PlanarState& s, const rclcpp::Time& t); 
+                     const pat_simulation::PlanarState& s, const rclcpp::Time& t,
+                     int h_pose, int h_vel);
 
-    void publishImu(const pat_simulation::PlanarState& s, const rclcpp::Time& t); 
+    void publishImu(const rclcpp::Time& t);
       
     void broadcastTF(const std::string& parent, const std::string& child,
                      const pat_simulation::PlanarState& s, const rclcpp::Time& t);
@@ -95,8 +100,56 @@ private:
     std::vector<std::string> arm_joint_names_;
     std::vector<int> arm_actuator_ids_;
     std::mutex mu_;
-    double imu_noise_{0.005};
-    std::mt19937 rng_{std::random_device{}()};
+
+    // Measurement imperfection. Every published channel goes through this, and
+    // every channel defaults to a perfect pass-through, so a run with no sensor
+    // configuration publishes exactly what MuJoCo computed. 
+    pat_simulation::SensorModel sensors_;
+
+    // Handles into sensors_, resolved once at startup. Vector-valued channels
+    // are registered consecutively so applyVector can take the first handle.
+    int h_imu_accel_{-1};     //!< x, y
+    int h_imu_gyro_{-1};      //!< z only; the table is planar
+    int h_star_yaw_{-1};
+    int h_nav_{-1};           //!< chaser x, y
+    int h_chaser_vel_{-1};    //!< vx, vy, omega
+    int h_target_{-1};        //!< x, y, theta
+    int h_target_vel_{-1};    //!< vx, vy, omega
+    int h_joint_pos_{-1};     //!< one per arm joint, arm_joint_names order
+    int h_joint_vel_{-1};     //!< likewise
+
+    // MuJoCo <sensor> indices from the MJCF, resolved once at startup.
+    int sid_accel_{-1}, sid_gyro_{-1}, sid_attitude_{-1}, sid_position_{-1};
+
+    /// Declare and read one channel's eight parameters under
+    /// "sensors.<name>.*", register it, and return its handle. `default_sigma`
+    /// seeds noise_std only, for the one channel that has a pre-existing
+    /// non-zero default to preserve.
+    int declareChannel(const std::string& name, double default_sigma = 0.0);
+
+    /// Declare and read a wrench profile under "disturbance.<name>.*".
+    pat_simulation::WrenchProfile declareWrench(const std::string& name);
+
+    // Commanded external disturbances, one per body that can take one. Applied
+    // every sim step, since xfrc_applied persists and a time-varying profile
+    // has to be rewritten. Inactive by default, in which case the simulator's
+    // xfrc_applied is never touched at all.
+    pat_simulation::DisturbanceModel dist_chaser_, dist_target_;
+    int body_chaser_{-1}, body_target_{-1};
+    bool any_disturbance_{false};
+    // What was last written to the chaser's xfrc_applied. Recorded rather than
+    // re-evaluated for the ground-truth topic, because the profiles advance a
+    // random walk per call and asking twice would both double-step the walk
+    // and report a value that was never applied.
+    double last_wrench_chaser_[3]{0.0, 0.0, 0.0};
+
+    // Ground truth for scoring a disturbance/contact estimate. Published on a
+    // deliberately sim-only topic: nothing like it exists on hardware, so an
+    // algorithm package subscribing to it would be a sim-to-real violation of
+    // exactly the kind this workspace is built to avoid.
+    rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr truth_pub_;
+    bool publish_truth_{false};
+    void publishTruth(const rclcpp::Time& t);
 };
 
 } // end namespace simulation_node

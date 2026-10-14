@@ -2,7 +2,79 @@ pat_simulation:
   ros__parameters:
     sim_rate_hz:   500.0
     pub_rate_hz:   100.0
-    imu_noise_std: 0.005
+
+    # Seed for every sensor imperfection below. Fixed rather than taken from
+    # the clock so a trial can be replayed; the node logs it at startup either
+    # way. Each channel derives its own stream from this seed and its own name,
+    # so turning one channel's noise on leaves every other channel's realised
+    # sequence untouched - which is what makes an A/B run between two configs
+    # mean anything.
+    sensor_seed: 20251014
+
+    # Measurement imperfection, per published channel. Every field is a
+    # departure from truth, so the all-zero values below are an exact
+    # pass-through: as written, this node publishes precisely what MuJoCo
+    # computed. That matters because every figure in the README's realtime
+    # section, the constraint ladder and the warm-start decision was measured
+    # against exact measurements - none of them apply to a run with any of
+    # these switched on, so the node logs a WARN naming each imperfect channel.
+    #
+    # Fields, in the order they are applied:
+    #   scale_error    multiplicative sensitivity error, out = (1 + e) * in
+    #   bias           constant offset, channel units
+    #   bias_walk_std  random walk driving the bias, channel units per sqrt(s)
+    #   noise_std      additive white Gaussian sigma, channel units
+    #   quantisation   LSB size; 0 disables
+    #   rate_hz        the sensor's own update rate; 0 means every sim step
+    #   dropout_prob   per-sample chance the reading is not refreshed
+    #   delay_s        transport delay, rounded to whole 2 ms sim steps
+    #
+    # imu_* come from the MJCF's <sensor> block on the chaser_imu site. nav_*
+    # and star_yaw are the two halves of the chaser's measured pose: position
+    # from relative navigation, attitude from a star tracker. They are split
+    # because on a real spacecraft they are different instruments with
+    # different rates and error budgets, even though /chaser/odom carries them
+    # together.
+    sensors:
+      # /chaser/imu - linear_acceleration [m/s^2], angular_velocity.z [rad/s].
+      # imu_gyro_z's sigma is the one non-zero default in this file: the gyro
+      # has always been published with this much noise and pat_gnc's navigator
+      # consumes it, so zeroing it would quietly change what the GNC stack sees.
+      imu_accel_x:  {scale_error: 0.0, bias: 0.0, bias_walk_std: 0.0, noise_std: 0.0,   quantisation: 0.0, rate_hz: 0.0, dropout_prob: 0.0, delay_s: 0.0}
+      imu_accel_y:  {scale_error: 0.0, bias: 0.0, bias_walk_std: 0.0, noise_std: 0.0,   quantisation: 0.0, rate_hz: 0.0, dropout_prob: 0.0, delay_s: 0.0}
+      imu_gyro_z:   {scale_error: 0.0, bias: 0.0, bias_walk_std: 0.0, noise_std: 0.005, quantisation: 0.0, rate_hz: 0.0, dropout_prob: 0.0, delay_s: 0.0}
+      # /chaser/odom - pose [m, m, rad]
+      nav_x:        {scale_error: 0.0, bias: 0.0, bias_walk_std: 0.0, noise_std: 0.0, quantisation: 0.0, rate_hz: 0.0, dropout_prob: 0.0, delay_s: 0.0}
+      nav_y:        {scale_error: 0.0, bias: 0.0, bias_walk_std: 0.0, noise_std: 0.0, quantisation: 0.0, rate_hz: 0.0, dropout_prob: 0.0, delay_s: 0.0}
+      star_yaw:     {scale_error: 0.0, bias: 0.0, bias_walk_std: 0.0, noise_std: 0.0, quantisation: 0.0, rate_hz: 0.0, dropout_prob: 0.0, delay_s: 0.0}
+      # /chaser/odom - twist [m/s, m/s, rad/s]
+      chaser_vx:    {scale_error: 0.0, bias: 0.0, bias_walk_std: 0.0, noise_std: 0.0, quantisation: 0.0, rate_hz: 0.0, dropout_prob: 0.0, delay_s: 0.0}
+      chaser_vy:    {scale_error: 0.0, bias: 0.0, bias_walk_std: 0.0, noise_std: 0.0, quantisation: 0.0, rate_hz: 0.0, dropout_prob: 0.0, delay_s: 0.0}
+      chaser_omega: {scale_error: 0.0, bias: 0.0, bias_walk_std: 0.0, noise_std: 0.0, quantisation: 0.0, rate_hz: 0.0, dropout_prob: 0.0, delay_s: 0.0}
+      # /target/odom - pose then twist. This is the channel set to degrade when
+      # asking what relative navigation to an uncooperative target really costs.
+      target_x:     {scale_error: 0.0, bias: 0.0, bias_walk_std: 0.0, noise_std: 0.0, quantisation: 0.0, rate_hz: 0.0, dropout_prob: 0.0, delay_s: 0.0}
+      target_y:     {scale_error: 0.0, bias: 0.0, bias_walk_std: 0.0, noise_std: 0.0, quantisation: 0.0, rate_hz: 0.0, dropout_prob: 0.0, delay_s: 0.0}
+      target_yaw:   {scale_error: 0.0, bias: 0.0, bias_walk_std: 0.0, noise_std: 0.0, quantisation: 0.0, rate_hz: 0.0, dropout_prob: 0.0, delay_s: 0.0}
+      target_vx:    {scale_error: 0.0, bias: 0.0, bias_walk_std: 0.0, noise_std: 0.0, quantisation: 0.0, rate_hz: 0.0, dropout_prob: 0.0, delay_s: 0.0}
+      target_vy:    {scale_error: 0.0, bias: 0.0, bias_walk_std: 0.0, noise_std: 0.0, quantisation: 0.0, rate_hz: 0.0, dropout_prob: 0.0, delay_s: 0.0}
+      target_omega: {scale_error: 0.0, bias: 0.0, bias_walk_std: 0.0, noise_std: 0.0, quantisation: 0.0, rate_hz: 0.0, dropout_prob: 0.0, delay_s: 0.0}
+      # /chaser/arm/joint_states - one channel per joint, so a single bad
+      # encoder can be simulated. Add an entry alongside arm_joint_names below.
+      joint_pos:
+        joint2_L: {scale_error: 0.0, bias: 0.0, bias_walk_std: 0.0, noise_std: 0.0, quantisation: 0.0, rate_hz: 0.0, dropout_prob: 0.0, delay_s: 0.0}
+        joint3_L: {scale_error: 0.0, bias: 0.0, bias_walk_std: 0.0, noise_std: 0.0, quantisation: 0.0, rate_hz: 0.0, dropout_prob: 0.0, delay_s: 0.0}
+        joint5_L: {scale_error: 0.0, bias: 0.0, bias_walk_std: 0.0, noise_std: 0.0, quantisation: 0.0, rate_hz: 0.0, dropout_prob: 0.0, delay_s: 0.0}
+        joint2_R: {scale_error: 0.0, bias: 0.0, bias_walk_std: 0.0, noise_std: 0.0, quantisation: 0.0, rate_hz: 0.0, dropout_prob: 0.0, delay_s: 0.0}
+        joint3_R: {scale_error: 0.0, bias: 0.0, bias_walk_std: 0.0, noise_std: 0.0, quantisation: 0.0, rate_hz: 0.0, dropout_prob: 0.0, delay_s: 0.0}
+        joint5_R: {scale_error: 0.0, bias: 0.0, bias_walk_std: 0.0, noise_std: 0.0, quantisation: 0.0, rate_hz: 0.0, dropout_prob: 0.0, delay_s: 0.0}
+      joint_vel:
+        joint2_L: {scale_error: 0.0, bias: 0.0, bias_walk_std: 0.0, noise_std: 0.0, quantisation: 0.0, rate_hz: 0.0, dropout_prob: 0.0, delay_s: 0.0}
+        joint3_L: {scale_error: 0.0, bias: 0.0, bias_walk_std: 0.0, noise_std: 0.0, quantisation: 0.0, rate_hz: 0.0, dropout_prob: 0.0, delay_s: 0.0}
+        joint5_L: {scale_error: 0.0, bias: 0.0, bias_walk_std: 0.0, noise_std: 0.0, quantisation: 0.0, rate_hz: 0.0, dropout_prob: 0.0, delay_s: 0.0}
+        joint2_R: {scale_error: 0.0, bias: 0.0, bias_walk_std: 0.0, noise_std: 0.0, quantisation: 0.0, rate_hz: 0.0, dropout_prob: 0.0, delay_s: 0.0}
+        joint3_R: {scale_error: 0.0, bias: 0.0, bias_walk_std: 0.0, noise_std: 0.0, quantisation: 0.0, rate_hz: 0.0, dropout_prob: 0.0, delay_s: 0.0}
+        joint5_R: {scale_error: 0.0, bias: 0.0, bias_walk_std: 0.0, noise_std: 0.0, quantisation: 0.0, rate_hz: 0.0, dropout_prob: 0.0, delay_s: 0.0}
     # Arm joints/actuators are opt-in — add entries here (and to the MJCF)
     # to add joints or a whole second arm; no source changes needed.
     # Dual planar Piper 3R arms (air_bearing_table.xacro). Lists are paired by
@@ -41,3 +113,49 @@ pat_simulation:
     chaser_frictionloss: [0.0, 0.0, 0.0]
     target_damping:      [0.01, 0.01, 0.005]
     target_frictionloss: [0.0, 0.0, 0.0]
+
+    # Model error: scale the mass AND rotational inertia (a uniform density
+    # change) of the named SCENE bodies. pat_arm_control's own MJCF is left
+    # alone, so this makes the controller's model genuinely wrong rather than
+    # merely coarse - the realistic ISAM case of a grappled payload of unknown
+    # mass, or a link mass taken from CAD and never weighed. Applied once at
+    # startup from here rather than in the xacro, so a sweep needs no rebuild.
+    # Paired by position. Left unset here, which means the model is used as
+    # built. They stay commented rather than written as [] because an empty
+    # YAML list has no inferable element type and ROS 2 rejects the file
+    # outright ("No parameter value set") - the same trap as nmpc.yaml's
+    # rt_cpus. Uncomment both together:
+    # mass_scale_bodies:  ["chaser"]
+    # mass_scale_factors: [1.10]
+
+    # Commanded external wrench, written to MuJoCo's xfrc_applied in the WORLD
+    # frame at each body's centre of mass. Unlike drag or contact this one's
+    # value is known exactly, which is what makes it the instrument for scoring
+    # a disturbance observer: "it recovered 0.42 of the 0.50 N applied" is a
+    # measurement rather than an impression.
+    #
+    #   type         none | step | sinusoid | random_walk
+    #   fx, fy       [N] world-frame force amplitude
+    #   tz           [N*m] torque amplitude about world z
+    #   start_s      when it begins; zero before that
+    #   duration_s   how long it lasts; 0 means indefinitely
+    #   freq_hz      sinusoid only; its phase starts at zero, so switching on
+    #                does not deliver a step
+    #   walk_std     random_walk only, per sqrt(s), scaled per axis by fx/fy/tz
+    #                so an axis left at 0 stays exactly 0
+    #
+    # Planar only: a z force or an x/y torque is absorbed by the slide/hinge
+    # joints and would measure nothing.
+    disturbance:
+      chaser: {type: "none", fx: 0.0, fy: 0.0, tz: 0.0, start_s: 0.0, duration_s: 0.0, freq_hz: 0.0, walk_std: 0.0}
+      target: {type: "none", fx: 0.0, fy: 0.0, tz: 0.0, start_s: 0.0, duration_s: 0.0, freq_hz: 0.0, walk_std: 0.0}
+
+    # Publish /sim_only/ground_truth: MuJoCo's exact contact force in
+    # generalised coordinates (qfrc_constraint, nv entries) plus the wrench
+    # actually applied to the chaser. This is what a contact or disturbance
+    # estimate gets scored against.
+    #
+    # The /sim_only/ prefix is a contract, not decoration: no hardware driver
+    # can ever publish this, so nothing that has to run on the Jetson may
+    # subscribe to it. Diagnostics and offline scoring only.
+    publish_ground_truth: false

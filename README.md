@@ -225,6 +225,101 @@ different collision group), so these joint terms are the only drag they feel.
 `pat_arm_control`'s internal model has no such drag, so raising them appears to the
 controller as unmodelled disturbance.
 
+### Imperfect measurements
+
+The algorithm packages see MuJoCo's exact state by default. That is the right
+default — every figure in "Settled by measurement" and "Realtime readiness" was
+taken against exact measurements, so none of them apply to a run with any of
+this switched on — but it is not what a spacecraft has, and nothing can be
+validated as an estimator against perfect inputs.
+
+`air_bearing_table.xacro` declares a flight-representative suite on the existing
+`chaser_imu` site: `accelerometer`, `gyro`, `framequat` (the star tracker's
+analogue) and `framepos` (the relative-navigation stand-in; not a flight sensor).
+`pat_simulation`'s `SensorModel` then corrupts each published channel by as much
+as `simulation.yaml` asks for. MuJoCo cannot do this itself — `mjModel.sensor_noise`
+exists in 3.7 but there is no `mjENBL_SENSORNOISE` to switch it on.
+
+Each of the 27 channels takes eight fields, applied in this order: `scale_error`,
+`bias`, `bias_walk_std` (per √s), `noise_std`, `quantisation`, `rate_hz` (the
+sensor's own update rate), `dropout_prob`, `delay_s`. All default to zero, which
+is an exact pass-through — bit-for-bit, asserted by
+`SensorModelPerfect.ZeroConfigIsBitForBitIdentity`, which also checks that a
+perfect channel never draws from the RNG.
+
+```yaml
+sensor_seed: 20251014
+sensors:
+  star_yaw: {noise_std: 0.0017, rate_hz: 5.0, delay_s: 0.02}
+```
+
+Each channel derives its stream from the seed **and its own name**, so switching
+one channel's noise on leaves every other channel's realised sequence untouched.
+That is what makes an A/B run between two configs mean anything, and it is why
+the seed is a name hash rather than a registration index. The node logs one line
+at startup: `baseline` when only the pre-existing gyro noise is present, and a
+WARN naming every imperfect channel otherwise.
+
+One channel ships non-zero: `imu_gyro_z.noise_std: 0.005`, because `/chaser/imu`
+has always carried that much noise and `pat_gnc`'s navigator consumes it. This
+was the `imu_noise_std` parameter, now folded into the channel it always meant.
+
+**The accelerometer was previously broken** — `publishImu` filled
+`linear_acceleration.x/y` with independent noise draws and no signal at all. It
+now carries MuJoCo's real proper acceleration. With gravity disabled there is no
+1 g term to remove, which is also true of a real IMU in free fall. Nothing
+consumed it (`pat_gnc` reads only `angular_velocity.z`), so the fix is not
+visible downstream today.
+
+### Disturbances
+
+Four mechanisms, all off by default:
+
+| mechanism | how | known/stored exactly? |
+|---|---|---|
+| table drag | `chaser_damping` / `_frictionloss` above | yes, but not per-tick |
+| model error | `mass_scale_bodies` / `_factors` — scales scene mass **and** inertia | yes |
+| external wrench | `disturbance.<body>.*` → `xfrc_applied` | **yes, per tick** |
+| contact | drive an arm into the target | no — read it back instead |
+
+The external wrench is the instrument for scoring an observer, because it is the
+only disturbance whose value is known per tick: `step`, `sinusoid` (phase starts
+at zero, so switching on is not secretly a step) or `random_walk` (per axis, so
+an axis left at zero stays exactly zero).
+
+```yaml
+disturbance:
+  chaser: {type: "step", fx: 0.5, start_s: 2.0, duration_s: 5.0}
+```
+
+Mass scaling applies to the **scene only** — `pat_arm_control`'s own MJCF is
+untouched — so the controller's model becomes genuinely wrong rather than merely
+coarse, which is the realistic ISAM case. Mass and inertia scale together, as a
+density change.
+
+Contact force cannot be commanded, so it is read back instead:
+`publish_ground_truth: true` publishes `/sim_only/ground_truth` with MuJoCo's
+exact `qfrc_constraint` (nv entries) plus the wrench actually applied. The
+`/sim_only/` prefix is a contract, not decoration — no hardware driver can ever
+publish it, so nothing that has to run on the Jetson may subscribe to it.
+
+Two facts worth knowing before measuring against any of this, both pinned by
+tests:
+
+- `mj_step` evaluates the dynamics *before* integrating, and under this model's
+  RK4 integrator the last internal evaluation is an intermediate stage — so
+  sensor data read straight after a step matches no particular instant and
+  disagrees with the yaw joint's own velocity by about 6%. `publish()` calls
+  `refreshSensors()` (one `mj_forward`) so the IMU and the odometry describe the
+  same instant; otherwise an estimator reads the mismatch as a real disturbance.
+  That extra forward call does **not** perturb the trajectory, contact included,
+  despite rewriting `qacc_warmstart`
+  (`SceneSensors.RefreshingSensorsDoesNotPerturbTheTrajectory`).
+- The MJCF's own all-zero arm pose **self-collides** at the real arm mount, so a
+  sim left at the model default starts with contact forces already acting —
+  about 0.05 m/s² on the accelerometer. `initial_arm_qpos` exists for this
+  reason, and any test needing an undisturbed chaser has to set it.
+
 ### Live telemetry
 
 ```bash
