@@ -458,6 +458,58 @@ otherwise have to rediscover. None are regressions.
   entry). The commented-out reference block's `full_nonlinear` comment also still
   describes the SQP path as untuned and QP-failing.
 
+### Disturbance observer (`pat_arm_control`)
+
+A generalised-momentum observer (De Luca & Mattone) estimating the generalised
+force the model does not account for: unmodelled link inertia, air-bearing drag,
+contact reaction. **The library and its tests exist; it is not yet wired into the
+node or the control law**, so `observer` is not a parameter yet. The derivation
+is in `observers/momentum_observer.h`; what matters here is why this one and what
+it measures.
+
+It never differentiates a measured velocity — the derivative of momentum is
+removed by integrating instead. That is the reason to prefer it over a linear
+extended state observer here: encoder-derived velocity is the noisiest signal
+available, and an LESO's disturbance channel differentiates twice, with noise
+scaling as the cube of its bandwidth. The single gain `K` is per DOF and sets the
+response directly, with the estimate reaching the true disturbance at time
+constant `1/K` (asserted against a synthetic plant, not just claimed).
+
+It runs on the full `nv` system and reduces the *answer* to joint space, reusing
+the cached `H_bb_inv_H_bm` that already produces `Cv_joints`. The identity the
+derivation rests on holds for the full mass matrix and not for the
+base-eliminated `H_g`, so this avoids needing it in reduced form at all. It also
+keeps the base rows, which are the net external wrench on the base — physically
+meaningful on its own, and thrown away by the reduced form.
+
+Three things measured rather than assumed:
+
+- **The free `Ṁ` is good enough.** MuJoCo exposes no analytic `Ṁ` (its derivative
+  API is finite difference throughout), so differencing consecutive mass matrices
+  is ours — free, because `M` is computed every period anyway. Against a
+  configuration-space finite difference (one extra `mj_fullM`, ~4 µs, able to use
+  an arbitrarily small step) it is **0.3% off** at `dt = 10 ms`, `|v| = 0.64`.
+  The 4 µs fallback is not needed.
+- **The error floor is set by speed.** With no disturbance applied the estimate
+  sits at **8×10⁻⁵** at 0.2 rad/s and **0.35** at 3.0 rad/s — the divided
+  difference is first order in `dt`. 3 rad/s is far beyond what the arm does.
+- **`update()` reaches the allocator zero times, including the first call.**
+  Every buffer is sized in the constructor, making it stricter than the control
+  tick, which still allocates its returned vector.
+
+Two traps it is built to avoid, both covered by tests: the integrator is seeded
+with the momentum on the first update, so the estimate starts at exactly zero
+rather than reporting the vehicle's own momentum as a disturbance; and `τ` must be
+the **applied** torque, not the planned one, since the controller clamps per joint
+before publishing and the clamped difference otherwise looks like a disturbance.
+
+A caution carried over from the collision experiment: **contact was never what
+destabilised the NMPC.** Driven into the target with the base pinned, the
+controller was indistinguishable from baseline (TIER 0, 0.00% over deadline);
+what destabilised it was base drift making the world-frame setpoint unreachable.
+The value here is model error and contact *detection*, not impulse rejection —
+no observer compensates an impulse.
+
 ### Settled by measurement — don't redo these
 
 - **Hard `lb == ub` bounds are deliberately NOT declared as equalities.** The

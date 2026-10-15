@@ -31,6 +31,7 @@
 #include <vector>
 
 #include "pat_arm_control/control/arm_nmpc.h"
+#include "pat_arm_control/observers/momentum_observer.h"
 #include "pat_arm_control/rt/rt_mailbox.h"
 
 // --- Heap-allocation counter ---------------------------------------------- //
@@ -2673,6 +2674,59 @@ TEST(RtRing, PushingDoesNotAllocate)
         allocs = scope.n();
     }
     EXPECT_EQ(allocs, 0);
+}
+
+/*! The observer is destined for its own realtime thread, so it is held to the
+ *  same standard as the control tick -- and to a stricter one, since it has no
+ *  returned-vector excuse: every buffer is sized in the constructor, so even
+ *  the first update must reach the allocator zero times. */
+TEST(RealtimeProfile, ObserverUpdateDoesNotAllocate)
+{
+    constexpr int kNv = 12;
+    MomentumObserverParams p;
+    p.nv = kNv;
+    p.n_joints = kNv - 6;
+    p.dt = 0.01;
+    p.gain = Eigen::VectorXd::Constant(1, 20.0);
+    p.mdot_clamp = 50.0;
+    p.estimate_clamp = 5.0;
+    MomentumObserver obs(p);
+
+    // Inputs built outside the counted scope. Configuration-dependent, so the
+    // Mdot difference is non-trivial and the clamp paths are reachable.
+    Eigen::MatrixXd M = Eigen::MatrixXd::Identity(kNv, kNv) * 2.0;
+    Eigen::VectorXd bias = Eigen::VectorXd::Constant(kNv, 0.01);
+    Eigen::VectorXd v = Eigen::VectorXd::Constant(kNv, 0.3);
+    Eigen::VectorXd tau = Eigen::VectorXd::Zero(kNv);
+    for (int i = 6; i < kNv; ++i) tau(i) = 0.5;
+    Eigen::VectorXd reduced(p.n_joints);
+    const Eigen::MatrixXd H_bb_inv_H_bm = Eigen::MatrixXd::Constant(6, p.n_joints, 0.1);
+
+    long first = 0, steady = 0;
+    {
+        AllocScope scope;
+        obs.update(M, bias, v, tau);
+        first = scope.n();
+    }
+
+    constexpr long kTicks = 50;
+    {
+        AllocScope scope;
+        for (long i = 0; i < kTicks; ++i) {
+            // Vary M so the divided difference does real work each step.
+            for (int k = 0; k < kNv; ++k) {
+                M(k, k) = 2.0 + 0.1 * std::sin(0.01 * static_cast<double>(i * kNv + k));
+            }
+            obs.update(M, bias, v, tau);
+            obs.reduceToJoints(H_bb_inv_H_bm, reduced);
+        }
+        steady = scope.n();
+    }
+    std::printf("[alloc] observer first update %ld, steady %.2f per update\n",
+                first, static_cast<double>(steady) / kTicks);
+
+    EXPECT_EQ(first, 0) << "the constructor is supposed to do all the sizing";
+    EXPECT_EQ(steady, 0);
 }
 
 }  // namespace

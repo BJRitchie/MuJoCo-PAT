@@ -48,7 +48,8 @@ find_package(acados REQUIRED)
 add_library(pat_arm_control_lib STATIC
     src/floating_base_dynamics.cpp
     src/quad_prob_solver.cpp
-    src/arm_nmpc.cpp)
+    src/arm_nmpc.cpp
+    src/momentum_observer.cpp)
 target_include_directories(pat_arm_control_lib PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>)
@@ -124,7 +125,9 @@ install(TARGETS nmpc_bench RUNTIME DESTINATION lib/${PROJECT_NAME})
 # resolved via FindPackageShare the way the node does it.
 if(BUILD_TESTING)
     find_package(ament_cmake_gtest REQUIRED)
-    ament_add_gtest(test_pat_arm_control test/test_pat_arm_control.cpp)
+    ament_add_gtest(test_pat_arm_control
+        test/test_pat_arm_control.cpp
+        test/test_momentum_observer.cpp)
     pat_arm_control_arch_flags(test_pat_arm_control)
     add_dependencies(test_pat_arm_control pat_arm_control_models)
     # ${CMAKE_DL_LIBS}: DISABLED_AllocStudy.Attribution resolves allocation call
