@@ -81,6 +81,21 @@ struct MjScratchData {
     }
 };
 
+// === WorkspaceImpl — one thread's mjData + base-elimination buffer ==========
+// Separate from MjScratchData because it carries the BaseElim too: the point of
+// a Workspace is that a second thread shares NOTHING mutable with the rollout,
+// and the rollout's be_scratch_ is a member of the controller.
+struct FloatingBaseDynamics::WorkspaceImpl {
+    mjData* data = nullptr;   // does NOT own the mjModel*
+    BaseElim be;
+    ~WorkspaceImpl() {
+        if (data) mj_deleteData(data);
+    }
+};
+
+FloatingBaseDynamics::Workspace::Workspace() = default;
+FloatingBaseDynamics::Workspace::~Workspace() = default;
+
 // === Construction ============================================================
 FloatingBaseDynamics::FloatingBaseDynamics(
     const std::string& mjcf_path)
@@ -428,6 +443,44 @@ void FloatingBaseDynamics::dynamicsAt(
     getDynamics(out.H_g, out.Cv_joints, d, be_scratch_);
     gjm6(be_scratch_, out.J_g6);
     out.jdot_qdot6 = jdotQdot6(site_id, d, be_scratch_);
+}
+
+void FloatingBaseDynamics::fullDynamics(
+    const Eigen::VectorXd& q, const Eigen::VectorXd& v, Workspace& ws,
+    Eigen::MatrixXd& M, Eigen::VectorXd& bias,
+    Eigen::MatrixXd& H_bb_inv_H_bm) const
+{
+    const int nq = mj_->model->nq;
+    const int nv = mj_->model->nv;
+    if (q.size() != nq || v.size() != nv) {
+        throw std::runtime_error(
+            "fullDynamics: q must be nq and v must be nv for this model");
+    }
+
+    // Lazily created, like the rollout's own scratch, so constructing a
+    // Workspace is cheap and the mjData is only paid for if it is used.
+    if (!ws.impl_) {
+        ws.impl_ = std::make_unique<WorkspaceImpl>();
+        ws.impl_->data = mj_makeData(mj_->model);
+    }
+    mjData* d = ws.impl_->data;
+
+    for (int i = 0; i < nq; ++i) d->qpos[i] = q[i];
+    for (int i = 0; i < nv; ++i) d->qvel[i] = v[i];
+    mj_forward(mj_->model, d);
+
+    computeBaseElim(d, ws.impl_->be);
+
+    // Resize only when wrong, so a caller reusing its outputs allocates nothing
+    // after the first call -- the observer runs at the control rate.
+    if (M.rows() != nv || M.cols() != nv) M.resize(nv, nv);
+    M = ws.impl_->be.M;
+    if (bias.size() != nv) bias.resize(nv);
+    for (int i = 0; i < nv; ++i) bias[i] = d->qfrc_bias[i];
+    if (H_bb_inv_H_bm.rows() != 6 || H_bb_inv_H_bm.cols() != n_joints_) {
+        H_bb_inv_H_bm.resize(6, n_joints_);
+    }
+    H_bb_inv_H_bm = ws.impl_->be.H_bb_inv_H_bm;
 }
 
 void FloatingBaseDynamics::integrateStep(

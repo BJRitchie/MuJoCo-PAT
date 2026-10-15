@@ -77,7 +77,15 @@ fi
 
 # A trial measures microseconds, so anything else running on the box lands in the
 # numbers. Refuse rather than quietly produce a contaminated log.
-if pgrep -x arm_control_node >/dev/null 2>&1 || pgrep -x simulation_node >/dev/null 2>&1; then
+#
+# Matched on the command line, not with `pgrep -x`: the kernel truncates comm to
+# 15 characters and "arm_control_node" is 16, so it appears as
+# "arm_control_nod" and an exact-name match silently never fires. The predecessor
+# name, arm_nmpc_node, was 13 characters and fit, so the rename broke this guard
+# without any visible symptom -- which is the worst kind, because a guard that
+# never fires looks exactly like a box that is always clean. The bracket keeps
+# pgrep from matching its own command line.
+if pgrep -f '[a]rm_control_node' >/dev/null 2>&1 || pgrep -x simulation_node >/dev/null 2>&1; then
     echo "a sim or NMPC node is already running -- stop it first, or this trial" >&2
     echo "will share the CPU (and the topics) with it" >&2
     exit 1
@@ -278,9 +286,9 @@ FREQ_MEAN=0
 rm -f "$FREQ_FILE"
 
 sleep 3
-if pgrep -x arm_control_node >/dev/null 2>&1; then
+if pgrep -f '[a]rm_control_node' >/dev/null 2>&1; then
     echo "WARNING: nodes survived teardown; kill them before the next trial" >&2
-    pgrep -ax arm_control_node >&2
+    pgrep -af '[a]rm_control_node' >&2
 fi
 
 WINDOWS=$(grep -c 'ticks @' "$LOGFILE" 2>/dev/null || echo 0)

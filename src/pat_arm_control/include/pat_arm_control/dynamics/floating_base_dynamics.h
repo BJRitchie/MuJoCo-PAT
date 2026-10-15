@@ -152,6 +152,70 @@ public:
     void setDesiredAngAcc(double x, double y, double z) {
         desiredAngAcc[0] = x; desiredAngAcc[1] = y; desiredAngAcc[2] = z; }
 
+    /*! Full-system DOF count (6 base + arm joints), i.e. mjModel.nv. */
+    int numDof() const { return 6 + n_joints_; }
+
+    /*! Configuration size, i.e. mjModel.nq (7 + arm joints: the free joint
+     *  carries a quaternion). */
+    int numConfig() const { return 7 + n_joints_; }
+
+    /*! Per-thread workspace for fullDynamics() below.
+     *
+     *  A distinct type rather than a comment, because the requirement it
+     *  encodes is easy to overlook and expensive to get wrong. dynamicsAt() and
+     *  integrateStep() evaluate hypothetical states on MUTABLE MEMBERS
+     *  (mj_scratch_, be_scratch_) that the rollout reuses ~N times a tick, so
+     *  they cannot be called from two threads at once. mjModel, by contrast, is
+     *  read-only once loaded and safe to share. One Workspace per thread is
+     *  therefore all a second thread needs -- no second model, no second MJCF
+     *  parse, a few hundred kB of mjData rather than a duplicate of everything.
+     *
+     *  Sized on first use and reused thereafter, so steady-state calls do not
+     *  allocate. Must not be shared between threads, which is what deleting the
+     *  copy enforces.
+     */
+    //! Opaque bundle behind Workspace: this thread's mjData plus its own
+    //! BaseElim. Nested rather than free so that its definition in the .cpp has
+    //! member access to BaseElim, which stays protected.
+    struct WorkspaceImpl;
+
+    class Workspace {
+    public:
+        Workspace();
+        ~Workspace();
+        Workspace(const Workspace&)            = delete;
+        Workspace& operator=(const Workspace&) = delete;
+
+    private:
+        friend class FloatingBaseDynamics;
+        std::unique_ptr<WorkspaceImpl> impl_;
+    };
+
+    /*! The full-system dynamics at an arbitrary (q, v), which is what a
+     *  disturbance observer needs and what nothing else exposed.
+     *
+     *  Runs mj_forward on `ws`'s own mjData -- kinematics and inertia, no
+     *  contacts, no integration -- and never touches the live state or the
+     *  rollout's scratch, so it is safe to call from another thread provided
+     *  that thread owns `ws`.
+     *
+     *  @param q                nq, same layout as controlLaw's
+     *  @param v                nv
+     *  @param ws               this thread's workspace
+     *  @param M                out, nv x nv full mass matrix
+     *  @param bias             out, nv, MuJoCo's qfrc_bias. With gravity
+     *                          disabled this is exactly C(q,qdot) qdot
+     *  @param H_bb_inv_H_bm    out, 6 x n_joints, the cached Schur term a
+     *                          full-system estimate is reduced to joint space
+     *                          with
+     *
+     *  Outputs are resized only if they are the wrong size, so a caller that
+     *  reuses them allocates nothing after the first call.
+     */
+    void fullDynamics(const Eigen::VectorXd& q, const Eigen::VectorXd& v,
+                      Workspace& ws, Eigen::MatrixXd& M, Eigen::VectorXd& bias,
+                      Eigen::MatrixXd& H_bb_inv_H_bm) const;
+
 protected:
     /*! Subclass control law.
      *  @param q  configuration vector  (nq)

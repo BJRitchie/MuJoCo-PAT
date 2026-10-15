@@ -253,6 +253,48 @@
     rt_priority: 0
     lock_memory: false
 
+    # --- Disturbance observer --------------------------------------------- #
+    # Estimates the generalised force the model does not account for:
+    # unmodelled link inertia, air-bearing drag, contact reaction.
+    #
+    # "none" | "momentum". Off by default, and switching it on changes the
+    # torque command NOT AT ALL -- the estimate is published on
+    # /chaser/arm/<side>/disturbance for scoring and nothing consumes it.
+    # Feeding it to the control law is a separate change, because an unguarded
+    # estimate reaching the actuators makes things worse rather than better.
+    observer: "none"
+    # Observer rate [Hz]. Its own thread, so this is independent of control_hz.
+    # It must match the rate the thread actually runs at, which it does by
+    # construction here - the filter integrates, so a mismatch is a scale error
+    # on the estimate rather than just a timing detail.
+    observer.hz: 100.0
+    # Gain K per DOF [1/s]. The estimate reaches the true disturbance with time
+    # constant 1/K, so 20 is a 50 ms lag. Higher tracks contact sooner and
+    # passes more measurement noise through.
+    observer.gain: 20.0
+    # Separate gain for the 6 base rows; < 0 means use observer.gain for them
+    # too. Worth having because they are a different physical quantity (a base
+    # force in N against a joint torque in N*m) and they sit on the noisiest
+    # channel in the system, the odom-derived base velocity.
+    observer.gain_base: -1.0
+    # Clamp on |Mdot| entries [1/s]; 0 disables. Mdot is a divided difference,
+    # so a velocity glitch or a skipped period produces one enormous value and
+    # a matching spike in the estimate. Measured at 0.3% error against a
+    # configuration-space finite difference at operating speeds, so this is a
+    # guard against glitches rather than a correction for the method.
+    observer.mdot_clamp: 0.0
+    # Clamp on each estimate entry [N or N*m]; 0 disables. Bounds the state, and
+    # holds the integrator consistent with the clamped output so a transient
+    # cannot wind it up.
+    observer.estimate_clamp: 0.0
+    # The observer thread's realtime priority and cores. Same meaning as
+    # rt_priority / rt_cpus above, and the same reason for the default of 0.
+    # Give it DIFFERENT cores from the control thread, per arm: sharing a core
+    # is most of what having its own thread was meant to avoid. Set per node
+    # below, like rt_cpus, and left unset here for the empty-list reason given
+    # there.
+    rt_priority_observer: 0
+
 pat_arm_nmpc_left:
   ros__parameters:
     arm_side: "left"
@@ -263,6 +305,7 @@ pat_arm_nmpc_left:
     # the parameter at all and the node fails to construct; unset means the C++
     # default, an empty mask, which leaves placement to the kernel.
     # rt_cpus: [4, 5]      # one physical P-core's SMT pair
+    # rt_cpus_observer: [8, 9]   # a DIFFERENT pair from rt_cpus above
     ee_site_name: "ee_site_L"
     joint_names:  [joint2_L, joint3_L, joint5_L]
     owned_joints: [joint2_L, joint3_L, joint5_L]
@@ -279,6 +322,7 @@ pat_arm_nmpc_right:
   ros__parameters:
     arm_side: "right"
     # rt_cpus: [6, 7]      # see the left arm's note
+    # rt_cpus_observer: [10, 11]  # see the left arm's note
     ee_site_name: "ee_site_R"
     joint_names:  [joint2_R, joint3_R, joint5_R]
     owned_joints: [joint2_R, joint3_R, joint5_R]

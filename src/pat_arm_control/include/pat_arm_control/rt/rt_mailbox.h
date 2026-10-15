@@ -6,8 +6,8 @@
 
 namespace pat_arm_control {
 
-/*! Single-producer / single-consumer snapshot hand-off for a small trivially
- *  copyable value, where the consumer must never block.
+/*! Single-producer snapshot hand-off for a small trivially copyable value,
+ *  where no consumer may block.
  *
  *  The control loop's problem is not throughput, it is that it cannot afford to
  *  wait: a thread at SCHED_FIFO blocking on a lock held by a normal-priority
@@ -31,9 +31,15 @@ namespace pat_arm_control {
  *  standard seqlock construction (it is how the kernel's own `seqcount` works)
  *  and it relies on a torn read being discarded rather than never happening.
  *
- *  Both sides are allocation-free and syscall-free. Only ONE thread may call
- *  write() and only ONE may call read(); two producers would interleave their
- *  sequence bumps and could leave it permanently odd.
+ *  Both sides are allocation-free and syscall-free.
+ *
+ *  Only ONE thread may call write(): two producers would interleave their
+ *  sequence bumps and could leave `seq_` permanently odd, at which point every
+ *  reader fails forever. ANY NUMBER of threads may call read() concurrently --
+ *  it is const, keeps no state between calls, and each reader's retry loop is
+ *  independent, so readers neither see nor affect one another. That is relied
+ *  on: the observer thread reads the same joint and base mailboxes the control
+ *  thread reads, rather than being given duplicates of them.
  */
 template <typename T>
 class SeqlockMailbox {

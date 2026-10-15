@@ -16,6 +16,7 @@
 #include <sensor_msgs/msg/joint_state.hpp>
 
 #include "pat_arm_control/control/arm_nmpc.h"
+#include "pat_arm_control/observers/momentum_observer.h"
 #include "pat_arm_control/rt/rt_mailbox.h"
 
 /// One ArmNMPC instance per arm (run two node processes, left + right).
@@ -63,6 +64,52 @@ public:
     struct SetpointSnapshot {
         double x{0.0}, y{0.0};
         double quat[4]{1.0, 0.0, 0.0, 0.0};   //!< [w, x, y, z]
+    };
+
+    /*! The applied joint torque, model-joint order, for the observer.
+     *
+     *  Two of these rather than one, because no single source knows the whole
+     *  vector. A momentum observer runs on the full model, so it needs the
+     *  torque on EVERY model joint; this node commands only the joints it owns,
+     *  and the other arm's are commanded by the other node instance. Treating
+     *  the joints it does not own as zero would make the other arm's torque
+     *  look like a disturbance, which is precisely the signal being measured.
+     *
+     *  So: `own` comes straight from the control thread, exact and with no
+     *  round trip, and `ext` comes from a subscription to the shared
+     *  torque_command topic, which carries both arms name-matched. The observer
+     *  starts from `ext` and overwrites its own joints with `own`, so the
+     *  entries that can be exact are exact and only the other arm's carry a
+     *  period of transport lag.
+     *
+     *  It must be the APPLIED torque, not the planned one -- the controller
+     *  clamps per joint before publishing, and feeding the pre-clamp value
+     *  makes the clamped difference read as a disturbance. */
+    struct TauSnapshot {
+        double        tau[kMaxJoints]{};
+        std::uint32_t n{0};
+    };
+
+    /*! The observer's output: the disturbance estimate reduced to joint space,
+     *  model-joint order, plus the base rows it was reduced from.
+     *
+     *  The base wrench is carried because it is physically meaningful on its
+     *  own -- it is what drag and contact reaction produce on the platform --
+     *  and the reduction to joint space discards it. */
+    struct DisturbanceSnapshot {
+        double        d_joints[kMaxJoints]{};   //!< reduced, model-joint order
+        double        d_base[6]{};              //!< net external wrench on the base
+        std::uint32_t n{0};
+        bool          ready{false};             //!< false until the filter has history
+        // Diagnostics, carried here rather than read off the observer directly:
+        // the observer's counters are plain longs owned by its thread, so the
+        // 1 Hz report reading them would be a race. Published by the one thread
+        // that writes them, like StatsSnapshot.
+        long   steps{0};
+        long   no_state{0};      //!< steps that found no measurement to use
+        double max_mdot{0.0};
+        long   mdot_clamped{0};
+        long   est_clamped{0};
     };
 
     /*! What the tick produces, queued for a non-realtime thread to publish.
@@ -311,16 +358,87 @@ private:
      *  same control. */
     std::vector<long> rt_cpus_;
     void controlThread();
-    //! Restrict the calling thread to rt_cpus_. Returns 0 on success, an
-    //! errno-style code on failure, -1 if no affinity was asked for.
-    int  applyAffinity();
+    
+    //! Restrict the calling thread to `cpus`. Returns 0 on success, an
+    //! errno-style code on failure, -1 if no affinity was asked for. Takes the
+    //! set as an argument rather than reading rt_cpus_, so the observer thread
+    //! can be pinned to a different core than the control thread -- which is
+    //! most of the point of giving it its own.
+    int  applyAffinity(const std::vector<long>& cpus);
     std::atomic<int> affinity_result_{-1};
-    //! Request SCHED_FIFO for the calling thread. Returns 0 on success, else the
-    //! errno-style code, which the report turns into one log line.
-    int  applyRealtimePolicy();
+    //! Request SCHED_FIFO at `priority` for the calling thread. Returns 0 on
+    //! success, else the errno-style code, which the report turns into one log
+    //! line. Parameterised for the same reason as applyAffinity.
+    int  applyRealtimePolicy(int priority);
     std::atomic<int>  rt_result_{-1};      //!< -1 = not attempted yet
     std::atomic<int>  mlock_result_{-1};
     std::atomic<bool> rt_reported_{false}; //!< so the report says it once
+
+    // --- Disturbance observer (its own thread) ---------------------------- //
+    /*! Runs the momentum observer on its own period, on its own core, with its
+     *  own mjData.
+     *
+     *  Separate from the control thread rather than folded into the tick, which
+     *  would have been cheaper -- the tick already computes a mass matrix and a
+     *  bias at rollout node 0. They are separate because they fail differently:
+     *  the controller can miss a period and recover on the next one, while the
+     *  observer integrates, so a period it skips becomes a permanent offset in
+     *  its integral. Its own thread lets it hold cadence through a tick the
+     *  solver is having trouble with.
+     *
+     *  Nothing consumes the estimate yet. It is published for scoring and that
+     *  is all: feeding it into the control law is a separate, staged change,
+     *  because an unguarded estimate reaching the actuators makes things worse
+     *  rather than better. */
+    void observerThread();
+    /*! One observer step: read the mailboxes, evaluate the dynamics, update.
+     *  Returns false if no state was available yet and nothing was done. */
+    bool observerStep();
+
+    std::unique_ptr<pat_arm_control::MomentumObserver> observer_;
+    std::thread       obs_thread_;
+    std::atomic<bool> obs_running_{false};
+    long              obs_period_ns_{10000000};
+    int               obs_rt_priority_{0};
+    std::vector<long> obs_rt_cpus_;
+    std::atomic<int>  obs_affinity_result_{-1};
+    std::atomic<int>  obs_rt_result_{-1};
+    std::atomic<bool> obs_reported_{false};
+
+    /*! The observer thread's own dynamics workspace. The controller's rollout
+     *  evaluates hypothetical states on mutable members, so the two threads
+     *  cannot share that path; one Workspace each is what makes the model
+     *  itself shareable, instead of needing a second MJCF parse. */
+    pat_arm_control::FloatingBaseDynamics::Workspace obs_ws_;
+
+    //! Observer-thread-private buffers. Members for the same reason the control
+    //! thread's are: an Eigen temporary per step is an allocation per step.
+    Eigen::MatrixXd obs_M_, obs_R_;
+    Eigen::VectorXd obs_bias_, obs_tau_, obs_q_, obs_v_, obs_d_joints_;
+    JointSnapshot   obs_joints_{};
+    BaseSnapshot    obs_base_{};
+    TauSnapshot     obs_tau_own_{}, obs_tau_ext_{};
+    bool            obs_have_joints_{false}, obs_have_base_{false};
+    long            obs_steps_{0}, obs_no_state_{0};
+
+    //! Written by the control thread (its own joints) and by the torque_command
+    //! subscription (whatever a message carries); both read by the observer
+    //! thread. See TauSnapshot for why it takes two sources.
+    pat_arm_control::SeqlockMailbox<TauSnapshot>         tau_own_mail_;
+    pat_arm_control::SeqlockMailbox<TauSnapshot>         tau_ext_mail_;
+    //! The observer's output, read by the publisher and the report.
+    pat_arm_control::SeqlockMailbox<DisturbanceSnapshot> dist_mail_;
+
+    //! Accumulated across torque_command messages, like q_joints_/v_joints_: a
+    //! message need not carry every joint, so the running array is the thing
+    //! worth handing on. Touched only by that callback.
+    std::vector<double> tau_joints_;
+    void onTorqueCommand(sensor_msgs::msg::JointState::SharedPtr msg);
+    rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr torque_echo_sub_;
+    rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr    dist_pub_;
+    sensor_msgs::msg::JointState dist_msg_;
+    //! Publishes the latest estimate off the realtime thread, like drainOutputs.
+    void publishDisturbance();
 
     rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr state_sub_;
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;

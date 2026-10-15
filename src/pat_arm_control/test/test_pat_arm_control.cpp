@@ -213,6 +213,10 @@ public:
     using ArmNMPC::trust_region;
     using ArmNMPC::buildJointBoxBounds;
     using ArmNMPC::buildTorqueGeneralConstraint;
+    // The live-state path, so FullDynamics.AgreesWithTheLiveStatePath can
+    // compare the public Workspace query against the one a control tick uses.
+    using ArmNMPC::getDynamics;
+    using ArmNMPC::loadLiveState;
     using ArmNMPC::computeInertiaProducts;
     using ArmNMPC::finalizeJointTorques;
     using FloatingBaseDynamics::BaseElim;
@@ -2509,6 +2513,77 @@ TEST(RtMailbox, ConcurrentReadsAreNeverTorn)
     EXPECT_GT(reads, 0) << "the reader never once completed a read";
 }
 
+/*! Two independent readers on one mailbox.
+ *
+ *  The observer thread reads the same joint and base mailboxes the control
+ *  thread reads, rather than being handed duplicates, so this is a contract the
+ *  node depends on rather than a theoretical property. A seqlock supports it --
+ *  read() is const, holds no state between calls, and each reader's retry loop
+ *  is independent -- but the header used to forbid it, so it is worth a test
+ *  rather than a corrected comment alone.
+ *
+ *  What would break if readers did interfere: one reader's retry would consume
+ *  or reset state the other needed, showing up as tearing or as one reader
+ *  systematically starving. Both are checked.
+ */
+TEST(RtMailbox, TwoReadersBothSucceedAndNeitherTears)
+{
+    SeqlockMailbox<Payload> mail;
+    std::atomic<bool> stop{false};
+    Payload seed;
+    seed.fill(0);
+    mail.write(seed);
+
+    // Paced like the real producer rather than a tight loop, so each reader
+    // should land a fresh value nearly every attempt -- the question here is
+    // whether having TWO of them changes that.
+    std::thread writer([&] {
+        for (std::uint64_t x = 1; !stop.load(std::memory_order_relaxed); ++x) {
+            Payload in;
+            in.fill(x);
+            mail.write(in);
+            std::this_thread::sleep_for(std::chrono::microseconds(100));
+        }
+    });
+
+    struct Result { long reads = 0, torn = 0, missed = 0; };
+    Result r[2];
+
+    auto reader = [&](Result& out) {
+        const auto t0 = std::chrono::steady_clock::now();
+        while (std::chrono::steady_clock::now() - t0 < std::chrono::milliseconds(400)) {
+            Payload got;
+            if (mail.read(got)) {
+                ++out.reads;
+                if (!got.uniform()) ++out.torn;
+            } else {
+                ++out.missed;
+            }
+        }
+    };
+
+    std::thread a([&] { reader(r[0]); });
+    std::thread b([&] { reader(r[1]); });
+    a.join();
+    b.join();
+    stop.store(true, std::memory_order_relaxed);
+    writer.join();
+
+    for (int i = 0; i < 2; ++i) {
+        const double rate = 100.0 * static_cast<double>(r[i].reads) /
+                            std::max(r[i].reads + r[i].missed, 1L);
+        std::printf("[mailbox] reader %d: %ld reads, %ld torn, %ld gave way "
+                    "(%.2f%% succeeded)\n",
+                    i, r[i].reads, r[i].torn, r[i].missed, rate);
+        EXPECT_EQ(r[i].torn, 0) << "reader " << i << " observed a torn value";
+        EXPECT_GT(r[i].reads, 0) << "reader " << i << " never completed a read";
+        // Neither reader may be starved by the other's presence. Against a
+        // producer idle most of the period, a reader that interfered would show
+        // up here as a collapsed success rate.
+        EXPECT_GT(rate, 95.0) << "reader " << i << " was starved";
+    }
+}
+
 /*! Progress at the rate the node actually runs at. The hand-off is only useful
  *  if the control loop gets a fresh measurement essentially every tick: the
  *  no-tearing guarantee would be worthless if the loop paid for it by reading
@@ -2674,6 +2749,192 @@ TEST(RtRing, PushingDoesNotAllocate)
         allocs = scope.n();
     }
     EXPECT_EQ(allocs, 0);
+}
+
+// === FloatingBaseDynamics::fullDynamics ==================================== //
+// The query the observer thread runs on. Its whole reason for existing is that
+// dynamicsAt() and integrateStep() evaluate hypothetical states on mutable
+// members, so a second thread cannot use them; these tests check that the
+// Workspace form really does avoid that, because the alternative design (a
+// second FloatingBaseDynamics, i.e. a second MJCF parse and a second model) was
+// rejected on the strength of it.
+
+TEST(FullDynamics, AgreesWithTheLiveStatePath)
+{
+    ModelProbe c(kMjcf, liveParams());
+    const State s = referenceState(c.n_joints_);
+    const int nv = c.numDof();
+    ASSERT_EQ(nv, 6 + c.n_joints_);
+    ASSERT_EQ(c.numConfig(), 7 + c.n_joints_);
+
+    // The live path: load the state the way a control tick does, then read the
+    // base-eliminated dynamics off it.
+    c.loadLiveState(s.q, s.v);
+    Eigen::MatrixXd H_g_live;
+    Eigen::VectorXd Cv_live;
+    c.getDynamics(H_g_live, Cv_live);
+
+    // The Workspace path, at the same state.
+    FloatingBaseDynamics::Workspace ws;
+    Eigen::MatrixXd M, R;
+    Eigen::VectorXd bias;
+    c.fullDynamics(s.q, s.v, ws, M, bias, R);
+
+    ASSERT_EQ(M.rows(), nv);
+    ASSERT_EQ(M.cols(), nv);
+    ASSERT_EQ(bias.size(), nv);
+    ASSERT_EQ(R.rows(), 6);
+    ASSERT_EQ(R.cols(), c.n_joints_);
+
+    // The mass matrix must be symmetric and positive definite, or nothing
+    // downstream of it means anything.
+    EXPECT_LT((M - M.transpose()).cwiseAbs().maxCoeff(), 1e-9);
+    EXPECT_GT(M.ldlt().vectorD().minCoeff(), 0.0);
+
+    // Reconstruct the reduced quantities from the full ones and check they
+    // match what the live path produced. This is the real equivalence claim:
+    // H_g = H_mm - H_bm^T H_bb^-1 H_bm, and Cv = c_m - H_bm^T H_bb^-1 c_b.
+    const Eigen::MatrixXd H_bm = M.topRightCorner(6, c.n_joints_);
+    const Eigen::MatrixXd H_g_rebuilt =
+        M.bottomRightCorner(c.n_joints_, c.n_joints_) - H_bm.transpose() * R;
+    const Eigen::VectorXd Cv_rebuilt =
+        bias.tail(c.n_joints_) - R.transpose() * bias.head(6);
+
+    EXPECT_LT((H_g_rebuilt - H_g_live).cwiseAbs().maxCoeff(), 1e-9)
+        << "the full mass matrix does not reduce to the live H_g";
+    EXPECT_LT((Cv_rebuilt - Cv_live).cwiseAbs().maxCoeff(), 1e-9)
+        << "qfrc_bias does not reduce to the live Cv_joints";
+}
+
+TEST(FullDynamics, DoesNotDisturbTheLiveStateOrTheRollout)
+{
+    // The observer thread must not change what the next control tick computes.
+    //
+    // Compared against a SECOND controller rather than against this one's own
+    // previous tick: the NMPC warm-starts, so two identical computeControl
+    // calls legitimately differ by a long way (0.19 N*m here), and asserting
+    // they match would be testing the warm start, not the interference.
+    auto drive = [](bool interleave) {
+        ModelProbe c(kMjcf, liveParams());
+        const State s = referenceState(c.n_joints_);
+        c.setDesiredPos(0.30, 0.25, 0.0);
+        c.computeControl(s.q, s.v);          // establishes the warm start
+
+        if (interleave) {
+            // Evaluate somewhere else entirely, repeatedly, exactly as the
+            // observer thread would between two control ticks.
+            FloatingBaseDynamics::Workspace ws;
+            Eigen::MatrixXd M, R;
+            Eigen::VectorXd bias;
+            Eigen::VectorXd q2 = s.q, v2 = s.v;
+            for (int i = 0; i < 20; ++i) {
+                q2(7) += 0.01;
+                v2(6) = 0.3;
+                c.fullDynamics(q2, v2, ws, M, bias, R);
+            }
+        }
+        return c.computeControl(s.q, s.v);   // the tick that must be unaffected
+    };
+
+    const Eigen::VectorXd clean = drive(false);
+    const Eigen::VectorXd interleaved = drive(true);
+    EXPECT_LT((interleaved - clean).cwiseAbs().maxCoeff(), 1e-12)
+        << "fullDynamics perturbed the controller's own state\nclean       "
+        << clean.transpose() << "\ninterleaved " << interleaved.transpose();
+}
+
+TEST(FullDynamics, TwoThreadsWithSeparateWorkspacesAgreeWithSerial)
+{
+    // The claim that justifies sharing one FloatingBaseDynamics between the
+    // control thread and the observer thread. mjModel is read-only once loaded;
+    // what must not be shared is the mjData, and a Workspace is exactly that.
+    ModelProbe c(kMjcf, liveParams());
+    const State s = referenceState(c.n_joints_);
+    const int nv = c.numDof();
+
+    // Two different states, so a workspace mix-up produces a wrong answer
+    // rather than coincidentally the right one.
+    Eigen::VectorXd qA = s.q, vA = s.v;
+    Eigen::VectorXd qB = s.q, vB = s.v;
+    qB(7) += 0.25;
+    vB(6) = -0.4;
+    vB(7) = 0.2;
+
+    // Serial references.
+    Eigen::MatrixXd MA_ref, RA_ref, MB_ref, RB_ref;
+    Eigen::VectorXd bA_ref, bB_ref;
+    {
+        FloatingBaseDynamics::Workspace ws;
+        c.fullDynamics(qA, vA, ws, MA_ref, bA_ref, RA_ref);
+        c.fullDynamics(qB, vB, ws, MB_ref, bB_ref, RB_ref);
+    }
+    ASSERT_GT((MA_ref - MB_ref).cwiseAbs().maxCoeff(), 1e-6)
+        << "the two states must differ, or this test cannot detect a mix-up";
+
+    // Now concurrently, each thread with its own Workspace, hammering the
+    // shared model for long enough to interleave.
+    constexpr int kIters = 400;
+    std::atomic<long> mismatches{0};
+    auto worker = [&](const Eigen::VectorXd& q, const Eigen::VectorXd& v,
+                      const Eigen::MatrixXd& M_ref, const Eigen::VectorXd& b_ref,
+                      const Eigen::MatrixXd& R_ref) {
+        FloatingBaseDynamics::Workspace ws;
+        Eigen::MatrixXd M, R;
+        Eigen::VectorXd bias;
+        for (int i = 0; i < kIters; ++i) {
+            c.fullDynamics(q, v, ws, M, bias, R);
+            if ((M - M_ref).cwiseAbs().maxCoeff() > 1e-12 ||
+                (bias - b_ref).cwiseAbs().maxCoeff() > 1e-12 ||
+                (R - R_ref).cwiseAbs().maxCoeff() > 1e-12) {
+                mismatches.fetch_add(1, std::memory_order_relaxed);
+            }
+        }
+    };
+
+    std::thread ta([&] { worker(qA, vA, MA_ref, bA_ref, RA_ref); });
+    std::thread tb([&] { worker(qB, vB, MB_ref, bB_ref, RB_ref); });
+    ta.join();
+    tb.join();
+
+    std::printf("[fulldyn] %d concurrent evaluations per thread, nv=%d, "
+                "%ld mismatches\n", kIters, nv, mismatches.load());
+    EXPECT_EQ(mismatches.load(), 0)
+        << "concurrent fullDynamics with separate workspaces diverged from "
+           "serial -- something mutable is still shared";
+}
+
+TEST(FullDynamics, SteadyStateCallsDoNotAllocate)
+{
+    ModelProbe c(kMjcf, liveParams());
+    const State s = referenceState(c.n_joints_);
+
+    FloatingBaseDynamics::Workspace ws;
+    Eigen::MatrixXd M, R;
+    Eigen::VectorXd bias;
+    // First call creates the mjData and sizes the outputs; that one is allowed
+    // to allocate, and the observer thread makes it during bring-up.
+    c.fullDynamics(s.q, s.v, ws, M, bias, R);
+
+    long allocs = 0;
+    {
+        AllocScope scope;
+        for (int i = 0; i < 20; ++i) c.fullDynamics(s.q, s.v, ws, M, bias, R);
+        allocs = scope.n();
+    }
+    std::printf("[alloc] fullDynamics steady state %.2f per call\n",
+                static_cast<double>(allocs) / 20.0);
+    EXPECT_EQ(allocs, 0);
+}
+
+TEST(FullDynamics, RejectsAMisSizedState)
+{
+    ModelProbe c(kMjcf, liveParams());
+    FloatingBaseDynamics::Workspace ws;
+    Eigen::MatrixXd M, R;
+    Eigen::VectorXd bias;
+    const Eigen::VectorXd q_bad = Eigen::VectorXd::Zero(3);
+    const Eigen::VectorXd v_ok = Eigen::VectorXd::Zero(c.numDof());
+    EXPECT_THROW(c.fullDynamics(q_bad, v_ok, ws, M, bias, R), std::runtime_error);
 }
 
 /*! The observer is destined for its own realtime thread, so it is held to the

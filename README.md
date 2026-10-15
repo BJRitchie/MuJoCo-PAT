@@ -510,6 +510,64 @@ what destabilised it was base drift making the world-frame setpoint unreachable.
 The value here is model error and contact *detection*, not impulse rejection —
 no observer compensates an impulse.
 
+#### Running it
+
+`observer: "momentum"` in `nmpc.yaml` starts it on its own thread, at
+`observer.hz`, pinned by `rt_cpus_observer`. It publishes
+`/chaser/arm/<side>/disturbance` — this arm's joint rows plus `base_fx`,
+`base_fy`, `base_tz` — and **nothing consumes it**, so switching it on does not
+change the torque command at all. That is what makes it safe to leave enabled
+while being tuned.
+
+Give it different cores from the control thread; sharing one is most of what
+having its own thread was for. With `rt_priority: 80` / `rt_priority_observer:
+75` and separate `rt_cpus`, `ps -L -o tid,cls,rtprio,psr` shows the two as
+`FF 80` on one core and `FF 75` on another, with the DDS and executor threads
+still `TS`. Control above observer, so a tick preempts an observer step.
+
+It is a separate thread rather than part of the tick — which would have been
+cheaper, since the tick already computes a mass matrix at rollout node 0 —
+because the two fail differently. The controller can miss a period and recover
+on the next one; the observer integrates, so a period it skips is a permanent
+offset in its integral. Its own thread lets it hold cadence through a tick the
+solver is struggling with. `no_state` in its 1 Hz report is therefore a
+correctness signal, not just a dropped sample.
+
+It shares one `FloatingBaseDynamics` with the control thread rather than loading
+a second model: `mjModel` is read-only once loaded, and what must not be shared
+is the `mjData`. `fullDynamics(q, v, ws, …)` takes a per-thread `Workspace` for
+exactly that, which is a distinct type precisely so the requirement cannot be
+overlooked — `dynamicsAt()` and `integrateStep()` use mutable members the
+rollout reuses, so they are *not* safe to call from a second thread.
+
+**`observer.hz` must not exceed the rate `/chaser/odom` and
+`/chaser/arm/joint_states` arrive at** (100 Hz as shipped). The estimator
+differences consecutive mass matrices, so stepping faster than the data changes
+makes `Ṁ` zero on the steps in between and the `Cᵀq̇` term wrong — more steps,
+worse estimate.
+
+#### Measured against an injected wrench
+
+`pat_simulation`'s `disturbance.chaser` applies a known world-frame force, so
+the estimate can be scored rather than eyeballed. A 1.0 N step on the free base,
+observer at 100 Hz, gain 20:
+
+| when | estimated `base_fx` |
+|---|---|
+| peak | **0.9996 N** |
+| first ~2 s after the step | 0.998–0.996 N |
+| later, base at ~0.2 m/s | 0.87 → 0.67 N |
+
+So **0.1% of the injected force in the regime that matters**, decaying as the
+undriven base runs away. Sweeping the magnitude shows the same thing from the
+other side — 0.25 N recovers to 99%, 0.5 N to 88%, 1.0 N to 72% when sampled at
+a fixed late time, because a larger force means a faster base by then, not
+because the estimator scales wrongly. It is the velocity-dependent `Ṁ`
+divided-difference error, the same one the unit tests bound, and the runaway
+base is already the documented confound for every free-base run past ~15 s.
+The other five rows stayed near zero throughout, so it attributed the force to
+the right DOF.
+
 ### Settled by measurement — don't redo these
 
 - **Hard `lb == ub` bounds are deliberately NOT declared as equalities.** The

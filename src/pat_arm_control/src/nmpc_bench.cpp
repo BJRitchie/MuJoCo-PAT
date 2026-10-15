@@ -91,6 +91,13 @@ const std::set<std::string> kNotOurs = {
     "arm_side", "joint_names", "model_joint_names", "model_tau_max",
     "rt_priority", "lock_memory", "rt_cpus",
     "trace_file", "trace_capacity", "pub_rate_hz", "mjcf_path",
+    // The disturbance observer. It runs on its own thread in the node and its
+    // estimate does not reach the control law, so it cannot affect the tick
+    // this measures. If it is ever fed into the command, these stop being "not
+    // ours" and the bench has to model it.
+    "observer", "observer.hz", "observer.gain", "observer.gain_base",
+    "observer.mdot_clamp", "observer.estimate_clamp",
+    "rt_priority_observer", "rt_cpus_observer",
 };
 
 double asDouble(const Flat& f, const std::string& k, double def, std::set<std::string>& used) {

@@ -417,8 +417,13 @@ void ArmNMPCNode::onEeSetpoint(geometry_msgs::msg::PoseStamped::SharedPtr msg) {
 }
 
 ArmNMPCNode::~ArmNMPCNode() {
-    // Stop and join the control thread FIRST: it touches the controller, the
+    // Stop and join both realtime threads FIRST: they touch the controller, the
     // mailboxes and the trace buffer, all of which are about to be destroyed.
+    // The observer goes first because it reads the controller (fullDynamics)
+    // while the control thread only writes its own mailbox -- stopping the
+    // reader before the thing it reads is the order that cannot race.
+    obs_running_.store(false, std::memory_order_release);
+    if (obs_thread_.joinable()) obs_thread_.join();
     ctrl_running_.store(false, std::memory_order_release);
     if (ctrl_thread_.joinable()) ctrl_thread_.join();
 
@@ -584,6 +589,21 @@ void ArmNMPCNode::controlLoop() {
         torque_pub_->publish(torque_msg_);
     }
 
+    // Hand the observer what was actually applied, after the non-finite guard
+    // and after the controller's own per-joint clamping -- the planned torque
+    // would make the clamped difference read as a disturbance. Indexed by this
+    // node's owned joints, which is how observerStep reads it back. A mailbox
+    // write is a few stores; it does not reach the allocator or a lock.
+    if (observer_) {
+        TauSnapshot s;
+        s.n = static_cast<std::uint32_t>(
+            std::min(joint_names_.size(), static_cast<std::size_t>(kMaxJoints)));
+        for (std::uint32_t k = 0; k < s.n; ++k) {
+            s.tau[k] = tau(static_cast<Eigen::Index>(owned_model_idx_[k]));
+        }
+        tau_own_mail_.write(s);
+    }
+
     // Time the whole callback, not just computeControl: state assembly, both
     // publishes and the torque copy are all on the control thread and all count
     // against the period. Recorded here rather than in a ScopedTimer because the
@@ -652,21 +672,104 @@ void ArmNMPCNode::start() {
     }
     ctrl_running_.store(true, std::memory_order_release);
     ctrl_thread_ = std::thread(&ArmNMPCNode::controlThread, this);
+
+    // --- Disturbance observer ------------------------------------------- //
+    // Off by default. Its estimate is published for scoring and nothing
+    // consumes it, so switching it on changes the torque command not at all --
+    // which is what makes it safe to leave in a running configuration while it
+    // is being tuned.
+    const std::string obs_type = declare_parameter<std::string>("observer", "none");
+    const double obs_hz = declare_parameter<double>("observer.hz", 100.0);
+    const double obs_gain = declare_parameter<double>("observer.gain", 20.0);
+    const double obs_gain_base = declare_parameter<double>("observer.gain_base", -1.0);
+    const double obs_mdot_clamp = declare_parameter<double>("observer.mdot_clamp", 0.0);
+    const double obs_est_clamp = declare_parameter<double>("observer.estimate_clamp", 0.0);
+    obs_rt_priority_ = declare_parameter<int>("rt_priority_observer", 0);
+    obs_rt_cpus_ = declare_parameter<std::vector<long>>("rt_cpus_observer",
+                                                        std::vector<long>{});
+
+    if (obs_type == "momentum") {
+        if (!(obs_hz > 0.0)) {
+            throw std::runtime_error("pat_arm_nmpc: 'observer.hz' must be positive");
+        }
+        const int n = static_cast<int>(model_joint_names_.size());
+        pat_arm_control::MomentumObserverParams op;
+        op.nv = 6 + n;
+        op.n_joints = n;
+        op.dt = 1.0 / obs_hz;
+        // One gain for the joint rows and, optionally, a different one for the
+        // base. They are different physical quantities -- a base force in N
+        // against a joint torque in N*m -- and the base rows sit on top of the
+        // noisiest channel in the system (odom-derived base velocity), so being
+        // able to slow them down independently is worth the extra parameter.
+        op.gain = Eigen::VectorXd::Constant(op.nv, obs_gain);
+        if (obs_gain_base >= 0.0) op.gain.head(6).setConstant(obs_gain_base);
+        op.mdot_clamp = obs_mdot_clamp;
+        op.estimate_clamp = obs_est_clamp;
+        observer_ = std::make_unique<pat_arm_control::MomentumObserver>(op);
+
+        // Size every observer-thread buffer here, so the thread itself never
+        // reaches the allocator. fullDynamics sizes its own outputs on first
+        // call; these are the ones it does not own.
+        obs_q_.setZero(7 + n);
+        obs_v_.setZero(6 + n);
+        obs_tau_.setZero(6 + n);
+        obs_d_joints_.setZero(n);
+        obs_M_.setZero(6 + n, 6 + n);
+        obs_bias_.setZero(6 + n);
+        obs_R_.setZero(6, n);
+        tau_joints_.assign(model_joint_names_.size(), 0.0);
+        obs_period_ns_ = static_cast<long>(1e9 / obs_hz);
+
+        // The shared torque_command topic, for the joints this node does not
+        // own -- see TauSnapshot. Subscribing to a topic this node also
+        // publishes is deliberate: it is the only place the other arm's applied
+        // torque exists, and a momentum observer on the full model needs it.
+        torque_echo_sub_ = create_subscription<sensor_msgs::msg::JointState>(
+            "/chaser/arm/torque_command", rclcpp::QoS(rclcpp::KeepLast(10)).reliable(),
+            std::bind(&ArmNMPCNode::onTorqueCommand, this, std::placeholders::_1));
+
+        dist_pub_ = create_publisher<sensor_msgs::msg::JointState>(
+            "/chaser/arm/" + arm_side_ + "/disturbance",
+            rclcpp::QoS(rclcpp::KeepLast(10)).reliable());
+            
+        // This arm's joint rows, then the three planar base rows. The base
+        // wrench is published because it is what drag and contact reaction
+        // actually produce on the platform, and the reduction to joint space
+        // discards it -- scoring the observer against an injected wrench needs
+        // it. Named, so the vector describes itself.
+        dist_msg_.name = joint_names_;
+        dist_msg_.name.push_back("base_fx");
+        dist_msg_.name.push_back("base_fy");
+        dist_msg_.name.push_back("base_tz");
+        dist_msg_.effort.assign(dist_msg_.name.size(), 0.0);
+
+        obs_running_.store(true, std::memory_order_release);
+        obs_thread_ = std::thread(&ArmNMPCNode::observerThread, this);
+        RCLCPP_INFO(get_logger(),
+                    "pat_arm_nmpc[%s]: momentum observer at %.0f Hz, gain %.1f "
+                    "(base %.1f), estimate NOT fed to the control law",
+                    arm_side_.c_str(), obs_hz, obs_gain,
+                    obs_gain_base >= 0.0 ? obs_gain_base : obs_gain);
+    } else if (obs_type != "none") {
+        throw std::runtime_error("pat_arm_nmpc: unknown 'observer' type '" +
+                                 obs_type + "' (expected none or momentum)");
+    }
 }
 
-int ArmNMPCNode::applyRealtimePolicy() {
-    if (rt_priority_ <= 0) return -1;         // not requested
+int ArmNMPCNode::applyRealtimePolicy(int priority) {
+    if (priority <= 0) return -1;             // not requested
     sched_param sp{};
-    sp.sched_priority = rt_priority_;
+    sp.sched_priority = priority;
     // pthread_setschedparam returns the error rather than setting errno.
     return pthread_setschedparam(pthread_self(), SCHED_FIFO, &sp);
 }
 
-int ArmNMPCNode::applyAffinity() {
-    if (rt_cpus_.empty()) return -1;          // not requested
+int ArmNMPCNode::applyAffinity(const std::vector<long>& cpus) {
+    if (cpus.empty()) return -1;              // not requested
     cpu_set_t set;
     CPU_ZERO(&set);
-    for (const long cpu : rt_cpus_) {
+    for (const long cpu : cpus) {
         if (cpu >= 0 && cpu < CPU_SETSIZE) CPU_SET(static_cast<int>(cpu), &set);
     }
     if (CPU_COUNT(&set) == 0) return EINVAL;   // every entry was out of range
@@ -679,8 +782,8 @@ void ArmNMPCNode::controlThread() {
     // thread can use, and the realtime scheduler respects an affinity mask but
     // will not choose a fast core on its own. The results are latched for the
     // report, since this thread does no logging.
-    affinity_result_.store(applyAffinity(), std::memory_order_relaxed);
-    rt_result_.store(applyRealtimePolicy(), std::memory_order_relaxed);
+    affinity_result_.store(applyAffinity(rt_cpus_), std::memory_order_relaxed);
+    rt_result_.store(applyRealtimePolicy(rt_priority_), std::memory_order_relaxed);
 
     // Advance `next` by exactly one period. Written out rather than using
     // std::chrono so the deadline stays the timespec clock_nanosleep wants.
@@ -727,6 +830,170 @@ void ArmNMPCNode::controlThread() {
     }
 }
 
+bool ArmNMPCNode::observerStep() {
+    // Same hand-off the control thread uses, read independently: a seqlock
+    // supports any number of readers, each retrying on its own, so the observer
+    // reads the SAME joint and base mailboxes rather than being given copies.
+    // A read that loses its race leaves the retained snapshot in place, and the
+    // step still runs on it -- one period of staleness, not a skipped step,
+    // because a skipped step is a permanent offset in an integral.
+    if (joint_mail_.read(obs_joints_)) obs_have_joints_ = true;
+    if (base_mail_.read(obs_base_))    obs_have_base_   = true;
+    if (!obs_have_joints_ || !obs_have_base_) {
+        ++obs_no_state_;
+        return false;
+    }
+    tau_own_mail_.read(obs_tau_own_);
+    tau_ext_mail_.read(obs_tau_ext_);
+
+    const int n = static_cast<int>(model_joint_names_.size());
+    const int nv = 6 + n;
+
+    // The free-floating base state, assembled exactly as controlLoop does it:
+    // planar x/y and a yaw-only quaternion, the rest identically zero.
+    obs_q_(0) = obs_base_.x;
+    obs_q_(1) = obs_base_.y;
+    obs_q_(2) = 0.0;
+    obs_q_(3) = std::cos(obs_base_.yaw / 2.0);
+    obs_q_(4) = 0.0;
+    obs_q_(5) = 0.0;
+    obs_q_(6) = std::sin(obs_base_.yaw / 2.0);
+    obs_v_(0) = obs_base_.vx;
+    obs_v_(1) = obs_base_.vy;
+    obs_v_(2) = 0.0;
+    obs_v_(3) = 0.0;
+    obs_v_(4) = 0.0;
+    obs_v_(5) = obs_base_.omega;
+    for (int i = 0; i < n; ++i) {
+        obs_q_(7 + i) = obs_joints_.q[static_cast<std::size_t>(i)];
+        obs_v_(6 + i) = obs_joints_.v[static_cast<std::size_t>(i)];
+    }
+
+    // The applied torque, base rows zero because the base is unactuated. Start
+    // from the topic, which covers every joint including the other arm's, then
+    // overwrite the joints this node owns with the exact value the control
+    // thread applied -- no DDS round trip on the entries that need not have one.
+    obs_tau_.setZero();
+    for (int i = 0; i < n && static_cast<std::uint32_t>(i) < obs_tau_ext_.n; ++i) {
+        obs_tau_(6 + i) = obs_tau_ext_.tau[static_cast<std::size_t>(i)];
+    }
+    for (std::size_t k = 0; k < owned_model_idx_.size(); ++k) {
+        if (static_cast<std::uint32_t>(k) >= obs_tau_own_.n) break;
+        obs_tau_(6 + static_cast<Eigen::Index>(owned_model_idx_[k])) =
+            obs_tau_own_.tau[k];
+    }
+
+    // The full-system dynamics on this thread's own workspace, so nothing is
+    // shared with the control thread's rollout but the read-only model.
+    controller_->fullDynamics(obs_q_, obs_v_, obs_ws_, obs_M_, obs_bias_, obs_R_);
+    observer_->update(obs_M_, obs_bias_, obs_v_, obs_tau_);
+    observer_->reduceToJoints(obs_R_, obs_d_joints_);
+
+    DisturbanceSnapshot out;
+    out.n = static_cast<std::uint32_t>(n);
+    out.ready = observer_->ready();
+    for (int i = 0; i < n && i < static_cast<int>(kMaxJoints); ++i) {
+        out.d_joints[static_cast<std::size_t>(i)] = obs_d_joints_(i);
+    }
+    const Eigen::VectorXd& r = observer_->estimate();
+    for (int i = 0; i < 6; ++i) out.d_base[static_cast<std::size_t>(i)] = r(i);
+
+    ++obs_steps_;
+    out.steps        = obs_steps_;
+    out.no_state     = obs_no_state_;
+    out.max_mdot     = observer_->maxMdot();
+    out.mdot_clamped = observer_->mdotClamped();
+    out.est_clamped  = observer_->estimateClamped();
+    dist_mail_.write(out);
+
+    (void)nv;
+    return true;
+}
+
+void ArmNMPCNode::observerThread() {
+    // Affinity then policy, from inside the thread, same order and for the same
+    // reasons as controlThread: the scheduler respects a mask but will not pick
+    // a fast core on its own.
+    obs_affinity_result_.store(applyAffinity(obs_rt_cpus_), std::memory_order_relaxed);
+    obs_rt_result_.store(applyRealtimePolicy(obs_rt_priority_),
+                         std::memory_order_relaxed);
+
+    const auto addPeriod = [this](timespec& t) {
+        t.tv_nsec += obs_period_ns_;
+        while (t.tv_nsec >= 1000000000L) {
+            t.tv_nsec -= 1000000000L;
+            ++t.tv_sec;
+        }
+    };
+    const auto isBefore = [](const timespec& a, const timespec& b) {
+        return a.tv_sec < b.tv_sec ||
+               (a.tv_sec == b.tv_sec && a.tv_nsec < b.tv_nsec);
+    };
+
+    timespec next{};
+    clock_gettime(CLOCK_MONOTONIC, &next);
+    while (obs_running_.load(std::memory_order_acquire)) {
+        addPeriod(next);
+        // Resync before sleeping, never after the step: checking afterwards is
+        // always true -- the deadline just woken for is by definition past --
+        // and steps the schedule twice per iteration, halving the rate. That
+        // exact bug cost the control thread half its rate once already.
+        timespec now{};
+        clock_gettime(CLOCK_MONOTONIC, &now);
+        while (isBefore(next, now)) addPeriod(next);
+
+        while (clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &next, nullptr)
+               == EINTR) {
+        }
+        if (!obs_running_.load(std::memory_order_acquire)) break;
+
+        // A throw here must not take the thread down: the observer is an
+        // accessory, and losing it should degrade the estimate rather than the
+        // node. The estimate simply stops updating and the report says so.
+        try {
+            observerStep();
+        } catch (const std::exception&) {
+            observer_->reset();
+            obs_have_joints_ = false;
+            obs_have_base_   = false;
+        }
+    }
+}
+
+void ArmNMPCNode::publishDisturbance() {
+    if (!dist_pub_) return;
+    DisturbanceSnapshot d;
+    if (!dist_mail_.read(d) || !d.ready) return;
+    for (std::size_t k = 0; k < joint_names_.size(); ++k) {
+        const std::size_t idx = owned_model_idx_[k];
+        dist_msg_.effort[k] = idx < kMaxJoints ? d.d_joints[idx] : 0.0;
+    }
+    // The planar base rows, in the order the names declare: x force, y force,
+    // yaw torque. Rows 2/3/4 are z force and x/y torque, which the table's
+    // slide and hinge joints absorb and which therefore measure nothing.
+    const std::size_t nj = joint_names_.size();
+    dist_msg_.effort[nj + 0] = d.d_base[0];
+    dist_msg_.effort[nj + 1] = d.d_base[1];
+    dist_msg_.effort[nj + 2] = d.d_base[5];
+    dist_msg_.header.stamp = get_clock()->now();
+    dist_pub_->publish(dist_msg_);
+}
+
+void ArmNMPCNode::onTorqueCommand(sensor_msgs::msg::JointState::SharedPtr msg) {
+    // The shared torque_command topic carries every arm's effort, name-matched,
+    // so this is how the observer learns what the OTHER node instance applied.
+    // It sees this node's own commands come back too; observerStep overwrites
+    // those with the exact values rather than using the round trip.
+    if (msg->effort.empty()) return;
+    applyNamedValues(msg, msg->effort, model_joint_names_, tau_joints_);
+
+    TauSnapshot s;
+    s.n = static_cast<std::uint32_t>(
+        std::min(tau_joints_.size(), static_cast<std::size_t>(kMaxJoints)));
+    for (std::uint32_t i = 0; i < s.n; ++i) s.tau[i] = tau_joints_[i];
+    tau_ext_mail_.write(s);
+}
+
 void ArmNMPCNode::drainOutputs() {
     // The measured EE pose only, and only because it is telemetry: delaying it by
     // a drain interval costs nothing, where delaying the torque command costs
@@ -748,6 +1015,10 @@ void ArmNMPCNode::drainOutputs() {
         pat_arm_control::ScopedTimer timer(pub_eepose_);
         ee_pose_pub_->publish(ps);
     }
+    // The observer's estimate rides the same drain: it is telemetry too, and
+    // publishing it from the observer thread would put rclcpp's allocator and
+    // locks on a realtime path for no benefit.
+    publishDisturbance();
 }
 
 void ArmNMPCNode::recordWake(std::chrono::steady_clock::time_point wake) {
@@ -815,6 +1086,64 @@ void ArmNMPCNode::reportDiagnostics() {
                 "pat_arm_nmpc[%s]: mlockall failed (%s) — a page fault can still "
                 "stall a tick. Needs ulimits.memlock",
                 arm_side_.c_str(), std::strerror(ml));
+        }
+    }
+
+    // The observer thread's own placement, reported once and separately: the
+    // two threads are only useful on DIFFERENT cores, so saying which each got
+    // is what makes a misconfiguration visible rather than merely slow.
+    if (observer_ && !obs_reported_.exchange(true, std::memory_order_acq_rel)) {
+        const int rt = obs_rt_result_.load(std::memory_order_relaxed);
+        if (rt == 0) {
+            RCLCPP_INFO(get_logger(),
+                "pat_arm_nmpc[%s]: observer thread at SCHED_FIFO priority %d",
+                arm_side_.c_str(), obs_rt_priority_);
+        } else if (rt > 0) {
+            RCLCPP_WARN(get_logger(),
+                "pat_arm_nmpc[%s]: observer SCHED_FIFO priority %d refused (%s) — "
+                "running at normal priority",
+                arm_side_.c_str(), obs_rt_priority_, std::strerror(rt));
+        }
+        const int aff = obs_affinity_result_.load(std::memory_order_relaxed);
+        if (aff == 0) {
+            std::string cpus;
+            for (const long c : obs_rt_cpus_) cpus += std::to_string(c) + " ";
+            RCLCPP_INFO(get_logger(),
+                        "pat_arm_nmpc[%s]: observer thread pinned to CPUs %s",
+                        arm_side_.c_str(), cpus.c_str());
+        } else if (aff > 0) {
+            RCLCPP_WARN(get_logger(),
+                "pat_arm_nmpc[%s]: observer CPU affinity failed (%s)",
+                arm_side_.c_str(), std::strerror(aff));
+        } else if (!obs_rt_cpus_.empty() || !rt_cpus_.empty()) {
+            RCLCPP_WARN(get_logger(),
+                "pat_arm_nmpc[%s]: observer has no rt_cpus_observer — it may share "
+                "a core with the control thread, which is most of what having its "
+                "own thread was for",
+                arm_side_.c_str());
+        }
+    }
+
+    // The observer's own window. Separate from the control report because they
+    // run on separate clocks: a step the observer skipped is a permanent offset
+    // in its integral, so `no_state` rising is a correctness problem and not
+    // merely a dropped sample.
+    if (observer_) {
+        DisturbanceSnapshot d;
+        if (dist_mail_.read(d)) {
+            RCLCPP_INFO(get_logger(),
+                "pat_arm_nmpc[%s] observer: %ld steps (%ld without state), "
+                "d_base [%.3f %.3f %.3f] d_joints[0] %.3f | max|Mdot| %.1f, "
+                "clamped Mdot %ld est %ld%s",
+                arm_side_.c_str(), d.steps, d.no_state,
+                d.d_base[0], d.d_base[1], d.d_base[5],
+                d.n > 0 ? d.d_joints[0] : 0.0,
+                d.max_mdot, d.mdot_clamped, d.est_clamped,
+                d.ready ? "" : " [not yet converged]");
+        } else {
+            RCLCPP_WARN(get_logger(),
+                "pat_arm_nmpc[%s] observer: no estimate published yet",
+                arm_side_.c_str());
         }
     }
 
