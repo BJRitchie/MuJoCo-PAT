@@ -150,6 +150,13 @@ private:
     rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr truth_pub_;
     bool publish_truth_{false};
     void publishTruth(const rclcpp::Time& t);
+
+    //! The clock the contact-pair log is throttled against. Steady, NOT the
+    //! node clock: launch files default use_sim_time:=true and nothing in this
+    //! workspace publishes /clock, so get_clock()->now() is frozen at zero and
+    //! a throttle gated on it fires once and is then silent for the rest of the
+    //! run. Rate-limiting output is a wall-clock concern either way.
+    rclcpp::Clock log_clock_{RCL_STEADY_TIME};
 };
 
 } // end namespace simulation_node

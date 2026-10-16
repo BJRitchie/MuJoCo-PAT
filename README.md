@@ -503,6 +503,100 @@ rather than reporting the vehicle's own momentum as a disturbance; and `τ` must
 the **applied** torque, not the planned one, since the controller clamps per joint
 before publishing and the clamped difference otherwise looks like a disturbance.
 
+#### Scored against contact, deterministically
+
+`contact_bench` drives one arm into the target and compares the estimate against
+MuJoCo's own `qfrc_constraint` on the tick it was computed. One process, no ROS,
+no DDS, no wall clock, no RNG — the same reason `nmpc_bench` and the constraint
+ladder are offline. Two runs produce a byte-identical 800-row series, which is
+what makes a sweep mean anything.
+
+```bash
+ros2 run pat_arm_control contact_bench --seconds 8 --free-target
+ros2 run pat_arm_control contact_bench --free-target --sweep-gain 10,20,40,80,160
+```
+
+Base pinned, target free, setpoint 8 cm past the target's face, exact
+measurements. 145 of 800 ticks in contact, `geom29/31--target_body`:
+
+| `observer.gain` | peak recovered (3 joints) | correlation |
+|---|---|---|
+| 10 | 0.11 / 0.10 / 0.09 | 0.13–0.21 |
+| 20 (default) | 0.19 / 0.19 / 0.17 | 0.24–0.28 |
+| 40 | 0.32 / 0.31 / 0.28 | 0.35–0.37 |
+| 80 | 0.59 / 0.58 / 0.54 | 0.45–0.46 |
+| 160 | 1.14 / 1.12 / 1.04 | 0.42 |
+
+Four things this establishes:
+
+- **Contact is detected within one control tick** (10 ms) at every gain. The
+  quiet-run floor on these joints is 0.008–0.014 N·m against a 0.02 N·m
+  threshold, so the zero-tick latency is a detection and not the floor.
+- **The recovered peak scales linearly with gain** — doubling K doubles it,
+  crossing 1.0 near 160. That is a first-order low-pass acting on a transient
+  shorter than its own time constant, and it is uniform across joints whose
+  true peaks span 0.93 to 14.6 N·m, so it is the filter and not a modelling
+  error.
+- **The mean is already right at the default gain.** Over the contact window,
+  truth vs estimate averaged −0.354/−0.299, 0.162/0.138, 0.0215/0.0186 — 84–86%
+  — while the peak ratio was 0.19. A low-pass preserves the average and
+  flattens the spike, so the observer is a good estimator of sustained
+  disturbance and a poor one of impulse. That is the same conclusion the
+  collision study reached from the other direction.
+- **Correlation peaks near gain 80 and then falls.** Past there the estimate
+  overshoots rather than tracking better, so ~80 is the best contact setting
+  *on exact measurements*. It is not a recommendation yet: every number above
+  was taken with the sensor model perfect, and a high gain is exactly what
+  passes measurement noise through. Tuning against the Phase 2.1 imperfections
+  is outstanding.
+
+Two scenario facts worth knowing before changing it:
+
+- **Pinning the target ruins the measurement.** A pinned 20 kg body is a rigid
+  wall, so the arm impacts and bounces: contact drops to 12 of 600 ticks, true
+  peaks jump to 107–221 N·m and `max|Mdot|` to 74 against 0.78. `--free-target`
+  is what produces a sustained push, and it is what the original collision
+  study used.
+- **`ee_targets.yaml`'s waypoint loop does not reach the target.** Its offsets
+  are *relative* (+0.20/+0.25 m) and only command the EE out to x ≈ 0.127,
+  short of the target's face at 0.18. Contact needs a setpoint driven past the
+  face, which is what `--setpoint` defaults to.
+
+#### The same measurement against the live stack, and why it was abandoned
+
+With the base pinned, the target at `initial_target_qpos: [-0.0175, -0.42, 0.0]`
+and a **sustained setpoint 8 cm past the target's face** (x = 0.26, y = −0.42 —
+a shove, not `ee_targets.yaml`'s waypoint loop, which only commands the EE out
+to x ≈ 0.127 and never reaches the target), the arm contacts the target and
+`tools/observer_score/score_observer.py` scores the estimate against
+`qfrc_constraint`:
+
+- **Contact is detected every run**, with the correct sign on all three joints
+  and a consistently positive correlation (+0.37 to +0.73).
+- **The estimate under-reads the peak**, ratio < 1 in 8 of 9 joint-runs —
+  consistent with a first-order low-pass of a transient.
+
+**Do not read a magnitude off these runs.** The live scenario is not repeatable
+enough for it: two runs of an *identical* configuration gave peak-force ratios
+of 0.37/0.41/0.42 and 0.52/0.24/0.29, because the impact's peak depends on the
+arm's state when the setpoint arrives and node startup timing shifts that by
+tens of milliseconds. The true peak itself varied by 50% between those runs. A
+gain sweep across such runs measures the startup jitter, not the gain — and a
+tuning conclusion drawn from it would be noise. The magnitudes above come from
+`contact_bench` instead, for exactly this reason.
+
+Running the live scenario is still worth doing, as an end-to-end check that the
+observer thread, the mailboxes and the topic all work in the real stack. It is
+just not where a number comes from.
+
+Two instruments exist for it, both on the sim's `publish_ground_truth` path:
+`ncon` alongside `qfrc_constraint`, because that vector carries contact AND
+joint-limit forces and the two are indistinguishable without it (an
+uncontrolled limp arm drifting into its range limit produces a convincing false
+contact signature); and a throttled contact-pair log naming the geoms, because
+the loaded DOFs alone cannot tell an arm-vs-target contact from the two arms
+touching each other.
+
 A caution carried over from the collision experiment: **contact was never what
 destabilised the NMPC.** Driven into the target with the base pinned, the
 controller was indistinguishable from baseline (TIER 0, 0.00% over deadline);
@@ -545,6 +639,45 @@ rollout reuses, so they are *not* safe to call from a second thread.
 differences consecutive mass matrices, so stepping faster than the data changes
 makes `Ṁ` zero on the steps in between and the `Cᵀq̇` term wrong — more steps,
 worse estimate.
+
+#### Feeding it into the command
+
+`observer.ff_gain` is how much of the estimate the controller actually cancels,
+and it is **0 by default even with `observer: "momentum"`** — the observer runs,
+publishes and can be scored without touching the torque command. Compensating an
+estimate closes a loop around it, and the estimate has its own lag and its own
+error floor, so full authority is the last step rather than the first. Bring it
+up in stages: measure, then 0.5, then 1.0.
+
+Three guards sit between the estimate and the actuators, each with its own test
+because each catches a different failure:
+
+| guard | what it catches |
+|---|---|
+| `observer.ff_max_frac` | a wrong *steady* estimate — the residual is unbounded by construction, since during hard contact it is whatever the contact was |
+| `observer.ff_slew` | a wrong *fast* one — contact makes the residual step within a tick or two, and handing that to a motor is a torque discontinuity |
+| safe-mode entry | a bad state producing a bad estimate while the tier system is already handling a failure |
+
+The safe-mode reset matters for *recovery* rather than for safe mode itself:
+`dampingTorque` never consults the feedforward, so what the reset prevents is the
+first tracking tick afterwards applying the stale pre-failure value as a step.
+
+**The QP's torque bounds shift by the same amount the command does**, so a torque
+limit keeps meaning what it says. Without that the solver would plan against a
+budget the command does not have, and the per-joint clamp would quietly take back
+what it had planned. The bounds move, they do not widen — the arm keeps exactly
+the authority it had.
+
+One consequence worth knowing when designing a test against it: **a mass error is
+invisible while the arm is still.** Inertia only produces a force error under
+acceleration, so 3× mass on two arm links with the arm holding a pose gives an
+estimate of 0.000, correctly. Any model-error measurement has to have the arm
+moving.
+
+Feeding `d̂` into the rollout's `integrateStep`, so the *plan* anticipates the
+disturbance rather than only the command correcting for it, is deliberately not
+done. It is more faithful and materially riskier, and it is a separate decision
+once the command feedforward above has been measured.
 
 #### Measured against an injected wrench
 

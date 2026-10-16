@@ -287,6 +287,30 @@
     # holds the integrator consistent with the clamped output so a transient
     # cannot wind it up.
     observer.estimate_clamp: 0.0
+    #
+    # Feedforward: how much of the estimate to actually cancel, as
+    #   tau = J^T u + Cv_joints - ff_gain * d_hat
+    # with the QP's torque bounds shifted by the same amount, so a torque limit
+    # still means what it says.
+    #
+    # 0 = the observer runs, publishes and is scored, and the command is
+    # untouched. That is the default even with observer: "momentum", because
+    # compensating an estimate closes a loop around it, and the estimate has its
+    # own lag (1/gain) and its own error floor. Bring it up in stages: measure
+    # the estimate first, then 0.5, then 1.0.
+    observer.ff_gain: 0.0
+    # Saturation, as a fraction of each joint's torque limit. NOT optional
+    # dressing: the estimate is unbounded by construction (a momentum residual
+    # during hard contact is whatever the contact was) and it goes straight to
+    # the actuators. This is what makes a bad estimate cost tracking accuracy
+    # instead of costing the arm.
+    observer.ff_max_frac: 0.3
+    # Maximum rate of change of the feedforward [N*m/s]; 0 disables. Catches a
+    # different failure from the saturation - that one bounds a wrong steady
+    # estimate, this one bounds a fast one. Contact makes the residual step
+    # within a tick or two, and handing that step to a motor is a torque
+    # discontinuity the arm feels.
+    observer.ff_slew: 0.0
     # The observer thread's realtime priority and cores. Same meaning as
     # rt_priority / rt_cpus above, and the same reason for the default of 0.
     # Give it DIFFERENT cores from the control thread, per arm: sharing a core

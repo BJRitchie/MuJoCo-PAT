@@ -98,6 +98,17 @@ public:
      *  and the reduction to joint space discards it. */
     struct DisturbanceSnapshot {
         double        d_joints[kMaxJoints]{};   //!< reduced, model-joint order
+        /*! The SAME joint rows BEFORE the base-elimination reduction.
+         *
+         *  Carried as well as the reduced form because the two answer different
+         *  questions and only one of them is scorable. The controller acts on
+         *  the reduced value -- that is the force it can actually counter. But
+         *  MuJoCo's qfrc_constraint, the only ground truth that exists for
+         *  contact, is a raw generalised force, so scoring the observer against
+         *  truth needs the raw rows. Publishing only the reduced ones would make
+         *  that comparison impossible without also publishing the 6 x n_joints
+         *  reduction matrix. */
+        double        d_raw[kMaxJoints]{};
         double        d_base[6]{};              //!< net external wrench on the base
         std::uint32_t n{0};
         bool          ready{false};             //!< false until the filter has history
@@ -426,8 +437,13 @@ private:
     //! thread. See TauSnapshot for why it takes two sources.
     pat_arm_control::SeqlockMailbox<TauSnapshot>         tau_own_mail_;
     pat_arm_control::SeqlockMailbox<TauSnapshot>         tau_ext_mail_;
-    //! The observer's output, read by the publisher and the report.
+    //! The observer's output, read by the control thread, the publisher and the
+    //! report -- three independent readers, which a seqlock allows.
     pat_arm_control::SeqlockMailbox<DisturbanceSnapshot> dist_mail_;
+    //! The control thread's retained copy and its Eigen view of it. Members so
+    //! the tick allocates nothing and so a lost race keeps the last value.
+    DisturbanceSnapshot ctrl_dist_{};
+    Eigen::VectorXd     ff_in_;
 
     //! Accumulated across torque_command messages, like q_joints_/v_joints_: a
     //! message need not carry every joint, so the running array is the thing

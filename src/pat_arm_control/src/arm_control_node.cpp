@@ -246,6 +246,13 @@ pat_arm_control::NMPCParams ArmNMPCNode::loadParams() {
         declare_parameter<int>("safe_mode.tier1_max_replay_ticks", p.tier1_max_replay_ticks);
     p.tier3_latch_after_ticks =
         declare_parameter<int>("safe_mode.tier3_latch_after_ticks", p.tier3_latch_after_ticks);
+    
+    // The disturbance feedforward. Named under observer.* because it is
+    // meaningless without an observer to feed it, and 0 by default so enabling
+    // the observer still changes nothing about the command.
+    p.ff_gain     = declare_parameter<double>("observer.ff_gain", p.ff_gain);
+    p.ff_max_frac = declare_parameter<double>("observer.ff_max_frac", p.ff_max_frac);
+    p.ff_slew     = declare_parameter<double>("observer.ff_slew", p.ff_slew);
     // control_period is not read here: it comes from control_hz, which the node's
     // own timer owns. The constructor fills it in before building the controller.
     p.rollout_v_clamp_mult =
@@ -536,6 +543,24 @@ void ArmNMPCNode::controlLoop() {
     controller_->setDesiredPos(des_x_, des_y_, 0.0);
     controller_->setDesiredOrient(des_quat_[0], des_quat_[1], des_quat_[2], des_quat_[3]);
 
+    // The disturbance feedforward, handed over BEFORE the solve so the command
+    // and the QP's torque bounds use the same value. A third reader of
+    // dist_mail_ alongside the publisher and the report, which a seqlock
+    // supports. A read that loses its race, or an observer not yet converged,
+    // leaves the retained value in place: the controller holds the last
+    // feedforward rather than dropping to zero, since dropping to zero is
+    // itself a torque step. With ff_gain at 0 this records and applies nothing.
+    if (observer_ && dist_mail_.read(ctrl_dist_) && ctrl_dist_.ready) {
+        const int n = static_cast<int>(model_joint_names_.size());
+        for (int i = 0; i < n; ++i) {
+            ff_in_(i) = static_cast<std::size_t>(i) < kMaxJoints
+                            ? ctrl_dist_.d_joints[static_cast<std::size_t>(i)]
+                            : 0.0;
+        }
+        controller_->setDisturbanceFeedforward(
+            ff_in_, static_cast<double>(period_ns_) * 1e-9);
+    }
+
     // computeControl handles its own numerical failures by entering safe mode,
     // so an exception reaching here means something outside the control law
     // itself. Damp rather than let it escape spin() and kill the process: the
@@ -715,6 +740,7 @@ void ArmNMPCNode::start() {
         obs_v_.setZero(6 + n);
         obs_tau_.setZero(6 + n);
         obs_d_joints_.setZero(n);
+        ff_in_.setZero(n);
         obs_M_.setZero(6 + n, 6 + n);
         obs_bias_.setZero(6 + n);
         obs_R_.setZero(6, n);
@@ -739,6 +765,7 @@ void ArmNMPCNode::start() {
         // discards it -- scoring the observer against an injected wrench needs
         // it. Named, so the vector describes itself.
         dist_msg_.name = joint_names_;
+        for (const auto& jn : joint_names_) dist_msg_.name.push_back("raw_" + jn);
         dist_msg_.name.push_back("base_fx");
         dist_msg_.name.push_back("base_fy");
         dist_msg_.name.push_back("base_tz");
@@ -897,6 +924,11 @@ bool ArmNMPCNode::observerStep() {
     }
     const Eigen::VectorXd& r = observer_->estimate();
     for (int i = 0; i < 6; ++i) out.d_base[static_cast<std::size_t>(i)] = r(i);
+    // The joint rows of the full-system estimate, unreduced -- what
+    // qfrc_constraint is directly comparable to.
+    for (int i = 0; i < n && i < static_cast<int>(kMaxJoints); ++i) {
+        out.d_raw[static_cast<std::size_t>(i)] = r(6 + i);
+    }
 
     ++obs_steps_;
     out.steps        = obs_steps_;
@@ -968,13 +1000,18 @@ void ArmNMPCNode::publishDisturbance() {
         const std::size_t idx = owned_model_idx_[k];
         dist_msg_.effort[k] = idx < kMaxJoints ? d.d_joints[idx] : 0.0;
     }
+    const std::size_t nj = joint_names_.size();
+    // The same joints unreduced, for scoring against qfrc_constraint.
+    for (std::size_t k = 0; k < nj; ++k) {
+        const std::size_t idx = owned_model_idx_[k];
+        dist_msg_.effort[nj + k] = idx < kMaxJoints ? d.d_raw[idx] : 0.0;
+    }
     // The planar base rows, in the order the names declare: x force, y force,
     // yaw torque. Rows 2/3/4 are z force and x/y torque, which the table's
     // slide and hinge joints absorb and which therefore measure nothing.
-    const std::size_t nj = joint_names_.size();
-    dist_msg_.effort[nj + 0] = d.d_base[0];
-    dist_msg_.effort[nj + 1] = d.d_base[1];
-    dist_msg_.effort[nj + 2] = d.d_base[5];
+    dist_msg_.effort[2 * nj + 0] = d.d_base[0];
+    dist_msg_.effort[2 * nj + 1] = d.d_base[1];
+    dist_msg_.effort[2 * nj + 2] = d.d_base[5];
     dist_msg_.header.stamp = get_clock()->now();
     dist_pub_->publish(dist_msg_);
 }

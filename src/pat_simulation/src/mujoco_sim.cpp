@@ -170,6 +170,21 @@ const double* MuJoCoSim::constraintForce() const noexcept {
     return data_->qfrc_constraint;
 }
 
+int MuJoCoSim::contactCount() const noexcept { return data_->ncon; }
+
+std::string MuJoCoSim::contactPairs() const {
+    std::string out;
+    for (int i = 0; i < data_->ncon; ++i) {
+        const auto name = [this](int geom_id) -> std::string {
+            const char* n = mj_id2name(model_, mjOBJ_GEOM, geom_id);
+            return n ? n : ("geom" + std::to_string(geom_id));
+        };
+        if (!out.empty()) out += ", ";
+        out += name(data_->contact[i].geom1) + "--" + name(data_->contact[i].geom2);
+    }
+    return out;
+}
+
 int MuJoCoSim::nv() const noexcept { return model_->nv; }
 
 void MuJoCoSim::setBodyMassScale(const std::vector<std::string>& bodies,

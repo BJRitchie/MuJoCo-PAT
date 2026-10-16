@@ -108,7 +108,7 @@ install(FILES "${_model_xml}" "${CMAKE_CURRENT_SOURCE_DIR}/models/platform.xml"
 # the INSTALLED copies, so the binary works from anywhere once installed, and
 # both are overridable with --params / --model.
 find_package(yaml-cpp REQUIRED)
-add_executable(nmpc_bench src/nmpc_bench.cpp)
+add_executable(nmpc_bench src/nmpc_bench.cpp src/bench_yaml.cpp)
 pat_arm_control_arch_flags(nmpc_bench)
 add_dependencies(nmpc_bench pat_arm_control_models)
 target_link_libraries(nmpc_bench pat_arm_control_lib yaml-cpp)
@@ -118,6 +118,29 @@ target_compile_definitions(nmpc_bench PRIVATE
     PAT_NMPC_BENCH_PARAMS="${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME}/config/nmpc.yaml"
     PAT_NMPC_BENCH_MODEL="${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME}/models/pat_platform_planar.xml")
 install(TARGETS nmpc_bench RUNTIME DESTINATION lib/${PROJECT_NAME})
+
+# ─── contact_bench: deterministic observer scoring against contact truth ───
+# Same ROS-free pattern as nmpc_bench, and offline for the same reason the
+# constraint ladder is: the live stack cannot reproduce a contact event closely
+# enough to compare two configurations. Measured — two runs of one config gave
+# peak-force ratios of 0.37/0.41/0.42 and 0.52/0.24/0.29.
+#
+# It additionally loads pat_simulation's SCENE model, because the contact being
+# scored only exists there (pat_arm_control's own MJCF is built arm_contype=0).
+# That is a compiled-in PATH, not a package dependency: nothing here links
+# against pat_simulation, and this is a benchmark, not the library or the node,
+# so the rule that algorithm packages must not depend on the simulator is not
+# in play. Overridable with --scene, which is how you would point it at a
+# different scene without rebuilding.
+add_executable(contact_bench src/contact_bench.cpp src/contact_scenario.cpp src/bench_yaml.cpp)
+pat_arm_control_arch_flags(contact_bench)
+add_dependencies(contact_bench pat_arm_control_models)
+target_link_libraries(contact_bench pat_arm_control_lib yaml-cpp)
+target_compile_definitions(contact_bench PRIVATE
+    PAT_NMPC_BENCH_PARAMS="${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME}/config/nmpc.yaml"
+    PAT_NMPC_BENCH_MODEL="${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME}/models/pat_platform_planar.xml"
+    PAT_CONTACT_BENCH_SCENE="${CMAKE_INSTALL_PREFIX}/share/pat_simulation/models/environment/air_bearing_table.xml")
+install(TARGETS contact_bench RUNTIME DESTINATION lib/${PROJECT_NAME})
 
 # ─── Tests ───────────────────────────────────────────────────────────────
 # The model-fidelity tests load the generated MJCF straight out of the build

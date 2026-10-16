@@ -132,6 +132,24 @@ public:
     /// have to work on real hardware where nothing like it exists.
     const double* constraintForce() const noexcept;
 
+    /// How many contacts the solver found this step (mjData::ncon).
+    ///
+    /// Needed alongside constraintForce() because qfrc_constraint carries
+    /// contact forces AND joint-limit forces in the same vector, and the two
+    /// mean entirely different things to anything scoring it: a nonzero row
+    /// with ncon == 0 is a joint against its range, not a collision.
+    int contactCount() const noexcept;
+
+    /// "geomA--geomB, geomC--geomD" for the contacts active right now, or ""
+    /// when there are none.
+    ///
+    /// qfrc_constraint says a constraint acted and on which DOFs; it does not
+    /// say what touched what, and the DOFs alone are ambiguous -- an arm-vs-arm
+    /// contact loads both arms and leaves the base rows near zero, which is
+    /// hard to tell from two joints simultaneously hitting their limits.
+    /// Scenario authoring needs the names.
+    std::string contactPairs() const;
+
     int nv() const noexcept;
 
     /// Scale the mass and rotational inertia of the named bodies.

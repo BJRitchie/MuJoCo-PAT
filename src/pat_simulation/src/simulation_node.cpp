@@ -347,7 +347,26 @@ void SimulationNode::publishTruth(const rclcpp::Time& t) {
     m.effort.push_back(last_wrench_chaser_[1]);
     m.name.push_back("wrench.chaser.tz");
     m.effort.push_back(last_wrench_chaser_[2]);
+    // The contact count, because qfrc_constraint alone cannot distinguish a
+    // contact from a joint limit -- MuJoCo puts both in it. A nonzero
+    // qfrc_constraint with ncon == 0 is a joint hitting its range, which looks
+    // exactly like contact to anything scoring the vector and means something
+    // completely different.
+    m.name.push_back("ncon");
+    m.effort.push_back(static_cast<double>(sim_->contactCount()));
     truth_pub_->publish(m);
+
+    // Which geoms are touching, throttled. A JointState cannot carry names
+    // that change every step, and scenario authoring needs them: the DOF rows
+    // alone cannot distinguish an arm against the target from the two arms
+    // against each other. Only while ground truth is on, so it costs nothing
+    // in a normal run.
+    const int ncon = sim_->contactCount();
+    if (ncon > 0) {
+        RCLCPP_INFO_THROTTLE(get_logger(), log_clock_, 1000,
+                             "contact (%d): %s", ncon,
+                             sim_->contactPairs().c_str());
+    }
 }
 
 void SimulationNode::publish() {

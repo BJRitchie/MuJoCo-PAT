@@ -127,6 +127,38 @@ struct NMPCParams {
      *  which steps straight from damping to the full QP solution. */
     int    safe_mode_recovery_ticks = 10;
 
+    /*! How much of the disturbance estimate to cancel, 0 to 1. 0 disables the
+     *  feedforward entirely and is the default, so an observer can run and be
+     *  scored without touching the command.
+     *
+     *  A fraction rather than a switch because partial compensation is the
+     *  useful bring-up setting: at 0.5 a wrong estimate costs half as much, and
+     *  the tracking improvement is still visible. Compensating an estimate is
+     *  closing a loop around it, and the estimate has its own lag (1/K) and its
+     *  own error floor, so full authority is the last step rather than the
+     *  first. */
+    double ff_gain = 0.0;
+
+    /*! Saturation on the feedforward, as a fraction of each joint's torque
+     *  limit. Sized this way for the same reason safe_mode_damping_frac is: an
+     *  absolute N*m bound cannot track per-joint limits that differ (10, 10, 5
+     *  N*m here).
+     *
+     *  This is not optional dressing. An estimator transient goes straight to
+     *  the actuators, and the estimate is unbounded by construction -- a
+     *  momentum residual during a hard contact is whatever the contact was. The
+     *  cap is what makes a bad estimate cost tracking accuracy instead of
+     *  costing the arm. */
+    double ff_max_frac = 0.3;
+
+    /*! Maximum rate of change of the feedforward [N*m/s]; 0 disables the limit.
+     *
+     *  Separate from the saturation because they catch different failures: the
+     *  cap bounds a wrong steady estimate, the slew bounds a fast one. Contact
+     *  makes the residual step within a tick or two, and handing that step
+     *  straight to a motor is a torque discontinuity the arm feels. */
+    double ff_slew = 0.0;
+
     /*! Tier 1 budget: ticks the controller may keep executing the last ACCEPTED
      *  plan after a failed solve, before giving up and damping. The solver already
      *  produced N stages of control and only the first was applied, so a single
@@ -210,6 +242,37 @@ public:
      *  actuators. Public because the ROS node's own exception handler needs it.
      *  v has the same layout as controlLaw's (length 6 + numArmJoints()). */
     Eigen::VectorXd dampingTorque(const Eigen::VectorXd& v) const;
+
+    /*! Hand the controller the latest disturbance estimate, reduced to joint
+     *  space, model-joint order and length numArmJoints().
+     *
+     *  Called from the control thread once per tick, BEFORE computeControl, so
+     *  the command and the QP's torque bounds use the same value. Applies
+     *  params_.ff_gain, then the ff_max_frac saturation, then the ff_slew rate
+     *  limit, and keeps the result until the next call -- so a tick that gets no
+     *  fresh estimate reuses the last one rather than dropping to zero, which
+     *  would itself be a torque step.
+     *
+     *  `dt` is the control period [s], needed to turn ff_slew's N*m/s into a
+     *  per-tick delta. Passed in rather than taken from params_ because the
+     *  horizon step Ts is not the control period and conflating them would make
+     *  the slew limit silently wrong by 3x on the shipped configuration.
+     *
+     *  With ff_gain at 0 this records the estimate and changes nothing, so the
+     *  observer can be scored against the same run it would act on.
+     *  Allocation-free. */
+    void setDisturbanceFeedforward(const Eigen::VectorXd& d_joints, double dt);
+
+    /*! What the feedforward is actually applying, after gain, saturation and
+     *  slew -- not the raw estimate. Exposed so the node can log the value that
+     *  reached the command rather than the one that was offered. */
+    const Eigen::VectorXd& disturbanceFeedforward() const noexcept { return d_ff_; }
+
+    /*! Ticks on which the saturation or the slew limit bound the feedforward.
+     *  If either is non-zero in steady state the estimate is being clipped, and
+     *  the compensation is not what the gain says it is. */
+    long ffSaturated() const noexcept { return ff_saturated_; }
+    long ffSlewLimited() const noexcept { return ff_slew_limited_; }
 
     ControlMode mode() const { return mode_; }
     /*! Ticks spent in safe mode since construction — a health counter for the
@@ -522,6 +585,16 @@ protected:
     //! arithmetic at every rollout node. Built once at construction alongside the
     //! vector it mirrors, since neither changes afterwards.
     Eigen::VectorXd tau_lim_vec_;
+
+    //! The disturbance feedforward in force right now: gain, saturation and
+    //! slew already applied. Zero unless setDisturbanceFeedforward has been
+    //! called with a non-zero ff_gain, and reset to zero on safe-mode entry so
+    //! recovery ramps up from nothing rather than resuming a stale value.
+    Eigen::VectorXd d_ff_;
+    //! Per-joint saturation bound, ff_max_frac * torqueLimsByIndex, built once.
+    Eigen::VectorXd ff_max_vec_;
+    long            ff_saturated_ = 0;
+    long            ff_slew_limited_ = 0;
 
     // Safe mode. kd_ is sized n_joints_ and nonzero only on owned indices,
     // fixed at construction from the torque and velocity limits. The mode

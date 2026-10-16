@@ -9,8 +9,7 @@ namespace pat_arm_control {
 ArmNMPC::ArmNMPC(
     const std::string& mjcf_path, const NMPCParams& params) 
     : FloatingBaseDynamics(mjcf_path)
-    , params_(params) 
-{
+    , params_(params) {
     // --- Check Controller Parameters --------------------------------- // 
     if (params_.ee_site_name.empty()) {
         throw std::runtime_error(
@@ -35,6 +34,22 @@ ArmNMPC::ArmNMPC(
     if (params_.safe_mode_recovery_ticks < 1) {
         throw std::runtime_error(
             "ArmNMPC: NMPCParams.safe_mode_recovery_ticks must be >= 1");
+    }
+    if (params_.ff_gain < 0.0 || params_.ff_gain > 1.0) {
+        throw std::runtime_error(
+            "ArmNMPC: NMPCParams.ff_gain must be in [0, 1] — it is the fraction "
+            "of the disturbance estimate to cancel, not a controller gain.");
+    }
+    if (params_.ff_max_frac <= 0.0 || params_.ff_max_frac > 1.0) {
+        throw std::runtime_error(
+            "ArmNMPC: NMPCParams.ff_max_frac must be in (0, 1] — the "
+            "feedforward has to be bounded by some fraction of the torque "
+            "limit, and a feedforward allowed the whole limit leaves the "
+            "tracking law none.");
+    }
+    if (params_.ff_slew < 0.0) {
+        throw std::runtime_error(
+            "ArmNMPC: NMPCParams.ff_slew must not be negative (0 disables it)");
     }
     ee_site_id_ = siteIdFromName(params_.ee_site_name);
 
@@ -91,6 +106,17 @@ ArmNMPC::ArmNMPC(
         // not change after construction.
         tau_lim_vec_.resize(n_joints_);
         for (int i = 0; i < n_joints_; ++i) tau_lim_vec_(i) = torqueLimsByIndex[i];
+
+        // Disturbance feedforward. Sized and zeroed here so the control path
+        // never allocates, and so the default (ff_gain 0) is a literal no-op:
+        // d_ff_ stays zero and the two expressions that use it reduce to what
+        // they were before the feedforward existed.
+        d_ff_.setZero(n_joints_);
+        ff_max_vec_.resize(n_joints_);
+        for (int i = 0; i < n_joints_; ++i) {
+            ff_max_vec_(i) = params_.ff_max_frac * torqueLimsByIndex[i];
+        }
+
         for (const auto& [jname, bounds] : qlims) {
             int idx = jointIndexFromName(jname);
             // Intersect rather than replace: a configured range may tighten the
@@ -575,8 +601,65 @@ void ArmNMPC::buildTorqueGeneralConstraint(
     Eigen::MatrixXd& D, Eigen::VectorXd& lg, Eigen::VectorXd& ug)
 {
     D = J.transpose();   // n_j x d
-    lg = -tau_lim_vec_ - Cv_joints;
-    ug =  tau_lim_vec_ - Cv_joints;
+    
+    // The constraint bounds the torque that will actually be APPLIED, and
+    // finalizeJointTorques applies J^T u + Cv_joints - d_ff. Written out:
+    //
+    //     -tau_lim <= J^T u + Cv_joints - d_ff <= tau_lim
+    //
+    // so both bounds move by +d_ff. Without the shift the QP would believe it
+    // has the full torque budget while the command spends part of it on the
+    // feedforward, and the clamp in finalizeJointTorques would silently take
+    // back whatever the solver had planned -- a torque limit has to keep
+    // meaning what it says.
+    //
+    // d_ff_ is zero unless a feedforward is configured, so this is the previous
+    // expression verbatim in the default case.
+    lg = -tau_lim_vec_ - Cv_joints + d_ff_;
+    ug =  tau_lim_vec_ - Cv_joints + d_ff_;
+}
+
+void ArmNMPC::setDisturbanceFeedforward(const Eigen::VectorXd& d_joints,
+                                        double dt)
+{
+    if (d_joints.size() != n_joints_) {
+        throw std::runtime_error(
+            "ArmNMPC::setDisturbanceFeedforward: d_joints must have "
+            "numArmJoints() entries");
+    }
+    // Gain 0 is the default and must be exactly a no-op, so that an observer
+    // can run and be scored on a configuration that is otherwise unchanged.
+    if (params_.ff_gain == 0.0) {
+        d_ff_.setZero();
+        return;
+    }
+
+    const bool slew_on = params_.ff_slew > 0.0 && dt > 0.0;
+    const double max_step = slew_on ? params_.ff_slew * dt : 0.0;
+    bool saturated = false, slewed = false;
+
+    for (int i = 0; i < n_joints_; ++i) {
+        // A non-finite estimate must not reach the actuators, and it must not
+        // poison the retained value either: hold the previous entry instead.
+        if (!std::isfinite(d_joints[i])) continue;
+
+        double target = params_.ff_gain * d_joints[i];
+
+        // Saturate before the slew limit, so the slew is spent approaching a
+        // reachable value rather than chasing one the cap will reject anyway.
+        const double cap = ff_max_vec_[i];
+        if (target > cap)       { target = cap;  saturated = true; }
+        else if (target < -cap) { target = -cap; saturated = true; }
+
+        if (slew_on) {
+            const double delta = target - d_ff_[i];
+            if (delta > max_step)       { target = d_ff_[i] + max_step; slewed = true; }
+            else if (delta < -max_step) { target = d_ff_[i] - max_step; slewed = true; }
+        }
+        d_ff_[i] = target;
+    }
+    if (saturated) ++ff_saturated_;
+    if (slewed)    ++ff_slew_limited_;
 }
 
 // tau_joints = J^T*tau_task + Cv_joints, clamped per-joint to torqueLimsByIndex.
@@ -597,6 +680,14 @@ void ArmNMPC::finalizeJointTorques(
     // expression at once evaluates J^T*tau_task into a temporary.
     tau_joints = Cv_joints;
     tau_joints.noalias() += J.transpose() * tau_task;
+    
+    // Cancel the estimated disturbance. The reduced dynamics are
+    // H_g qddot + Cv_joints = tau + d, so commanding tau = J^T u + Cv - d
+    // leaves the plant following the plan the solver actually made. d_ff_ is
+    // zero unless a feedforward is configured, and buildTorqueGeneralConstraint
+    // shifted the QP's bounds by the same amount, so the clamp below should not
+    // be what removes it.
+    tau_joints -= d_ff_;
     for (int i = 0; i < n_joints_; ++i) {
         tau_joints[i] = std::max(-torqueLimsByIndex[i],
                                  std::min(torqueLimsByIndex[i], tau_joints[i]));
@@ -623,6 +714,15 @@ void ArmNMPC::enterDamping()
     mode_ = ControlMode::Damping;
     consecutive_ok_ = 0;
     u_bar_.assign(params_.N, Eigen::VectorXd::Zero(3));
+    
+    // Drop the feedforward on entry. Safe mode exists because something has
+    // already gone wrong, and a bad state is exactly what produces a bad
+    // disturbance estimate -- compensating it could compound the failure the
+    // tier system is handling. dampingTorque never consults d_ff_, so what this
+    // really protects is RECOVERY: without the reset, the first tracking tick
+    // after safe mode would apply the stale pre-failure value as a step. Cleared
+    // here so recovery ramps back up from nothing through the slew limit.
+    d_ff_.setZero();
 }
 
 void ArmNMPC::clearLatch()
