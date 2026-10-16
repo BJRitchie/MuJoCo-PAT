@@ -2,7 +2,10 @@
 
 #include <cmath>
 #include <cstdio>
+#include <random>
 #include <stdexcept>
+#include <utility>
+#include <vector>
 
 #include <Eigen/Dense>
 
@@ -441,6 +444,91 @@ TEST(MomentumObserverPlant, TimeDifferenceMdotAgainstConfigurationSpaceFd) {
     // caveat is the mitigation, at about 4 us a step.
     EXPECT_LT(abs_err / scale, 0.10)
         << "time-difference Mdot is now more than 10% off the reference";
+}
+
+TEST(MomentumObserver, NoiseAndSignalBothScaleWithGainSoSnrIsNotFree) {
+    // The other half of the gain question. contact_bench measures how much of a
+    // contact TRANSIENT a given gain recovers, and finds it linear in K. This
+    // measures what the same gain costs in passed-through measurement noise,
+    // which contact_bench cannot see because it reads the plant exactly.
+    //
+    // Velocity is the channel that matters: the residual is K(Mv - I), so an
+    // error in the measured v lands in the estimate multiplied by K*M. The
+    // prediction is therefore that noise grows LINEARLY with K -- the same way
+    // the recovered transient does, so for a transient the gain buys no
+    // signal-to-noise at all. What it does buy is sustained-disturbance
+    // accuracy, because that signal SATURATES at the true value while the
+    // noise keeps growing. Both halves are measured here.
+    constexpr double kSigmaV = 0.01;     // rad/s, a plausible encoder-derived error
+    constexpr int kSteps = 4000;
+
+    struct Result { double noise_sd; double steady; };
+    auto run = [](double K, double sigma_v, double d_true) {
+        MomentumObserver obs(baseParams(K));
+        Plant plant;
+        // A deliberately fixed seed per call, so this test is as deterministic
+        // as every other measurement in this repo.
+        std::mt19937_64 rng(20251016);
+        std::normal_distribution<double> noise(0.0, sigma_v);
+
+        Eigen::VectorXd d = Eigen::VectorXd::Zero(kNv);
+        d(0) = d_true;
+        plant.setDisturbance(d);
+
+        const Eigen::VectorXd tau = Eigen::VectorXd::Zero(kNv);
+        std::vector<double> tail;
+        for (int i = 0; i < kSteps; ++i) {
+            // The observer sees a corrupted velocity; the plant evolves from the
+            // true one. That is what a measurement error is.
+            Eigen::VectorXd v_meas = plant.v();
+            if (sigma_v > 0.0) {
+                for (int j = 0; j < kNv; ++j) v_meas(j) += noise(rng);
+            }
+            obs.update(plant.M(), plant.biasForce(), v_meas, tau);
+            plant.step(tau, kDt);
+            // The last quarter, by which point the filter has settled.
+            if (i > 3 * kSteps / 4) tail.push_back(obs.estimate()(0));
+        }
+        Result r{0.0, 0.0};
+        const double n = static_cast<double>(tail.size());
+        for (double x : tail) r.steady += x;
+        r.steady /= n;
+        for (double x : tail) r.noise_sd += (x - r.steady) * (x - r.steady);
+        r.noise_sd = std::sqrt(r.noise_sd / n);
+        return r;
+    };
+
+    std::printf("[observer] gain   noise sd (no disturbance)   steady est of "
+                "d=1.0\n");
+    std::vector<std::pair<double, Result>> rows;
+    for (double K : {10.0, 20.0, 40.0, 80.0, 160.0}) {
+        const Result noise_only = run(K, kSigmaV, 0.0);
+        const Result with_signal = run(K, kSigmaV, 1.0);
+        rows.emplace_back(K, Result{noise_only.noise_sd, with_signal.steady});
+        std::printf("[observer] %5.0f   %22.5f   %18.4f\n",
+                    K, noise_only.noise_sd, with_signal.steady);
+    }
+
+    // Noise grows with the gain, monotonically -- that is the cost.
+    for (std::size_t i = 1; i < rows.size(); ++i) {
+        EXPECT_GT(rows[i].second.noise_sd, rows[i - 1].second.noise_sd)
+            << "gain " << rows[i].first << " passed no more noise than "
+            << rows[i - 1].first;
+    }
+    // And roughly linearly: a 16x gain span should move it by something close
+    // to 16x, not by 2x and not by 200x. Loose, because M is configuration
+    // dependent and the plant keeps moving.
+    const double span = rows.back().second.noise_sd / rows.front().second.noise_sd;
+    EXPECT_GT(span, 6.0);
+    EXPECT_LT(span, 40.0);
+
+    // The sustained signal, by contrast, saturates: every gain here recovers
+    // essentially all of a constant disturbance, so raising K past what the
+    // disturbance needs buys noise and nothing else. This is why the contact
+    // sweep's "higher is better" does NOT generalise to drag or model error.
+    for (const auto& [K, r] : rows) {
+        EXPECT_NEAR(r.steady, 1.0, 0.25) << "gain " << K;
+    }
 }
 
 TEST(MomentumObserver, HighVelocitySetsTheDiscretisationFloor) {

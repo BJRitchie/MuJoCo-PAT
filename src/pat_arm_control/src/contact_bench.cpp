@@ -154,7 +154,27 @@ struct Options {
     double tgt_x = -0.0175, tgt_y = -0.42;
     bool free_target = false;
     std::vector<double> sweep_gain;                //!< one trial per entry
+
+    /*! Drag mode: measure the observer against air-bearing table drag instead
+     *  of against contact.
+     *
+     *  > 0 replaces the base damping with this value and parks the target well
+     *  out of reach, so nothing touches and the ONLY unmodelled force is the
+     *  drag -- which the scene applies as -damping * velocity and the
+     *  controller's model has no term for at all.
+     *
+     *  This is the measurement the plan calls the headline validation, and it
+     *  could not be made in the live stack: it needs the base MOVING (drag is
+     *  proportional to velocity, so a pinned base has none to measure) while
+     *  also not drifting far enough to make the setpoint unreachable. A
+     *  deterministic short run with moderate damping is both. 500 is the
+     *  pinning value and leaves nothing to see; the shipped table value is
+     *  0.05. */
+    double drag_damping = -1.0;
 };
+
+//! True when --drag asked for the drag measurement rather than contact.
+bool dragMode(const Options& o) { return o.drag_damping > 0.0; }
 
 void usage() {
     std::cout <<
@@ -178,6 +198,12 @@ R"(contact_bench - deterministic scoring of the disturbance observer against
   --free-target      leave the target free; the default pins it so contact is
                      sustained and scorable instead of a transient that knocks
                      a 20 kg body away
+  --drag D           measure against table DRAG instead of contact: set the
+                     base damping to D, park the target out of reach, and score
+                     the base-row estimate against the -D*velocity the scene is
+                     actually applying. Needs the base moving, so D must be
+                     moderate -- 0.05 is the shipped table value, 500 pins it
+                     and leaves no drag to see
   --out CSV          write the per-tick series
 )";
 }
@@ -214,6 +240,7 @@ bool parseArgs(int argc, char** argv, Options& o, int& code) {
             else if (a == "--gain")    o.gain    = std::stod(next());
             else if (a == "--ff-gain") o.ff_gain = std::stod(next());
             else if (a == "--free-target") o.free_target = true;
+            else if (a == "--drag")    o.drag_damping = std::stod(next());
             else if (a == "--setpoint") xy(next(), o.sp_x, o.sp_y);
             else if (a == "--target")   xy(next(), o.tgt_x, o.tgt_y);
             else if (a == "--sweep-gain") {
@@ -286,6 +313,16 @@ ContactScenario::Config sceneConfig(const Options& o,
     c.target_y = o.tgt_y;
     // Zero damping leaves the target at whatever the MJCF ships, i.e. free.
     if (o.free_target) c.target_damping = {{0.0, 0.0, 0.0}};
+
+    if (dragMode(o)) {
+        // Moderate damping on all three planar DOFs, so the base moves (drag
+        // is proportional to velocity) without drifting far.
+        c.base_damping = {{o.drag_damping, o.drag_damping, o.drag_damping}};
+        // And the target well out of the way, so contact cannot contaminate a
+        // measurement that is supposed to be drag alone.
+        c.target_x = 2.0;
+        c.target_y = 2.0;
+    }
     return c;
 }
 
@@ -324,6 +361,12 @@ struct Trial {
     long   obs_steps = 0;
     double obs_max_mdot = 0.0;
     std::array<double, 3> base_peak{{0.0, 0.0, 0.0}};   //!< fx, fy, tz
+
+    /*! Drag mode only: the analytic drag the scene applied, paired with what
+     *  the observer's base rows estimated, per tick. Three entries each:
+     *  x force, y force, yaw torque. */
+    std::vector<std::array<double, 3>> drag_truth;
+    std::vector<std::array<double, 3>> drag_est;
 };
 
 /*! The estimate must exceed this to count as having detected contact.
@@ -483,6 +526,18 @@ Trial runTrial(const Options& o, double gain_override) {
                 t.base_peak[i] = row.base[i];
             }
         }
+        // (f2) Drag mode: the truth here is analytic rather than read back.
+        //      MuJoCo applies -damping * velocity on each planar DOF, and the
+        //      controller's model has no damping at all, so that product IS the
+        //      unmodelled force the observer should be reporting on its base
+        //      rows. Recorded before the step, like everything else, so the
+        //      velocity used is the one the estimate was computed from.
+        if (dragMode(o)) {
+            const auto vb = scene.baseVelocity();
+            const auto db = scene.baseDamping();
+            t.drag_truth.push_back({{-db[0] * vb[0], -db[1] * vb[1], -db[2] * vb[2]}});
+            t.drag_est.push_back(row.base);
+        }
         t.rows.push_back(std::move(row));
 
         // (g) Apply and advance. segment(6, n) is the joint block of the
@@ -498,7 +553,51 @@ Trial runTrial(const Options& o, double gain_override) {
 
 // ============================== Reporting ================================= //
 
+/*! Drag mode's report: estimate against the analytic -damping*velocity.
+ *
+ *  Scored over the second half of the run, so the filter's initial transient is
+ *  not counted as error -- the estimate starts at exactly zero by construction
+ *  and needs a few time constants to catch up. */
+void reportDrag(const Trial& t) {
+    const std::size_t n = t.drag_truth.size();
+    if (n < 4) {
+        std::printf("  too few ticks to score drag\n");
+        return;
+    }
+    const std::size_t from = n / 2;
+    const char* axis[3] = {"base fx", "base fy", "base tz"};
+
+    std::printf("\n  drag recovery, scored over the second half of the run "
+                "(the filter starts at zero\n  and needs a few time constants "
+                "to catch up):\n");
+    std::printf("    %-9s %12s %12s %8s %10s\n",
+                "axis", "truth mean", "est mean", "ratio", "rms err");
+    for (int a = 0; a < 3; ++a) {
+        double mt = 0.0, me = 0.0, sq = 0.0;
+        for (std::size_t i = from; i < n; ++i) {
+            mt += t.drag_truth[i][static_cast<std::size_t>(a)];
+            me += t.drag_est[i][static_cast<std::size_t>(a)];
+        }
+        const double cnt = static_cast<double>(n - from);
+        mt /= cnt;
+        me /= cnt;
+        for (std::size_t i = from; i < n; ++i) {
+            const double e = t.drag_truth[i][static_cast<std::size_t>(a)] -
+                             t.drag_est[i][static_cast<std::size_t>(a)];
+            sq += e * e;
+        }
+        std::printf("    %-9s %12.5f %12.5f %8.2f %10.5f\n", axis[a], mt, me,
+                    mt != 0.0 ? me / mt : std::nan(""), std::sqrt(sq / cnt));
+    }
+    std::printf("  observer: %ld steps, max|Mdot| %.2f\n",
+                t.obs_steps, t.obs_max_mdot);
+}
+
 void reportTrial(const Options& o, const Trial& t) {
+    if (dragMode(o)) {
+        reportDrag(t);
+        return;
+    }
     std::printf("  contact on %d of %zu ticks, peak ncon %d\n",
                 t.contact_ticks, t.rows.size(), t.max_ncon);
     if (t.contact_ticks == 0) {
@@ -621,7 +720,10 @@ int main(int argc, char** argv) {
         std::printf("  observer.gain=%.1f ff_gain=%.2f\n", t.applied_gain,
                     o.ff_gain >= 0.0 ? o.ff_gain : 0.0);
         reportTrial(o, t);
-        if (!o.out_csv.empty() && t.contact_ticks > 0) writeCsv(o.out_csv, t);
+        if (!o.out_csv.empty()) writeCsv(o.out_csv, t);
+        // Drag mode has no contact by design, so "no contact" is not a failure
+        // there -- it is the point.
+        if (dragMode(o)) return 0;
         return t.contact_ticks == 0 ? 1 : 0;
     } catch (const std::exception& e) {
         std::cerr << "contact_bench: " << e.what() << "\n";

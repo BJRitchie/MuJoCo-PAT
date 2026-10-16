@@ -105,6 +105,19 @@ public:
     void readControllerState(double anchor_x, double anchor_y,
                              Eigen::VectorXd& q, Eigen::VectorXd& v) const;
 
+    /*! The base's planar velocity (vx, vy, omega) in scene coordinates.
+     *
+     *  Exposed for the drag measurement: the air-bearing table is modelled as
+     *  joint damping, so the drag force on each planar DOF is exactly
+     *  -damping * velocity. That makes it a disturbance whose true value is
+     *  known analytically at every instant -- unlike contact, which has to be
+     *  read back from the solver. */
+    std::array<double, 3> baseVelocity() const;
+
+    //! The damping actually in force on the three planar base DOFs, so a
+    //! caller can compute the drag it should be seeing.
+    std::array<double, 3> baseDamping() const { return cfg_.base_damping; }
+
 private:
     struct JointRef {
         int qpos = 0;    //!< scene qpos address

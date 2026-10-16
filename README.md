@@ -544,11 +544,81 @@ Four things this establishes:
   disturbance and a poor one of impulse. That is the same conclusion the
   collision study reached from the other direction.
 - **Correlation peaks near gain 80 and then falls.** Past there the estimate
-  overshoots rather than tracking better, so ~80 is the best contact setting
-  *on exact measurements*. It is not a recommendation yet: every number above
-  was taken with the sensor model perfect, and a high gain is exactly what
-  passes measurement noise through. Tuning against the Phase 2.1 imperfections
-  is outstanding.
+  overshoots rather than tracking better.
+
+#### Scored against drag
+
+The other half of what the observer is for, and the one the plan calls the
+headline validation. Air-bearing table drag is modelled as joint damping, so the
+force the scene applies is exactly `−damping × velocity` at every instant — a
+disturbance whose true value is known analytically rather than read back from
+the solver, and one the controller's model has no term for at all.
+
+```bash
+ros2 run pat_arm_control contact_bench --seconds 8 --drag 0.5
+```
+
+`--drag D` sets the base damping to D and parks the target out of reach, so the
+only unmodelled force is the drag. Scored over the second half of the run, at
+the default gain:
+
+| base damping | fx ratio | fy ratio | tz ratio |
+|---|---|---|---|
+| 0.05 (shipped) | (1.21) | 1.00 | 1.00 |
+| 0.5 | 0.96 | 1.02 | 1.01 |
+| 5.0 | 1.00 | 0.97 | 0.95 |
+| 50.0 | 1.05 | 1.06 | 1.03 |
+
+**95–106% recovery across a 1000× span of damping**, with RMS error around 1% of
+the signal. The 1.21 is on a signal of 1×10⁻⁵ N, below the estimator's own error
+floor, so it is not a meaningful ratio — the shipped table drag is simply too
+small to measure against.
+
+This measurement is why the drag test needed an offline harness rather than the
+live stack, and it resolves a conflict in the plan: it asks for the base pinned
+throughout *and* for drag to be recovered, but drag is proportional to velocity,
+so a pinned base has none to measure. A deterministic short run at moderate
+damping is both — the base moves enough to produce drag without drifting far
+enough to make the setpoint unreachable.
+
+#### What the gain costs, and why the default is right
+
+The contact sweep above only says what a gain *buys*, because `contact_bench`
+reads the plant exactly. What it costs is measured separately, in
+`MomentumObserver.NoiseAndSignalBothScaleWithGainSoSnrIsNotFree`: the residual
+is `K(Mv − I)`, so an error in the measured velocity reaches the estimate
+multiplied by `K·M`. With σ = 0.01 rad/s on velocity:
+
+| `observer.gain` | estimate noise σ | steady recovery of a constant 1.0 |
+|---|---|---|
+| 10 | 0.25 | 1.03 |
+| 20 (default) | 0.52 | 1.06 |
+| 40 | 1.11 | 1.09 |
+| 80 | 2.60 | 1.11 |
+| 160 | **9.49** | 1.11 |
+
+Noise grows *faster* than linearly — 37× across a 16× gain span — while the
+sustained signal **saturates by gain 10**. Gain 160 therefore buys 8% more
+sustained accuracy for 37× the noise.
+
+Putting the two tables together settles the tuning:
+
+- **For drag and model error, low gain.** The signal saturates almost
+  immediately, so anything above ~20 is pure noise cost. The contact sweep's
+  "higher recovers more peak" does **not** generalise.
+- **For contact, raising the gain is still not worth it**, despite the peak
+  recovery being linear in K — because *detection already happens within one
+  control tick at every gain tested*. Peak magnitude is not what detection
+  needs, and it is the only thing the gain improves.
+- **So the shipped `observer.gain: 20.0` is the right default**, and the figure
+  that matters for using it is the noise: ±0.52 N·m on a signal of order 1.
+  That is why `observer.ff_slew` and `ff_max_frac` are not optional dressing —
+  feeding an estimate that noisy forward at full authority would inject serious
+  torque noise, which is also why `ff_gain` ships at 0.
+
+The σ = 0.01 rad/s is an assumption, not a measured encoder spec. The shape of
+the trade-off does not depend on it (both columns scale with σ), but the
+absolute noise figure does.
 
 Two scenario facts worth knowing before changing it:
 

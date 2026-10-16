@@ -149,6 +149,10 @@ void ContactScenario::armConstraintForce(Eigen::VectorXd& out) const {
     }
 }
 
+std::array<double, 3> ContactScenario::baseVelocity() const {
+    return {{d_->qvel[cxd_], d_->qvel[cyd_], d_->qvel[cwd_]}};
+}
+
 void ContactScenario::readControllerState(double anchor_x, double anchor_y,
                                           Eigen::VectorXd& q,
                                           Eigen::VectorXd& v) const {
