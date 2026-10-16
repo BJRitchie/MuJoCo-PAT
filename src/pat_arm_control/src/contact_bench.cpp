@@ -61,11 +61,44 @@
  *                              of magnitude
  *    rms err                   average disagreement over the contact window
  *
+ *  =============================== MODES ================================
+ *
+ *  Three disturbances, one scenario harness. Only the first involves contact;
+ *  the other two park the target out of reach so the signal is one thing.
+ *
+ *    contact        the default. Drive the arm into the target and score the
+ *                   estimate against qfrc_constraint.
+ *    --drag D       score the base rows against the -D*velocity the table
+ *                   applies. The truth is analytic, so it is exact.
+ *    --mass-scale S score the joint rows against the torque the controller's
+ *                   model gets wrong when the real links are S times heavier.
+ *
+ *  The last two need the plant MOVING -- drag is proportional to velocity and
+ *  an inertia error produces torque only under acceleration -- which is why
+ *  --mass-scale oscillates the setpoint rather than holding it.
+ *
+ *  ========================== TRUTH CHANNELS ============================
+ *
+ *  Two, recorded side by side every tick:
+ *
+ *    qfrc_constraint       MuJoCo's own constraint force. Exact, and no
+ *                          algorithm could know it, but it is zero whenever
+ *                          nothing is touching -- so it cannot score model
+ *                          error at all.
+ *    M*qacc + bias - tau   the controller's model evaluated at the plant's real
+ *                          acceleration. This IS `d` by definition, so it
+ *                          covers model error too.
+ *
+ *  They share no arithmetic, so where both apply they check each other, and the
+ *  contact report prints how far apart they got.
+ *
  *  ================================ USE =================================
  *
  *    contact_bench
  *    contact_bench --gain 60 --out /tmp/contact.csv
  *    contact_bench --sweep-gain 20,60,150
+ *    contact_bench --drag 0.5
+ *    contact_bench --mass-scale 2.0 --ab-ff 1.0
  */
 #include <algorithm>
 #include <cmath>
@@ -104,6 +137,11 @@ public:
     ArmProbe(const std::string& mjcf, const NMPCParams& p) : ArmNMPC(mjcf, p) {}
     using ArmNMPC::n_joints_;
     using ArmNMPC::ownedJointInds;
+    //! The per-joint feedforward cap, ff_max_frac * the joint's torque limit.
+    //! Reported alongside the disturbance because a disturbance larger than the
+    //! cap cannot be fed forward however well it is estimated, and that is a
+    //! fact about the actuators rather than about the observer.
+    using ArmNMPC::ff_max_vec_;
 };
 
 // ======================== Options and parsing ============================= //
@@ -171,10 +209,73 @@ struct Options {
      *  pinning value and leaves nothing to see; the shipped table value is
      *  0.05. */
     double drag_damping = -1.0;
+
+    /*! Model-error mode: scale every arm link's mass and inertia in the SCENE
+     *  only, so the controller's model is genuinely wrong.
+     *
+     *  1.0 is no perturbation. Like drag mode this parks the target out of
+     *  reach, because the question is what the observer does about a wrong
+     *  model, not about contact.
+     *
+     *  Mass error is invisible unless the arm is ACCELERATING -- the mismatch
+     *  torque is (M_scene - M_model) * qacc, which is identically zero at rest
+     *  however wrong the masses are. A static arm with 3x mass on two links
+     *  measured an estimate of 0.000. So this mode drives the setpoint in a
+     *  sine (see osc_amp) rather than to a fixed point. */
+    double mass_scale = 1.0;
+
+    /*! Oscillate the scored arm's EE setpoint about its start pose instead of
+     *  holding a fixed point: amplitude [m] along x, and frequency [Hz].
+     *
+     *  Peak commanded acceleration is amp * (2*pi*hz)^2, which is what makes an
+     *  inertia error observable. Deterministic -- a sine of SIMULATED time, not
+     *  of the wall clock. Zero amplitude keeps the fixed-setpoint behaviour. */
+    double osc_amp = 0.0;
+    double osc_hz  = 0.75;
+
+    /*! Run the whole trial twice, with the feedforward off and then on at this
+     *  gain, and report EE tracking for both. Negative disables.
+     *
+     *  The A/B is the only way to answer whether acting on the estimate HELPS:
+     *  scoring d_hat against truth says the observer is correct, not that the
+     *  feedforward improves anything. Valid for the same reason the gain sweep
+     *  is -- the two runs are identical but for the feedforward. */
+    double ab_ff = -1.0;
+
+    /*! Base damping override, any mode. Negative keeps the mode's own default.
+     *
+     *  This matters more than it looks. The feedforward acts on the
+     *  BASE-ELIMINATED estimate, and the Schur reduction
+     *  d_m - (H_bb^-1 H_bm)^T d_b mixes the base rows into every joint row. The
+     *  pinning value of 500 therefore injects the rig's own drag straight into
+     *  the feedforward, where it is an artefact of the test and not something
+     *  the flight controller would ever see. So the oscillating modes default
+     *  to the shipped table value instead of to pinning. */
+    double base_damping = -1.0;
 };
+
+//! The air-bearing table's own damping, from simulation.yaml. The realistic
+//! value, as against the 500 used to pin the base for contact work.
+constexpr double kTableDamping = 0.05;
 
 //! True when --drag asked for the drag measurement rather than contact.
 bool dragMode(const Options& o) { return o.drag_damping > 0.0; }
+
+/*! True when the setpoint sweeps: the tracking measurement.
+ *
+ *  --mass-scale selects it implicitly because model error is only observable
+ *  under acceleration, but it is a mode in its own right, and running it with
+ *  no mass error at all is the BASELINE the model-error runs are compared
+ *  against. Without that baseline a tracking number means nothing: an error of
+ *  12 cm could be the model error or could be what this arm does anyway. */
+bool trackingMode(const Options& o) { return o.osc_amp > 0.0; }
+
+//! Whether a model error is actually in force within a tracking run.
+bool hasModelError(const Options& o) { return o.mass_scale != 1.0; }
+
+//! Both alternative modes park the target out of reach, so neither is scored
+//! against a signal contaminated by contact.
+bool quietMode(const Options& o) { return dragMode(o) || trackingMode(o); }
 
 void usage() {
     std::cout <<
@@ -204,6 +305,21 @@ R"(contact_bench - deterministic scoring of the disturbance observer against
                      actually applying. Needs the base moving, so D must be
                      moderate -- 0.05 is the shipped table value, 500 pins it
                      and leaves no drag to see
+  --mass-scale S     measure against MODEL ERROR instead of contact: scale every
+                     arm link's mass and inertia by S in the scene only, park
+                     the target out of reach, and score the estimate against the
+                     mismatch torque. Implies --osc, because an inertia error
+                     produces no torque at all unless the arm is accelerating
+  --osc A[,HZ]       oscillate the scored arm's EE setpoint about its start pose
+                     by A metres along x at HZ (default 0.75), instead of
+                     driving it to a fixed setpoint. Tracked in the BASE's frame,
+                     so base drift cannot put it out of reach
+  --base-damping D   override the base damping. Contact mode pins at 500; the
+                     oscillating modes use the table's own 0.05, because pinning
+                     puts the rig's drag into the base-eliminated feedforward
+  --ab-ff G          run the trial twice, feedforward off then on at gain G, and
+                     report EE tracking for both. The only test of whether
+                     acting on the estimate actually improves anything
   --out CSV          write the per-tick series
 )";
 }
@@ -241,6 +357,16 @@ bool parseArgs(int argc, char** argv, Options& o, int& code) {
             else if (a == "--ff-gain") o.ff_gain = std::stod(next());
             else if (a == "--free-target") o.free_target = true;
             else if (a == "--drag")    o.drag_damping = std::stod(next());
+            else if (a == "--mass-scale") o.mass_scale = std::stod(next());
+            else if (a == "--base-damping") o.base_damping = std::stod(next());
+            else if (a == "--ab-ff")   o.ab_ff   = std::stod(next());
+            else if (a == "--osc") {
+                // "A" or "A,HZ" -- the frequency keeps its default when omitted.
+                const std::string v = next();
+                const auto comma = v.find(',');
+                o.osc_amp = std::stod(v.substr(0, comma));
+                if (comma != std::string::npos) o.osc_hz = std::stod(v.substr(comma + 1));
+            }
             else if (a == "--setpoint") xy(next(), o.sp_x, o.sp_y);
             else if (a == "--target")   xy(next(), o.tgt_x, o.tgt_y);
             else if (a == "--sweep-gain") {
@@ -269,6 +395,28 @@ bool parseArgs(int argc, char** argv, Options& o, int& code) {
     }
     if (o.seconds <= 0.0 || o.hz <= 0.0) {
         std::cerr << "contact_bench: --seconds and --hz must be positive\n";
+        code = 2;
+        return false;
+    }
+    if (!(o.mass_scale > 0.0)) {
+        std::cerr << "contact_bench: --mass-scale must be positive\n";
+        code = 2;
+        return false;
+    }
+    if (o.osc_amp < 0.0 || o.osc_hz <= 0.0) {
+        std::cerr << "contact_bench: --osc needs a non-negative amplitude and a "
+                     "positive frequency\n";
+        code = 2;
+        return false;
+    }
+    // Model error without motion measures nothing: the mismatch torque is
+    // (M_scene - M_model) * qacc. Rather than silently reporting zeros, supply
+    // the motion the mode needs. An explicit --osc still wins.
+    if (hasModelError(o) && o.osc_amp == 0.0) o.osc_amp = 0.08;
+    if (dragMode(o) && trackingMode(o)) {
+        std::cerr << "contact_bench: --drag and --osc/--mass-scale score "
+                     "different rows against different truths; run them "
+                     "separately\n";
         code = 2;
         return false;
     }
@@ -318,8 +466,18 @@ ContactScenario::Config sceneConfig(const Options& o,
         // Moderate damping on all three planar DOFs, so the base moves (drag
         // is proportional to velocity) without drifting far.
         c.base_damping = {{o.drag_damping, o.drag_damping, o.drag_damping}};
-        // And the target well out of the way, so contact cannot contaminate a
-        // measurement that is supposed to be drag alone.
+    } else if (trackingMode(o)) {
+        // NOT the pinning value: see Options::base_damping. Pinning would put
+        // the rig's own drag into the feedforward through the base elimination.
+        c.base_damping = {{kTableDamping, kTableDamping, kTableDamping}};
+    }
+    if (o.base_damping >= 0.0) {
+        c.base_damping = {{o.base_damping, o.base_damping, o.base_damping}};
+    }
+    c.arm_mass_scale = o.mass_scale;
+    if (quietMode(o)) {
+        // The target well out of the way, so contact cannot contaminate a
+        // measurement that is supposed to be one disturbance alone.
         c.target_x = 2.0;
         c.target_y = 2.0;
     }
@@ -358,9 +516,39 @@ struct Trial {
     int first_detect_tick = -1;            //!< -1 if the observer never saw it
     std::string first_contact_pairs;       //!< which geoms touched, at onset
     double applied_gain = 0.0;             //!< what the joint rows actually used
+    double applied_ff = 0.0;               //!< the ff_gain the command used
     long   obs_steps = 0;
     double obs_max_mdot = 0.0;
     std::array<double, 3> base_peak{{0.0, 0.0, 0.0}};   //!< fx, fy, tz
+
+    //! Total arm-link mass the PLANT has. Stated in the report so the size of
+    //! the model error is read in kilograms, not inferred from a flag.
+    double scene_arm_mass = 0.0;
+
+    //! Base damping in force, and how far the base actually travelled. Reported
+    //! because a free base drifting far is the standing confound of this rig,
+    //! so a run has to show how much of it happened.
+    double base_damping = 0.0;
+    double base_drift = 0.0;
+
+    //! How often the feedforward hit its saturation bound or its slew limit.
+    //! Nonzero means the guards were load-bearing in this run, so the A/B
+    //! compares a limited feedforward and the report has to say so.
+    long ff_saturated = 0;
+    long ff_slew_limited = 0;
+
+    //! Per model joint: the feedforward cap, and the joint's torque limit.
+    std::vector<double> ff_cap;
+    std::vector<double> tau_max;
+
+    /*! Per model joint: the largest torque actually commanded, and how many
+     *  ticks it sat within 1% of the limit.
+     *
+     *  Reported because a torque-starved arm and a badly tuned one look the
+     *  same from the tracking error alone, and the difference decides whether a
+     *  feedforward could have helped at all. */
+    std::vector<double> tau_peak;
+    std::vector<long>   tau_railed;
 
     /*! Drag mode only: the analytic drag the scene applied, paired with what
      *  the observer's base rows estimated, per tick. Three entries each:
@@ -424,6 +612,9 @@ Trial runTrial(const Options& o, double gain_override) {
     Eigen::VectorXd q, v, tau_full(6 + n_joints), d_reduced(n_joints), truth;
     Eigen::MatrixXd M, R;
     Eigen::VectorXd bias;
+    // The acceleration-derived truth channel: acc from the plant, resid from the
+    // controller's own model evaluated at the same state.
+    Eigen::VectorXd acc, resid(6 + n_joints);
 
     // --- 3. Setpoints ----------------------------------------------------- //
     scene.readControllerState(cfg.base_anchor_x, cfg.base_anchor_y, q, v);
@@ -441,13 +632,63 @@ Trial runTrial(const Options& o, double gain_override) {
     // orientation setpoint is simply where it started, so the run is a straight
     // push rather than a push plus a twist.
     const ArmNMPC::EePose start = scored.currentEePose(q, v);
-    scored.setDesiredPos(o.sp_x, o.sp_y, start.pos.z());
     scored.setDesiredOrient(start.quat(0), start.quat(1), start.quat(2), start.quat(3));
 
+    // The start pose expressed in the base's frame, so an oscillating setpoint
+    // can be put back into the world each tick wherever the base has got to.
+    const auto base0 = scene.basePose();
+    const double off_x = start.pos.x() - (base0[0] + cfg.base_anchor_x);
+    const double off_y = start.pos.y() - (base0[1] + cfg.base_anchor_y);
+
+    /*! Where the scored arm is told to put its EE at simulated time `now`.
+     *
+     *  Fixed and world-frame by default, which is what the contact scenario
+     *  needs: it drives the EE to a point inside a target that does not move.
+     *
+     *  With osc_amp set it is instead a sine about the START pose expressed in
+     *  the BASE's frame. Two reasons. It oscillates about the start rather than
+     *  about --setpoint because those modes measure what happens while the arm
+     *  accelerates, and sweeping about a point 8 cm inside the target would be
+     *  a run of repeated collisions. And it follows the base because those
+     *  modes do not pin the base: a world-frame setpoint then drifts out of
+     *  reach, which is the confound that makes every long free-base run
+     *  uninterpretable. Tracking in the base frame removes it, and the base
+     *  frame is the right one for arm control regardless. */
+    const auto setpointAt = [&](double now, double& x, double& y) {
+        if (o.osc_amp == 0.0) {
+            x = o.sp_x;
+            y = o.sp_y;
+            return;
+        }
+        const auto b = scene.basePose();
+        const double s = o.osc_amp * std::sin(2.0 * M_PI * o.osc_hz * now);
+        // Rotate the stored offset by the base's current yaw, so a base that
+        // has turned does not drag the setpoint sideways.
+        const double c = std::cos(b[2] - base0[2]);
+        const double sn = std::sin(b[2] - base0[2]);
+        x = b[0] + cfg.base_anchor_x + c * (off_x + s) - sn * off_y;
+        y = b[1] + cfg.base_anchor_y + sn * (off_x + s) + c * off_y;
+    };
+
     Trial t;
-    t.applied_gain  = op.gain(6);     // a joint row, past any base override
-    t.joint_names   = cfg.model_joints;
-    t.scored_joints = scored.ownedJointInds;
+    t.applied_gain   = op.gain(6);     // a joint row, past any base override
+    t.applied_ff     = cfg.params.ff_gain;
+    t.joint_names    = cfg.model_joints;
+    t.scored_joints  = scored.ownedJointInds;
+    t.scene_arm_mass = scene.armMass();
+    t.base_damping   = scene.baseDamping()[0];
+    t.ff_cap.assign(static_cast<std::size_t>(n_joints), 0.0);
+    t.tau_max.assign(static_cast<std::size_t>(n_joints), 0.0);
+    t.tau_peak.assign(static_cast<std::size_t>(n_joints), 0.0);
+    t.tau_railed.assign(static_cast<std::size_t>(n_joints), 0);
+    for (int i = 0; i < n_joints; ++i) {
+        const auto u = static_cast<std::size_t>(i);
+        t.ff_cap[u]  = scored.ff_max_vec_(i);
+        // ff_max_vec_ is ff_max_frac * the limit, so the limit is recovered
+        // from it rather than read from a second place that could disagree.
+        t.tau_max[u] = cfg.params.ff_max_frac > 0.0
+                           ? scored.ff_max_vec_(i) / cfg.params.ff_max_frac : 0.0;
+    }
 
     // Physics runs faster than control (500 Hz against 100 Hz as shipped), so
     // each control tick advances the plant several physics steps.
@@ -461,6 +702,16 @@ Trial runTrial(const Options& o, double gain_override) {
         // (a) Plant state -> controller coordinates. Both controllers see the
         //     whole model state; each acts only on the joints it owns.
         scene.readControllerState(cfg.base_anchor_x, cfg.base_anchor_y, q, v);
+
+        // (a2) Command this tick's setpoint, and measure how far the EE is from
+        //      it right now. Measured BEFORE the solve, against the setpoint
+        //      this tick was asked to reach, so the number is a tracking error
+        //      and not a comparison with where the arm is about to be sent.
+        double sx = 0.0, sy = 0.0;
+        setpointAt(scene.time(), sx, sy);
+        scored.setDesiredPos(sx, sy, start.pos.z());
+        const ArmNMPC::EePose now_ee = scored.currentEePose(q, v);
+        const double ee_err = std::hypot(now_ee.pos.x() - sx, now_ee.pos.y() - sy);
 
         // (b) Solve. Each returns a vector over ALL model joints with only its
         //     own entries meaningful.
@@ -476,6 +727,24 @@ Trial runTrial(const Options& o, double gain_override) {
         for (const int idx : scored.ownedJointInds) tau_full(6 + idx) = tau_s(idx);
         for (const int idx : held.ownedJointInds)   tau_full(6 + idx) = tau_h(idx);
 
+        // (c1) How hard the actuators are working, before anything else looks
+        //      at the torque.
+        for (int i = 0; i < n_joints; ++i) {
+            const auto u = static_cast<std::size_t>(i);
+            const double mag = std::fabs(tau_full(6 + i));
+            t.tau_peak[u] = std::max(t.tau_peak[u], mag);
+            if (t.tau_max[u] > 0.0 && mag >= 0.99 * t.tau_max[u]) ++t.tau_railed[u];
+        }
+
+        // (c2) Put that torque on the plant and refresh its derived quantities,
+        //      so qacc and qfrc_constraint describe THIS instant under THIS
+        //      torque. Without the refresh they would still describe the last
+        //      substep of the previous tick, and the residual below would pair
+        //      one tick's torque with another tick's acceleration. The plant is
+        //      not advanced here -- that happens at (g).
+        scene.applyArmTorque(tau_full.segment(6, n_joints));
+        scene.refreshDerived();
+
         // (d) Step the observer. fullDynamics evaluates the CONTROLLER's model
         //     at this state -- the model with no contact in it, which is why
         //     the contact shows up as a disturbance at all.
@@ -483,18 +752,38 @@ Trial runTrial(const Options& o, double gain_override) {
         obs.update(M, bias, v, tau_full);
         obs.reduceToJoints(R, d_reduced);
 
+        // (d2) Hand the estimate to the control law, which will act on it NEXT
+        //      tick. One tick of lag is not a simplification: the node's
+        //      observer runs on its own thread and the control thread reads
+        //      whatever the mailbox last held, so the bench would overstate the
+        //      feedforward if it applied the estimate to the solve it came
+        //      from. With ff_gain at 0 this records and changes nothing.
+        scored.setDisturbanceFeedforward(d_reduced, dt);
+
+        // (d3) The independent truth channel. The observer integrates to avoid
+        //      ever touching an acceleration; this evaluates the same residual
+        //      directly from the plant's qacc, so the two share no arithmetic
+        //      and an agreement between them means something.
+        scene.readControllerAccel(acc);
+        resid.noalias() = M * acc;
+        resid += bias;
+        resid -= tau_full;
+
         // (e) Record estimate and truth together, BEFORE advancing the plant,
         //     so both describe the same instant.
         scene.armConstraintForce(truth);
         ContactRow row;
         row.t    = scene.time();
         row.ncon = scene.contactCount();
+        row.ee_err = ee_err;
         row.truth.resize(static_cast<std::size_t>(n_joints));
         row.raw.resize(static_cast<std::size_t>(n_joints));
         row.reduced.resize(static_cast<std::size_t>(n_joints));
+        row.resid.resize(static_cast<std::size_t>(n_joints));
         for (int i = 0; i < n_joints; ++i) {
             const auto u = static_cast<std::size_t>(i);
             row.truth[u]   = truth(i);
+            row.resid[u]   = resid(6 + i);
             // raw: the full-system estimate's joint rows, which is what
             // qfrc_constraint is directly comparable to. reduced: what the
             // controller would act on, which differs by the base coupling.
@@ -540,14 +829,17 @@ Trial runTrial(const Options& o, double gain_override) {
         }
         t.rows.push_back(std::move(row));
 
-        // (g) Apply and advance. segment(6, n) is the joint block of the
-        //     full-system torque vector.
-        scene.applyArmTorque(tau_full.segment(6, n_joints));
+        // (g) Advance. The torque was applied at (c2), before the truth was
+        //     read, so this only runs the physics forward one control period.
         scene.step(steps_per_tick);
     }
 
-    t.obs_steps    = obs.updates();
-    t.obs_max_mdot = obs.maxMdot();
+    const auto base_end = scene.basePose();
+    t.base_drift      = std::hypot(base_end[0] - base0[0], base_end[1] - base0[1]);
+    t.obs_steps       = obs.updates();
+    t.obs_max_mdot    = obs.maxMdot();
+    t.ff_saturated    = scored.ffSaturated();
+    t.ff_slew_limited = scored.ffSlewLimited();
     return t;
 }
 
@@ -593,9 +885,136 @@ void reportDrag(const Trial& t) {
                 t.obs_steps, t.obs_max_mdot);
 }
 
+/*! The window the steady-state scorers use: everything past the first quarter
+ *  of the run.
+ *
+ *  The filter starts at exactly zero and needs a few time constants to arrive,
+ *  and the arm starts from rest and needs a cycle of the setpoint sine before it
+ *  is accelerating the way the rest of the run does. Counting either as error
+ *  would understate a correct estimate. */
+std::size_t steadyFrom(const Trial& t) { return t.rows.size() / 4; }
+
+/*! EE tracking error over the steady window: mean, peak and RMS. */
+struct Tracking {
+    double mean = 0.0;
+    double peak = 0.0;
+    double rms  = 0.0;
+};
+
+Tracking trackingOf(const Trial& t) {
+    Tracking k;
+    const std::size_t from = steadyFrom(t);
+    if (from >= t.rows.size()) return k;
+    double sq = 0.0;
+    for (std::size_t i = from; i < t.rows.size(); ++i) {
+        const double e = t.rows[i].ee_err;
+        k.mean += e;
+        sq     += e * e;
+        k.peak = std::max(k.peak, e);
+    }
+    const double n = static_cast<double>(t.rows.size() - from);
+    k.mean /= n;
+    k.rms = std::sqrt(sq / n);
+    return k;
+}
+
+/*! Model-error mode's report: the estimate against the mismatch torque.
+ *
+ *  The truth here is the acceleration residual rather than qfrc_constraint,
+ *  because nothing is touching: the disturbance is the controller's own model
+ *  being wrong about how much the arm weighs. */
+void reportTracking(const Options& o, const Trial& t) {
+    if (hasModelError(o)) {
+        std::printf("\n  scene arm mass %.3f kg at %.2fx, so the controller's "
+                    "model is short by %.3f kg\n", t.scene_arm_mass,
+                    o.mass_scale,
+                    t.scene_arm_mass - t.scene_arm_mass / o.mass_scale);
+    } else {
+        std::printf("\n  arm mass %.3f kg, UNPERTURBED: this is the baseline "
+                    "run, so the tracking error\n  below is what the arm does "
+                    "with a correct model and nothing disturbing it. The\n"
+                    "  disturbance table is numerical dust by construction and "
+                    "its ratios read n/a.\n", t.scene_arm_mass);
+    }
+    std::printf("  EE setpoint oscillating %.3f m at %.2f Hz, peak commanded "
+                "accel %.2f m/s^2\n", o.osc_amp, o.osc_hz,
+                o.osc_amp * std::pow(2.0 * M_PI * o.osc_hz, 2.0));
+    std::printf("  base damping %.3f (the table's own value, not the pinning "
+                "500), drifted %.3f m\n", t.base_damping, t.base_drift);
+
+    // Nothing can touch in this mode -- the target is parked metres away -- so
+    // a constraint force here is the arm against its own JOINT RANGE LIMIT,
+    // which MuJoCo puts in the same qfrc_constraint vector. It is impulsive, it
+    // dwarfs the smooth mismatch torque, and an observer lags it exactly as it
+    // lags contact. Left unsaid it would quietly become the measurement, so it
+    // is reported as contamination and the amplitude it needs is named.
+    int limit_ticks = 0;
+    for (const auto& r : t.rows) {
+        if (r.ncon > 0) ++limit_ticks;
+    }
+    if (limit_ticks > 0) {
+        std::printf("\n  WARNING: %d ticks hit a JOINT RANGE LIMIT. Nothing can "
+                    "touch in this mode, so that\n  is the arm against its own "
+                    "stop -- an impulsive force in the same qfrc_constraint\n"
+                    "  vector, large enough to dominate the smooth mismatch "
+                    "torque being measured.\n  Reduce --osc below the arm's "
+                    "reachable travel.\n", limit_ticks);
+    }
+
+    const std::size_t from = steadyFrom(t);
+    std::printf("\n  estimate against M*qacc + bias - tau, the mismatch torque, "
+                "from %.2f s on\n  (the arm starts at rest and the filter starts "
+                "at zero; neither is error).\n  Scored by AMPLITUDE, not by "
+                "signed peak: this disturbance oscillates with the\n  setpoint, "
+                "and two signed oscillations can peak on opposite half-cycles:\n",
+                t.rows[from].t);
+    std::printf("    %-10s %10s %10s %7s %7s %8s %9s %8s\n",
+                "joint", "truth rms", "est rms", "ratio", "corr", "rms err",
+                "ff cap", "tau max");
+    bool over_cap = false;
+    for (const int idx : t.scored_joints) {
+        const JointScore s =
+            pat_arm_control::bench::scoreJointResidual(t.rows, idx, from);
+        const auto u = static_cast<std::size_t>(idx);
+        std::printf("    %-10s %10.4f %10.4f %7.2f %7.2f %8.4f %9.4f %8.4f\n",
+                    t.joint_names[u].c_str(), s.truth_rms, s.est_rms,
+                    s.amplitudeRatio(), s.corr, s.rms_err, t.ff_cap[u],
+                    t.tau_max[u]);
+        if (s.truth_rms > t.ff_cap[u]) over_cap = true;
+    }
+    if (over_cap) {
+        std::printf("\n  The disturbance is larger than the feedforward cap "
+                    "(ff_max_frac * tau max), so the\n  command cannot cancel "
+                    "it however well it is estimated. That is a statement about\n"
+                    "  the actuators, not the observer: a %.2f N*m joint limit "
+                    "leaves %.3f N*m of\n  feedforward authority. Reduce "
+                    "--mass-scale to measure the feedforward itself.\n",
+                    t.tau_max[static_cast<std::size_t>(t.scored_joints.front())],
+                    t.ff_cap[static_cast<std::size_t>(t.scored_joints.front())]);
+    }
+    const Tracking k = trackingOf(t);
+    std::printf("\n  EE tracking over the same window: mean %.5f  peak %.5f  "
+                "rms %.5f m\n", k.mean, k.peak, k.rms);
+    std::printf("  commanded torque:");
+    for (const int idx : t.scored_joints) {
+        const auto u = static_cast<std::size_t>(idx);
+        std::printf("  %s peak %.4f (%ld ticks at the rail)",
+                    t.joint_names[u].c_str(), t.tau_peak[u], t.tau_railed[u]);
+    }
+    std::printf("\n");
+    std::printf("  observer: %ld steps, max|Mdot| %.2f;  feedforward gain %.2f, "
+                "saturated %ld, slew-limited %ld\n",
+                t.obs_steps, t.obs_max_mdot, t.applied_ff, t.ff_saturated,
+                t.ff_slew_limited);
+}
+
 void reportTrial(const Options& o, const Trial& t) {
     if (dragMode(o)) {
         reportDrag(t);
+        return;
+    }
+    if (trackingMode(o)) {
+        reportTracking(o, t);
         return;
     }
     std::printf("  contact on %d of %zu ticks, peak ncon %d\n",
@@ -630,6 +1049,26 @@ void reportTrial(const Options& o, const Trial& t) {
                     s.truth_peak, s.est_peak, s.ratio(), s.truth_mean,
                     s.est_mean, s.corr, s.rms_err);
     }
+    // Both truth channels apply during contact, and they are computed from
+    // nothing in common: one is MuJoCo's own constraint force, the other is the
+    // controller's model evaluated at the plant's acceleration. Agreement means
+    // the acceleration residual that the model-error mode relies on -- where
+    // qfrc_constraint is identically zero and cannot check anything -- is
+    // sound. Disagreement on a contact run would mean it is not.
+    double worst = 0.0, scale = 0.0;
+    for (const auto& r : t.rows) {
+        if (r.ncon <= 0) continue;
+        for (const int idx : t.scored_joints) {
+            const auto u = static_cast<std::size_t>(idx);
+            worst = std::max(worst, std::fabs(r.truth[u] - r.resid[u]));
+            scale = std::max(scale, std::fabs(r.truth[u]));
+        }
+    }
+    std::printf("\n  truth channels cross-checked over the contact window: "
+                "qfrc_constraint against\n  M*qacc + bias - tau differ by at "
+                "most %.4f N*m on a %.4f N*m signal (%.2f%%)\n",
+                worst, scale, scale != 0.0 ? 100.0 * worst / scale : 0.0);
+
     std::printf("\n  base wrench estimate peaks: fx %.3f  fy %.3f  tz %.3f\n"
                 "  (the pinning drag is in these: the scene damps the base and "
                 "the controller's model does\n   not, so they are NOT a contact "
@@ -643,21 +1082,62 @@ void writeCsv(const std::string& path, const Trial& t) {
     std::ofstream os(path);
     if (!os) throw std::runtime_error("cannot write " + path);
     // One row per control tick; three columns per scored joint plus the base.
-    os << "t_s,ncon";
+    os << "t_s,ncon,ee_err";
     for (const int idx : t.scored_joints) {
         const auto& n = t.joint_names[static_cast<std::size_t>(idx)];
-        os << ",truth_" << n << ",raw_" << n << ",reduced_" << n;
+        os << ",truth_" << n << ",resid_" << n << ",raw_" << n
+           << ",reduced_" << n;
     }
     os << ",base_fx,base_fy,base_tz\n";
     for (const auto& r : t.rows) {
-        os << r.t << ',' << r.ncon;
+        os << r.t << ',' << r.ncon << ',' << r.ee_err;
         for (const int idx : t.scored_joints) {
             const auto u = static_cast<std::size_t>(idx);
-            os << ',' << r.truth[u] << ',' << r.raw[u] << ',' << r.reduced[u];
+            os << ',' << r.truth[u] << ',' << r.resid[u] << ',' << r.raw[u]
+               << ',' << r.reduced[u];
         }
         os << ',' << r.base[0] << ',' << r.base[1] << ',' << r.base[2] << '\n';
     }
     std::printf("\n  wrote %zu rows to %s\n", t.rows.size(), path.c_str());
+}
+
+/*! The A/B: does acting on the estimate actually improve tracking?
+ *
+ *  Two runs of one scenario, differing only in ff_gain. That is a fair
+ *  comparison for the same reason the gain sweep is -- the scenario is
+ *  deterministic, so the arm, the setpoint and the disturbance are identical in
+ *  both runs and the difference is the feedforward alone.
+ */
+void reportAb(const Options& o, const Trial& off, const Trial& on) {
+    const Tracking a = trackingOf(off);
+    const Tracking b = trackingOf(on);
+    std::printf("\nfeedforward A/B -- identical runs but for ff_gain, scored over "
+                "the steady window:\n");
+    std::printf("  %-14s %12s %12s %12s\n", "ff_gain", "mean err", "peak err",
+                "rms err");
+    std::printf("  %-14.2f %12.5f %12.5f %12.5f\n", off.applied_ff, a.mean,
+                a.peak, a.rms);
+    std::printf("  %-14.2f %12.5f %12.5f %12.5f\n", on.applied_ff, b.mean,
+                b.peak, b.rms);
+    const auto pct = [](double before, double after) {
+        return before != 0.0 ? 100.0 * (before - after) / before : 0.0;
+    };
+    std::printf("  %-14s %11.1f%% %11.1f%% %11.1f%%   (positive = the "
+                "feedforward helped)\n", "improvement",
+                pct(a.mean, b.mean), pct(a.peak, b.peak), pct(a.rms, b.rms));
+    if (on.ff_saturated > 0 || on.ff_slew_limited > 0) {
+        std::printf("  the feedforward was limited on the second run: saturated "
+                    "%ld, slew-limited %ld\n  (so this understates what an "
+                    "unguarded estimate would have done, which is the point of "
+                    "the guards)\n", on.ff_saturated, on.ff_slew_limited);
+    }
+    if (!hasModelError(o) && !dragMode(o)) {
+        std::printf("  note: with no model error and nothing touching, there is "
+                    "almost no disturbance to\n  feed forward. This row is the "
+                    "BASELINE -- the tracking error the arm has anyway -- and a\n"
+                    "  result near zero here is the correct answer, not a weak "
+                    "one\n");
+    }
 }
 
 /*! One table across the sweep, so the gain's effect is read down a column. */
@@ -701,11 +1181,40 @@ int main(int argc, char** argv) {
     try {
         // The scenario, echoed up front: these numbers decide whether contact
         // happens at all, so a run is not interpretable without them.
-        std::printf("contact_bench: %.1f s at %.0f Hz, arm=%s, target=(%.4f, %.4f), "
-                    "setpoint=(%.3f, %.3f), target_%s\n  scene %s\n",
-                    o.seconds, o.hz, o.arm.c_str(), o.tgt_x, o.tgt_y,
-                    o.sp_x, o.sp_y, o.free_target ? "free" : "pinned",
-                    o.scene.c_str());
+        const char* mode = dragMode(o) ? "drag"
+                         : trackingMode(o)
+                               ? (hasModelError(o) ? "tracking, model error"
+                                                   : "tracking, baseline")
+                               : "contact";
+        std::printf("contact_bench: mode=%s, %.1f s at %.0f Hz, arm=%s\n",
+                    mode, o.seconds, o.hz, o.arm.c_str());
+        if (quietMode(o)) {
+            // The target is parked out of reach in these modes, so echoing a
+            // --target would describe something the run does not use.
+            std::printf("  target parked out of reach; setpoint %s\n",
+                        o.osc_amp > 0.0 ? "oscillating about the start pose"
+                                        : "held at the start pose");
+        } else {
+            std::printf("  target=(%.4f, %.4f), setpoint=(%.3f, %.3f), "
+                        "target_%s\n", o.tgt_x, o.tgt_y, o.sp_x, o.sp_y,
+                        o.free_target ? "free" : "pinned");
+        }
+        std::printf("  scene %s\n", o.scene.c_str());
+
+        if (o.ab_ff >= 0.0) {
+            // The feedforward gain is the ONLY difference between the two.
+            Options off = o;
+            off.ff_gain = 0.0;
+            Options on = o;
+            on.ff_gain = o.ab_ff;
+            const Trial t_off = runTrial(off, o.gain);
+            const Trial t_on  = runTrial(on, o.gain);
+            // The estimate's own scoring once, from the run that acted on it.
+            reportTrial(on, t_on);
+            reportAb(o, t_off, t_on);
+            if (!o.out_csv.empty()) writeCsv(o.out_csv, t_on);
+            return 0;
+        }
 
         if (!o.sweep_gain.empty()) {
             std::vector<Trial> trials;
@@ -721,9 +1230,9 @@ int main(int argc, char** argv) {
                     o.ff_gain >= 0.0 ? o.ff_gain : 0.0);
         reportTrial(o, t);
         if (!o.out_csv.empty()) writeCsv(o.out_csv, t);
-        // Drag mode has no contact by design, so "no contact" is not a failure
-        // there -- it is the point.
-        if (dragMode(o)) return 0;
+        // The drag and model-error modes have no contact by design, so "no
+        // contact" is not a failure there -- it is the point.
+        if (quietMode(o)) return 0;
         return t.contact_ticks == 0 ? 1 : 0;
     } catch (const std::exception& e) {
         std::cerr << "contact_bench: " << e.what() << "\n";

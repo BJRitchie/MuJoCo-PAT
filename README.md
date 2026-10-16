@@ -517,15 +517,20 @@ ros2 run pat_arm_control contact_bench --free-target --sweep-gain 10,20,40,80,16
 ```
 
 Base pinned, target free, setpoint 8 cm past the target's face, exact
-measurements. 145 of 800 ticks in contact, `geom29/31--target_body`:
+measurements. 144 of 800 ticks in contact, `geom29/31--target_body`:
 
 | `observer.gain` | peak recovered (3 joints) | correlation |
 |---|---|---|
-| 10 | 0.11 / 0.10 / 0.09 | 0.13–0.21 |
-| 20 (default) | 0.19 / 0.19 / 0.17 | 0.24–0.28 |
-| 40 | 0.32 / 0.31 / 0.28 | 0.35–0.37 |
-| 80 | 0.59 / 0.58 / 0.54 | 0.45–0.46 |
-| 160 | 1.14 / 1.12 / 1.04 | 0.42 |
+| 10 | 0.11 / 0.11 / 0.09 | 0.14–0.22 |
+| 20 (default) | 0.20 / 0.19 / 0.17 | 0.25–0.29 |
+| 40 | 0.33 / 0.32 / 0.29 | 0.37–0.38 |
+| 80 | 0.61 / 0.60 / 0.56 | 0.46–0.48 |
+| 160 | 1.18 / 1.16 / 1.08 | 0.42–0.44 |
+
+The tick's torque is applied to the plant *before* `qfrc_constraint` and `qacc`
+are read, so the truth and the estimate scored against it describe the same
+instant under the same torque. `mj_step` on its own leaves both describing the
+start of its last substep, under the previous tick's command.
 
 Four things this establishes:
 
@@ -535,11 +540,11 @@ Four things this establishes:
 - **The recovered peak scales linearly with gain** — doubling K doubles it,
   crossing 1.0 near 160. That is a first-order low-pass acting on a transient
   shorter than its own time constant, and it is uniform across joints whose
-  true peaks span 0.93 to 14.6 N·m, so it is the filter and not a modelling
+  true peaks span 0.90 to 14.1 N·m, so it is the filter and not a modelling
   error.
 - **The mean is already right at the default gain.** Over the contact window,
-  truth vs estimate averaged −0.354/−0.299, 0.162/0.138, 0.0215/0.0186 — 84–86%
-  — while the peak ratio was 0.19. A low-pass preserves the average and
+  truth vs estimate averaged −0.353/−0.301, 0.162/0.139, 0.0215/0.0188 — 85–87%
+  — while the peak ratio was 0.20. A low-pass preserves the average and
   flattens the spike, so the observer is a good estimator of sustained
   disturbance and a poor one of impulse. That is the same conclusion the
   collision study reached from the other direction.
@@ -581,6 +586,101 @@ so a pinned base has none to measure. A deterministic short run at moderate
 damping is both — the base moves enough to produce drag without drifting far
 enough to make the setpoint unreachable.
 
+#### Scored against model error, and whether the feedforward helps
+
+The realistic ISAM case: the arm carries a payload, or its as-built links differ
+from the CAD the controller was given, so the controller computes the wrong
+inertia for every joint. `--mass-scale S` scales every arm link's mass and
+inertia in the *scene* only, leaving the controller's model untouched.
+
+```bash
+ros2 run pat_arm_control contact_bench --osc 0.03,0.15 --seconds 24
+ros2 run pat_arm_control contact_bench --mass-scale 1.2 --osc 0.03,0.15 --seconds 24 --ab-ff 1.0
+```
+
+Three things this mode needs that the others do not.
+
+**The arm must be accelerating.** The mismatch torque is
+`(M_scene − M_model) q̈`, identically zero at rest however wrong the masses are
+— a static arm with 3× mass on two links estimates `0.000`. So the setpoint
+sweeps a sine instead of holding a point.
+
+**The truth cannot be `qfrc_constraint`.** Nothing is touching, so it is zero.
+The truth is instead `M q̈ + bias − τ`, computed from the plant's real
+acceleration and the controller's own model — which *is* `d` by definition. The
+observer never touches an acceleration, so the two share no arithmetic. Over a
+contact run, where both channels apply, they agree to **under 1×10⁻⁴ N·m on a
+14.1 N·m signal**, which is what earns the residual channel its credibility
+where `qfrc_constraint` cannot check it.
+
+**The base must not be pinned.** The feedforward acts on the *base-eliminated*
+estimate, and the Schur reduction `d_m − (H_bb⁻¹H_bm)ᵀ d_b` mixes the base rows
+into every joint row. Pinning at damping 500 therefore feeds the rig's own drag
+straight into the command. The oscillating modes use the table's own 0.05
+instead, and the setpoint is tracked in the **base's frame** so drift cannot put
+it out of reach — over 24 s the base moves 3 mm.
+
+Estimate against the mismatch torque, scored by amplitude over the settled
+window at the default gain:
+
+| arm mass | disturbance (RMS, `joint2_L`) | recovered | correlation |
+|---|---|---|---|
+| 1.2× | 0.0033 | 1.00 | 1.00 |
+| 1.5× | 0.0455 | 1.00 | 1.00 |
+| 2.0× | 0.0793 | 1.00 | 1.00 |
+| 3.0× | 0.1148 | 1.00 | 1.00 |
+
+Scored by **amplitude**, not by signed peak: this disturbance oscillates with
+the setpoint, and two signed oscillations can take their largest-magnitude
+samples on opposite half-cycles, which turns a near-perfect estimate into a
+large negative ratio. The peak ratio is right for a transient like contact and
+wrong here.
+
+Then the question the estimate alone cannot answer — does *acting* on it improve
+anything? Three runs of one scenario, 1.2× mass, 0.03 m at 0.15 Hz:
+
+| | mean EE error | peak | RMS |
+|---|---|---|---|
+| correct model, feedforward off | 0.02115 | 0.03343 | 0.02329 |
+| 1.2× mass, feedforward off | 0.02329 | 0.03662 | 0.02560 |
+| 1.2× mass, **feedforward on** | **0.02133** | **0.03364** | **0.02346** |
+
+The model error costs 2.14 mm of mean tracking error; the feedforward recovers
+1.96 mm of it — **92%** — landing within 0.9% of the unperturbed baseline. The
+baseline row is what makes that readable: 8% off the *total* error could have
+been anything, but 92% of the error the model error *caused* is the claim.
+
+**It only works below the feedforward cap**, and the cap is tight. With
+`model_tau_max: 0.25` and `ff_max_frac: 0.3`, the feedforward has 0.075 N·m of
+authority per joint:
+
+| arm mass | disturbance | vs cap | tracking improvement |
+|---|---|---|---|
+| 1.1× | 0.0097 | under | +1.0% |
+| 1.2× | 0.0190 | under | +0.9% |
+| 1.5× | 0.0455 | under | −0.4% |
+| 2.0× | 0.0793 | **over** | −3.4% |
+| 3.0× | 0.1148 | **over** | −3.3% |
+
+Past the cap the feedforward makes tracking *worse*, so the report prints the
+cap, the joint's torque limit and the saturation count beside every result.
+
+The improvement is also small whenever the arm is working near its torque
+limit, and that is the dominant effect at larger amplitudes — at 0.15 m and
+0.25 Hz, `joint2_L` and `joint3_L` sit at the 0.25 N·m rail for 186 and 135 of
+2000 ticks, and the mean tracking error is then **invariant to a 3× mass change**
+(0.1178 to 0.1254 m across the whole range). There is nothing for a feedforward
+to recover when the limit is the actuator rather than the model. Hence the
+measurement is taken at an amplitude the arm can actually follow, and the report
+prints peak commanded torque and ticks at the rail so a torque-starved run is
+never mistaken for a tuning result.
+
+A joint-range contamination guard comes with it: nothing can touch in this mode,
+so a nonzero `qfrc_constraint` is the arm against its own stop — impulsive, in
+the same vector, and large enough to dominate the smooth mismatch torque. At
+0.25 m amplitude it produced a 0.447 N·m spike against a 0.095 N·m median. The
+report counts those ticks and says so.
+
 #### What the gain costs, and why the default is right
 
 The contact sweep above only says what a gain *buys*, because `contact_bench`
@@ -614,7 +714,16 @@ Putting the two tables together settles the tuning:
   that matters for using it is the noise: ±0.52 N·m on a signal of order 1.
   That is why `observer.ff_slew` and `ff_max_frac` are not optional dressing —
   feeding an estimate that noisy forward at full authority would inject serious
-  torque noise, which is also why `ff_gain` ships at 0.
+  torque noise.
+
+**And this is why `ff_gain` ships at 0, despite the feedforward recovering 92%
+of the tracking error that model error causes.** That measurement is taken on
+*exact* measurements, so it is an upper bound. At σ = 0.01 rad/s the estimate
+noise is 0.52 N·m, against a feedforward cap of 0.075 N·m — **7× the entire
+authority the feedforward has**. The command would saturate on noise alone, in
+both directions, every tick. Turning `ff_gain` up is therefore a decision that
+waits on a measured encoder spec and the Phase 2.1 sensor model, not on the
+observer, which is already accurate enough.
 
 The σ = 0.01 rad/s is an assumption, not a measured encoder spec. The shape of
 the trade-off does not depend on it (both columns scale with σ), but the

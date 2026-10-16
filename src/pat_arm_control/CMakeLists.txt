@@ -148,9 +148,14 @@ install(TARGETS contact_bench RUNTIME DESTINATION lib/${PROJECT_NAME})
 # resolved via FindPackageShare the way the node does it.
 if(BUILD_TESTING)
     find_package(ament_cmake_gtest REQUIRED)
+    # contact_scenario.cpp is pulled in for the bench scorers: they turn a
+    # recorded run into the figures the README quotes, so an error in them
+    # produces a confident wrong number rather than a failure.
     ament_add_gtest(test_pat_arm_control
         test/test_pat_arm_control.cpp
-        test/test_momentum_observer.cpp)
+        test/test_momentum_observer.cpp
+        test/test_bench_scoring.cpp
+        src/contact_scenario.cpp)
     pat_arm_control_arch_flags(test_pat_arm_control)
     add_dependencies(test_pat_arm_control pat_arm_control_models)
     # ${CMAKE_DL_LIBS}: DISABLED_AllocStudy.Attribution resolves allocation call

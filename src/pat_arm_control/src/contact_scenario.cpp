@@ -90,7 +90,40 @@ ContactScenario::ContactScenario(const Config& cfg) : cfg_(cfg) {
     damp(m_->jnt_dofadr[jointId(m_, "target_y")],   cfg_.target_damping[1]);
     damp(m_->jnt_dofadr[jointId(m_, "target_yaw")], cfg_.target_damping[2]);
 
+    applyMassScale();
+
     reset();
+}
+
+void ContactScenario::applyMassScale() {
+    if (cfg_.arm_mass_scale == 1.0) return;
+    if (!(cfg_.arm_mass_scale > 0.0)) {
+        throw std::runtime_error("ContactScenario: arm_mass_scale must be "
+                                 "positive");
+    }
+    const double s = cfg_.arm_mass_scale;
+    // The bodies to perturb are exactly the ones the model joints move, taken
+    // from jnt_bodyid rather than from a name list, so adding an arm segment to
+    // the MJCF needs no change here. Mass and rotational inertia scale together
+    // because a denser link of the same geometry is what is being modelled; the
+    // centre of mass does not move.
+    for (const auto& jn : cfg_.model_joints) {
+        const int bid = m_->jnt_bodyid[jointId(m_, jn)];
+        m_->body_mass[bid] *= s;
+        for (int k = 0; k < 3; ++k) m_->body_inertia[3 * bid + k] *= s;
+    }
+    // body_mass and body_inertia feed derived constants, subtree masses among
+    // them, so those have to be rebuilt or the model is internally
+    // inconsistent. reset() then runs mj_forward to put mjData back in step.
+    mj_setConst(m_, d_);
+}
+
+double ContactScenario::armMass() const {
+    double total = 0.0;
+    for (const auto& jn : cfg_.model_joints) {
+        total += m_->body_mass[m_->jnt_bodyid[jointId(m_, jn)]];
+    }
+    return total;
 }
 
 ContactScenario::~ContactScenario() {
@@ -124,6 +157,8 @@ void ContactScenario::step(int n_steps) {
     for (int i = 0; i < n_steps; ++i) mj_step(m_, d_);
 }
 
+void ContactScenario::refreshDerived() { mj_forward(m_, d_); }
+
 double ContactScenario::time() const { return d_->time; }
 double ContactScenario::timestep() const { return m_->opt.timestep; }
 int    ContactScenario::contactCount() const { return d_->ncon; }
@@ -149,8 +184,24 @@ void ContactScenario::armConstraintForce(Eigen::VectorXd& out) const {
     }
 }
 
+void ContactScenario::readControllerAccel(Eigen::VectorXd& a) const {
+    const auto n = static_cast<Eigen::Index>(joints_.size());
+    if (a.size() != 6 + n) a.resize(6 + n);
+    a.setZero();
+    a(0) = d_->qacc[cxd_];
+    a(1) = d_->qacc[cyd_];
+    a(5) = d_->qacc[cwd_];
+    for (Eigen::Index i = 0; i < n; ++i) {
+        a(6 + i) = d_->qacc[joints_[static_cast<std::size_t>(i)].dof];
+    }
+}
+
 std::array<double, 3> ContactScenario::baseVelocity() const {
     return {{d_->qvel[cxd_], d_->qvel[cyd_], d_->qvel[cwd_]}};
+}
+
+std::array<double, 3> ContactScenario::basePose() const {
+    return {{d_->qpos[cx_], d_->qpos[cy_], d_->qpos[cw_]}};
 }
 
 void ContactScenario::readControllerState(double anchor_x, double anchor_y,
@@ -187,20 +238,33 @@ void ContactScenario::readControllerState(double anchor_x, double anchor_y,
     }
 }
 
+/*! Below this a truth signal is numerical dust, not a disturbance.
+ *
+ *  A bare "!= 0.0" guard is not enough: a baseline run with a correct model and
+ *  nothing touching leaves a truth of order 1e-14, and dividing by it produced
+ *  ratios of 5e13 that look like catastrophic failure rather than like the
+ *  absence of a signal. Far below any disturbance worth estimating -- the
+ *  observer's own measured error floor is 8e-5 -- so a real signal is never
+ *  suppressed by it. */
+constexpr double kSignalFloor = 1e-6;
+
 double JointScore::ratio() const {
-    return truth_peak != 0.0 ? est_peak / truth_peak : std::nan("");
+    return std::fabs(truth_peak) > kSignalFloor ? est_peak / truth_peak
+                                                : std::nan("");
 }
 
-JointScore scoreJoint(const std::vector<ContactRow>& rows, int joint) {
+double JointScore::amplitudeRatio() const {
+    return truth_rms > kSignalFloor ? est_rms / truth_rms : std::nan("");
+}
+
+namespace {
+
+/*! Peak, mean, correlation and RMS error of a paired truth/estimate series.
+ *
+ *  Shared by both scorers so the two windows cannot drift in how they compute
+ *  the same statistics; only the choice of which ticks to include differs. */
+JointScore statsOf(const std::vector<double>& tr, const std::vector<double>& es) {
     JointScore s;
-    const auto j = static_cast<std::size_t>(joint);
-    std::vector<double> tr, es;
-    for (const auto& r : rows) {
-        if (r.ncon <= 0) continue;            // quiet ticks are not the contact
-        if (j >= r.truth.size()) continue;
-        tr.push_back(r.truth[j]);
-        es.push_back(r.raw[j]);
-    }
     s.n_contact = static_cast<int>(tr.size());
     if (tr.empty()) return s;
 
@@ -215,7 +279,7 @@ JointScore scoreJoint(const std::vector<ContactRow>& rows, int joint) {
     s.truth_mean /= n;
     s.est_mean   /= n;
 
-    double st = 0.0, se = 0.0, cov = 0.0, sq = 0.0;
+    double st = 0.0, se = 0.0, cov = 0.0, sq = 0.0, mt = 0.0, me = 0.0;
     for (std::size_t i = 0; i < tr.size(); ++i) {
         const double a = tr[i] - s.truth_mean;
         const double b = es[i] - s.est_mean;
@@ -223,10 +287,41 @@ JointScore scoreJoint(const std::vector<ContactRow>& rows, int joint) {
         se  += b * b;
         cov += a * b;
         sq  += (tr[i] - es[i]) * (tr[i] - es[i]);
+        mt  += tr[i] * tr[i];
+        me  += es[i] * es[i];
     }
     s.corr = (st > 1e-18 && se > 1e-18) ? cov / std::sqrt(st * se) : std::nan("");
-    s.rms_err = std::sqrt(sq / n);
+    s.rms_err   = std::sqrt(sq / n);
+    s.truth_rms = std::sqrt(mt / n);
+    s.est_rms   = std::sqrt(me / n);
     return s;
+}
+
+}  // namespace
+
+JointScore scoreJoint(const std::vector<ContactRow>& rows, int joint) {
+    const auto j = static_cast<std::size_t>(joint);
+    std::vector<double> tr, es;
+    for (const auto& r : rows) {
+        if (r.ncon <= 0) continue;            // quiet ticks are not the contact
+        if (j >= r.truth.size()) continue;
+        tr.push_back(r.truth[j]);
+        es.push_back(r.raw[j]);
+    }
+    return statsOf(tr, es);
+}
+
+JointScore scoreJointResidual(const std::vector<ContactRow>& rows, int joint,
+                              std::size_t from) {
+    const auto j = static_cast<std::size_t>(joint);
+    std::vector<double> tr, es;
+    for (std::size_t i = from; i < rows.size(); ++i) {
+        const auto& r = rows[i];
+        if (j >= r.resid.size()) continue;
+        tr.push_back(r.resid[j]);
+        es.push_back(r.raw[j]);
+    }
+    return statsOf(tr, es);
 }
 
 }  // namespace bench
