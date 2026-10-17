@@ -220,9 +220,14 @@ double ImuEkf::insert(double t_meas, const Meas& m) {
         ++diag_.not_ready;
         return -1.0;
     }
-    // The kept step a measurement belongs to: the newest one at or before it.
+    // The kept step a measurement belongs to: the one NEAREST its time.
     // Searched from the newest end, since almost every measurement belongs
-    // there or a few steps back.
+    // there or a few steps back. Nearest rather than at-or-before for two
+    // reasons. It halves the worst timing error, to half an IMU interval. And
+    // a stamp computed as (message time - latency) routinely lands a rounding
+    // error below the step it was taken at; at-or-before then applies it a
+    // whole interval early, which while turning is a systematic yaw error
+    // several times the star tracker's own noise.
     std::size_t k = hist_size_;
     for (std::size_t i = hist_size_; i-- > 0;) {
         if (stepAt(i).t <= t_meas) {
@@ -231,9 +236,18 @@ double ImuEkf::insert(double t_meas, const Meas& m) {
         }
     }
     if (k == hist_size_) {
-        // Older than everything kept: there is no state to apply it to.
-        ++diag_.too_old;
-        return -1.0;
+        // Before every kept step: nearest is the oldest, if it is within half
+        // an interval of it; otherwise there is no state to apply it to.
+        const bool near_oldest = hist_size_ >= 2 &&
+            (stepAt(0).t - t_meas) < 0.5 * (stepAt(1).t - stepAt(0).t);
+        if (!near_oldest) {
+            ++diag_.too_old;
+            return -1.0;
+        }
+        k = 0;
+    } else if (k + 1 < hist_size_ &&
+               (stepAt(k + 1).t - t_meas) < (t_meas - stepAt(k).t)) {
+        ++k;
     }
 
     Step& home = stepAt(k);

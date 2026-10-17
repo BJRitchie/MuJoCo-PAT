@@ -58,7 +58,12 @@ class SensorChannel {
 public:
     SensorChannel() = default;
 
-    /// `dt` is the period at which apply() will be called (the sim step).
+    /// `dt` is the period at which apply() will be called. Every time-based
+    /// setting -- delay_s, rate_hz, bias_walk_std -- is converted to calls of
+    /// apply() through it, so it must be the real call period: a channel
+    /// advanced once per 10 ms publish but built with the 2 ms physics step
+    /// delays 5x too long, samples 5x too slowly and walks at sqrt(1/5) of its
+    /// density.
     /// `seed` is the master seed; this channel derives its own stream from it
     /// and `name` (see kFnvOffset below for why the name and not an index).
     SensorChannel(std::string name, const ChannelConfig& cfg, double dt,
@@ -123,6 +128,11 @@ public:
     /// be unique. Throws std::invalid_argument on a duplicate name, a negative
     /// parameter, or a dropout probability outside [0, 1].
     int addChannel(const std::string& name, const ChannelConfig& cfg);
+
+    /// As above, for a channel advanced at its own period `dt` rather than
+    /// the model's. Channels published at different rates -- an IMU faster
+    /// than odometry, say -- each need the period they are actually called at.
+    int addChannel(const std::string& name, const ChannelConfig& cfg, double dt);
 
     /// Handle for a registered name, or -1 if there is none.
     int handle(const std::string& name) const;

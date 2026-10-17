@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdint>
@@ -5,6 +6,7 @@
 #include <memory>
 #include <mutex>
 #include <random>
+#include <utility>
 
 #include <rclcpp/rclcpp.hpp>
 #include <nav_msgs/msg/odometry.hpp>
@@ -29,6 +31,17 @@ SimulationNode::SimulationNode() : Node("pat_simulation") {
     const auto model_path = declare_parameter<std::string>("model_path", "");
     const double sim_hz   = declare_parameter<double>("sim_rate_hz",  500.0);
     const double pub_hz   = declare_parameter<double>("pub_rate_hz",  100.0);
+    
+    // The IMU's publish rate, independent of pub_rate_hz so it can run up to
+    // the physics rate without also speeding up odometry and joint states.
+    // Defaults to pub_rate_hz, which leaves /chaser/imu at its former rate.
+    const double imu_hz   = declare_parameter<double>("imu_rate_hz",  pub_hz);
+    if (!(imu_hz > 0.0) || imu_hz > sim_hz) {
+        throw std::runtime_error("'imu_rate_hz' must be positive and no faster than "
+                                 "'sim_rate_hz' -- the IMU cannot sample between "
+                                 "physics steps");
+    }
+    imu_every_steps_ = std::max(1, static_cast<int>(std::lround(sim_hz / imu_hz)));
     // Off for headless use (CI, batch tools like tools/pinn_datagen/, a
     // server with no GLX/DRM device) -- GLFW window creation is otherwise
     // unconditional and fails loudly (though non-fatally) without one.
@@ -135,33 +148,39 @@ SimulationNode::SimulationNode() : Node("pat_simulation") {
     // with no signal underneath, so there is no behaviour there worth keeping.
     constexpr double kGyroSigmaDefault = 0.005;
 
-    h_imu_accel_  = declareChannel("imu_accel_x");
-                    declareChannel("imu_accel_y");
-    h_imu_gyro_   = declareChannel("imu_gyro_z", kGyroSigmaDefault);
+    // Each channel is advanced once per publish of its topic, so that is the
+    // period it is built with. The IMU publishes every imu_every_steps_
+    // physics steps; everything else once per publish() tick.
+    const double imu_dt = imu_every_steps_ * sim_->dt();
+    const double pub_dt = 1.0 / pub_hz;
+
+    h_imu_accel_  = declareChannel("imu_accel_x", 0.0, imu_dt);
+                    declareChannel("imu_accel_y", 0.0, imu_dt);
+    h_imu_gyro_   = declareChannel("imu_gyro_z", kGyroSigmaDefault, imu_dt);
     // The chaser's pose triple, registered consecutively as x, y, theta so one
     // handle covers it. Position is the relative-navigation channel and
     // attitude is the star tracker's, which is why they are named differently
     // even though odom presents them together -- degrade them independently.
-    h_nav_        = declareChannel("nav_x");
-                    declareChannel("nav_y");
-    h_star_yaw_   = declareChannel("star_yaw");
-    h_chaser_vel_ = declareChannel("chaser_vx");
-                    declareChannel("chaser_vy");
-                    declareChannel("chaser_omega");
-    h_target_     = declareChannel("target_x");
-                    declareChannel("target_y");
-                    declareChannel("target_yaw");
-    h_target_vel_ = declareChannel("target_vx");
-                    declareChannel("target_vy");
-                    declareChannel("target_omega");
+    h_nav_        = declareChannel("nav_x", 0.0, pub_dt);
+                    declareChannel("nav_y", 0.0, pub_dt);
+    h_star_yaw_   = declareChannel("star_yaw", 0.0, pub_dt);
+    h_chaser_vel_ = declareChannel("chaser_vx", 0.0, pub_dt);
+                    declareChannel("chaser_vy", 0.0, pub_dt);
+                    declareChannel("chaser_omega", 0.0, pub_dt);
+    h_target_     = declareChannel("target_x", 0.0, pub_dt);
+                    declareChannel("target_y", 0.0, pub_dt);
+                    declareChannel("target_yaw", 0.0, pub_dt);
+    h_target_vel_ = declareChannel("target_vx", 0.0, pub_dt);
+                    declareChannel("target_vy", 0.0, pub_dt);
+                    declareChannel("target_omega", 0.0, pub_dt);
     // Arm encoders, one channel per joint so a single bad joint can be
     // simulated. Registered in arm_joint_names_ order, matching publishArmState.
     for (std::size_t i = 0; i < arm_joint_names_.size(); ++i) {
-        const int h = declareChannel("joint_pos." + arm_joint_names_[i]);
+        const int h = declareChannel("joint_pos." + arm_joint_names_[i], 0.0, pub_dt);
         if (i == 0) h_joint_pos_ = h;
     }
     for (std::size_t i = 0; i < arm_joint_names_.size(); ++i) {
-        const int h = declareChannel("joint_vel." + arm_joint_names_[i]);
+        const int h = declareChannel("joint_vel." + arm_joint_names_[i], 0.0, pub_dt);
         if (i == 0) h_joint_vel_ = h;
     }
 
@@ -302,7 +321,8 @@ SimulationNode::SimulationNode() : Node("pat_simulation") {
 }
 
 // === Private Methods ============================================================
-int SimulationNode::declareChannel(const std::string& name, double default_sigma) {
+int SimulationNode::declareChannel(const std::string& name, double default_sigma,
+                                   double dt) {
     const std::string p = "sensors." + name + ".";
     pat_simulation::ChannelConfig c;
     c.noise_std     = declare_parameter<double>(p + "noise_std",     default_sigma);
@@ -313,7 +333,7 @@ int SimulationNode::declareChannel(const std::string& name, double default_sigma
     c.delay_s       = declare_parameter<double>(p + "delay_s",       0.0);
     c.dropout_prob  = declare_parameter<double>(p + "dropout_prob",  0.0);
     c.rate_hz       = declare_parameter<double>(p + "rate_hz",       0.0);
-    return sensors_.addChannel(name, c);
+    return sensors_.addChannel(name, c, dt);
 }
 
 pat_simulation::WrenchProfile SimulationNode::declareWrench(const std::string& name) {
@@ -338,8 +358,10 @@ void SimulationNode::publishTruth(const rclcpp::Time& t) {
     m.header.stamp = t;
     const double* qfrc = sim_->constraintForce();
     const int nv = sim_->nv();
-    m.name.reserve(static_cast<std::size_t>(nv) + 3);
-    m.effort.reserve(static_cast<std::size_t>(nv) + 3);
+    // nv constraint rows, then three wrench components, ncon, and the six
+    // base states.
+    m.name.reserve(static_cast<std::size_t>(nv) + 10);
+    m.effort.reserve(static_cast<std::size_t>(nv) + 10);
     for (int i = 0; i < nv; ++i) {
         m.name.push_back("qfrc_constraint." + std::to_string(i));
         m.effort.push_back(qfrc[i]);
@@ -359,6 +381,18 @@ void SimulationNode::publishTruth(const rclcpp::Time& t) {
     // completely different.
     m.name.push_back("ncon");
     m.effort.push_back(static_cast<double>(sim_->contactCount()));
+    
+    // The chaser's true planar state, for scoring a base state estimator
+    // (pat_gnc's nav_node) against what actually happened. Same frame and
+    // convention as /chaser/odom before any sensor corruption.
+    const auto ch = sim_->getChaserState();
+    const std::pair<const char*, double> base[] = {
+        {"chaser.x", ch.x},       {"chaser.y", ch.y},       {"chaser.yaw", ch.theta},
+        {"chaser.vx", ch.xdot},   {"chaser.vy", ch.ydot},   {"chaser.omega", ch.thetadot}};
+    for (const auto& [name, value] : base) {
+        m.name.push_back(name);
+        m.effort.push_back(value);
+    }
     truth_pub_->publish(m);
 
     // Which geoms are touching, throttled. A JointState cannot carry names
@@ -374,30 +408,29 @@ void SimulationNode::publishTruth(const rclcpp::Time& t) {
     }
 }
 
-void SimulationNode::publish() {
-    // Every message on this tick is stamped with MuJoCo's simulated time, not
-    // with this node's ROS clock: that clock only learns the time from the
-    // /clock published here, so it would lag the physics by up to a tick.
-    // Stamping from the physics directly makes a stamp say exactly when the
-    // simulated measurement was taken, which is what an estimator that
-    // integrates IMU intervals between stamps needs.
-    const rclcpp::Time now(static_cast<std::int64_t>(std::llround(sim_->time() * 1e9)),
-                           RCL_ROS_TIME);
+rclcpp::Time SimulationNode::simStamp() const {
+    return rclcpp::Time(static_cast<std::int64_t>(std::llround(sim_->time() * 1e9)),
+                        RCL_ROS_TIME);
+}
 
-    // /clock first, so no subscriber ever receives a message stamped ahead of
-    // its own clock.
+void SimulationNode::publishClock(const rclcpp::Time& t) {
+    const std::int64_t ns = t.nanoseconds();
+    if (ns == last_clock_ns_) return;
+    last_clock_ns_ = ns;
     rosgraph_msgs::msg::Clock clk;
-    clk.clock = now;
+    clk.clock = t;
     clock_pub_->publish(clk);
+}
+
+void SimulationNode::publish() {
+    const rclcpp::Time now = simStamp();
+    publishClock(now);
 
     // mj_step evaluates the dynamics before integrating, so mjData's derived
-    // quantities -- the <sensor> outputs among them -- describe the state the
-    // last step started from, and under RK4 an intermediate stage of it. One
-    // forward evaluation here puts the sensors on the same instant as the
-    // qpos/qvel that odom is built from; without it the IMU and the odometry
-    // disagree by a few percent and anything estimating from both reads the
-    // mismatch as a real disturbance. Once per publish (100 Hz), not once per
-    // step (500 Hz).
+    // quantities describe the state the last step started from, and under RK4
+    // an intermediate stage of it. One forward evaluation here puts them on
+    // the same instant as the qpos/qvel that odometry is built from -- the
+    // constraint forces and contact count in the ground truth among them.
     sim_->refreshSensors();
 
     // Relevant satellites
@@ -409,7 +442,6 @@ void SimulationNode::publish() {
     // visualisation and debugging aid here, not a sensor the algorithms read.
     publishOdom(*ch_odom_, "map", "chaser", ch, now, h_nav_, h_chaser_vel_);
     publishOdom(*tg_odom_, "map", "target", tg, now, h_target_, h_target_vel_);
-    publishImu(now);
     publishArmState(now);
     if (publish_truth_) publishTruth(now);
 
@@ -625,6 +657,18 @@ void SimulationNode::simTimerCallback() {
     }
 
     sim_->step(ctrl_);
+
+    // The IMU, at its own rate, from the physics loop. The forward evaluation
+    // puts MuJoCo's accelerometer and gyro on the state the step just reached
+    // -- mj_step leaves them describing where it started, a few percent off --
+    // and the stamp is that same simulated instant.
+    if (++imu_step_ >= imu_every_steps_) {
+        imu_step_ = 0;
+        sim_->refreshSensors();
+        const rclcpp::Time t = simStamp();
+        publishClock(t);
+        publishImu(t);
+    }
 }
 
 }

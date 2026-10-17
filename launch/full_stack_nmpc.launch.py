@@ -22,6 +22,13 @@ arm_nmpc.launch.py. Defaults to pat_arm_control's installed config/nmpc.yaml.
 estimator, config `nav_params:=`, default pat_gnc/config/nav.yaml) and points
 both arm controllers at its /chaser/nav/odom instead of /chaser/odom.
 
+`sensor_profile:=` overlays a sensor configuration on the simulation. Flight
+sensing end to end is
+  sensor_profile:=<pat_simulation share>/config/sensors_flight.yaml
+  with_nav:=true nav_params:=<pat_gnc share>/config/nav_flight.yaml
+
+`visualise:=false` runs the simulation headless.
+
 `trace_file:=/path/to/trace.csv` records every control tick's timing and writes
 it at exit, one file per arm (trace_left.csv / trace_right.csv). Off by default.
 Plot it with tools/nmpc_timing/plot_trace.py.
@@ -72,11 +79,13 @@ def generate_launch_description() -> LaunchDescription:
         DeclareLaunchArgument("telemetry", default_value="false"),
         DeclareLaunchArgument("plotjuggler", default_value="false"),
         DeclareLaunchArgument("visualise", default_value="true"),
+        DeclareLaunchArgument("sensor_profile", default_value=""),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
                 PathJoinSubstitution([ThisLaunchFileDir(), "simulation.launch.py"])),
             launch_arguments={"use_sim_time": LaunchConfiguration("use_sim_time"),
-                              "visualise": LaunchConfiguration("visualise")}.items()),
+                              "visualise": LaunchConfiguration("visualise"),
+                              "sensor_profile": LaunchConfiguration("sensor_profile")}.items()),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
                 PathJoinSubstitution([ThisLaunchFileDir(), "gnc.launch.py"])),

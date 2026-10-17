@@ -49,9 +49,15 @@ if(BUILD_TESTING)
     target_link_libraries(test_pat_gnc pat_gnc_lib)
 endif()
 
-install(TARGETS pat_gnc_lib gnc_node nav_node
-    ARCHIVE DESTINATION lib  LIBRARY DESTINATION lib
-    RUNTIME DESTINATION lib/${PROJECT_NAME})
+# The library is exported (pat_gnc::pat_gnc_lib) so pat_simulation's nav_bench
+# can drive the estimator against the simulator offline. The dependency only
+# ever runs simulator -> algorithm: nothing here may depend on pat_simulation,
+# which the runtime image does not build.
+install(TARGETS pat_gnc_lib EXPORT pat_gncTargets
+    ARCHIVE DESTINATION lib  LIBRARY DESTINATION lib)
+install(TARGETS gnc_node nav_node RUNTIME DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY include/ DESTINATION include/)
 install(DIRECTORY config/  DESTINATION share/${PROJECT_NAME}/config/)
+ament_export_targets(pat_gncTargets HAS_LIBRARY_TARGET)
+ament_export_dependencies(Eigen3)
 ament_package()

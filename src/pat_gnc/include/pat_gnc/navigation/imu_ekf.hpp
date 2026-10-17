@@ -138,18 +138,18 @@ public:
     /*! The measurement updates. `t_meas` is when the measurement was TAKEN,
      *  not when it arrived.
      *
-     *  A measurement at or after the latest IMU time is applied now. One stamped
+     *  A measurement nearest the latest IMU time is applied now. One stamped
      *  earlier is applied where it belongs, by state-history recomputation:
-     *  the filter returns to the kept step at or just before `t_meas`, applies
-     *  it there, and re-runs every later IMU step AND every later measurement,
+     *  the filter returns to the kept step nearest `t_meas`, applies it
+     *  there, and re-runs every later IMU step AND every later measurement,
      *  so a late star-tracker fix cannot discard a position fix that arrived
      *  before it. This is the exact recomputation method that Larsen,
      *  Andersen, Ravn & Poulsen, "Incorporation of Time Delayed Measurements
      *  in a Discrete-time Kalman Filter", IEEE CDC 1998, use as their
      *  reference; their extrapolation shortcut is cheaper but approximate, and
      *  with an 8-state filter the exact method is affordable. The measurement
-     *  is applied at the kept step nearest before it, so its timing is
-     *  quantised to one IMU interval.
+     *  is applied at the kept step nearest it, so its timing error is at most
+     *  half an IMU interval.
      *
      *  Each returns the measurement's normalised innovation squared, computed
      *  where it was applied, or a negative value if it was not considered at

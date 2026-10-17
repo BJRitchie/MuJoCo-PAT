@@ -54,12 +54,21 @@ pat_nav:
     # --- imu_ekf: sensor latency ---------------------------------------------
     # How old each instrument's reading is when its /chaser/odom message is
     # stamped [s]. Match the sensor channels' delay_s (star_yaw, nav_x/nav_y).
+    # Must be right to about 1 ms: while turning, a timing error is a yaw
+    # error, and 10 ms has the gate rejecting a quarter of star-tracker fixes.
     imu_ekf.latency_yaw: 0.0
     imu_ekf.latency_pos: 0.0
     imu_ekf.latency_vel: 0.0
     # Fuse the odometry twist as a velocity measurement. Off: flight has no
     # velocity sensor, and the mocap twist is a differentiated pose.
     imu_ekf.use_twist: false
+    # Apply each instrument's reading only when it changes. A sensor slower
+    # than /chaser/odom is republished held at the odometry rate, and fusing
+    # every repeat as new would make the filter overconfident.
+    imu_ekf.skip_repeated: true
+    # Fuse the odometry position. false = flight with no relative-nav sensor:
+    # position then dead-reckons, with a covariance that grows to say so.
+    imu_ekf.use_position: true
 
     # --- imu_ekf: robustness and realtime bound ------------------------------
     # IMU steps of history kept for late measurements. Also the worst-case

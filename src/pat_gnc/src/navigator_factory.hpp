@@ -52,6 +52,10 @@ inline ImuEkfNavigator::Config declareImuEkfConfig(rclcpp::Node& node) {
     c.latency_pos = d("latency_pos", c.latency_pos);
     c.latency_vel = d("latency_vel", c.latency_vel);
     c.use_twist   = node.declare_parameter<bool>("imu_ekf.use_twist", c.use_twist);
+    c.skip_repeated =
+        node.declare_parameter<bool>("imu_ekf.skip_repeated", c.skip_repeated);
+    c.use_position =
+        node.declare_parameter<bool>("imu_ekf.use_position", c.use_position);
     if (c.latency_yaw < 0.0 || c.latency_pos < 0.0 || c.latency_vel < 0.0) {
         throw std::runtime_error("imu_ekf.latency_* must be non-negative");
     }

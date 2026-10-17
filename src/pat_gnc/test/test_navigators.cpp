@@ -83,11 +83,10 @@ TEST(ImuEkfNavigator, LatencyPlacesEachInstrumentAtItsOwnAge) {
     nav.onOdometry(1.0, {0.001, 0.0, 0.001}, {});
     const auto& d = nav.filter().diagnostics();
     EXPECT_EQ(d.replays, 2u);
-    // 0.2 s at 500 Hz is 100 steps. Placement is quantised to the kept step
-    // at or before the measurement, and a stamp computed as 1.0 - 0.2 can sit
-    // a rounding error either side of a step boundary, so 100 or 101.
-    EXPECT_GE(d.max_replay_steps, 100u);
-    EXPECT_LE(d.max_replay_steps, 101u);
+    // 0.2 s at 500 Hz is exactly 100 steps. The stamp 1.0 - 0.2 sits a
+    // rounding error off a step boundary; placement at the NEAREST step lands
+    // it on that boundary regardless of which side the rounding went.
+    EXPECT_EQ(d.max_replay_steps, 100u);
     EXPECT_EQ(d.pos_updates, 1u);
     EXPECT_EQ(d.yaw_updates, 1u);
 }
@@ -102,6 +101,29 @@ TEST(ImuEkfNavigator, TwistIsIgnoredUnlessAskedFor) {
         stillImu(nav, 0.002, 0.1);
         nav.onOdometry(0.1, {0.0, 0.0, 0.0}, {0.03, 0.0, 0.0});
         EXPECT_EQ(nav.filter().diagnostics().vel_updates, use ? 1u : 0u);
+    }
+}
+
+TEST(ImuEkfNavigator, AHeldReadingIsFusedOnceNotOncePerMessage) {
+    // A 2 Hz position fix republished on 100 Hz odometry by a sample-and-hold
+    // driver: fifty messages carry the same reading. It is one measurement, and
+    // fusing it fifty times would shrink the covariance as if it were fifty.
+    // Yaw changes every message here, so it is fused every time.
+    for (const bool skip : {true, false}) {
+        ImuEkfNavigator::Config cfg;
+        cfg.skip_repeated = skip;
+        ImuEkfNavigator nav(cfg);
+        nav.onImu(0.0, {0.0, 0.0}, 0.0);
+        nav.onOdometry(0.0, {0.0, 0.0, 0.0}, {});
+        for (int k = 1; k <= 100; ++k) {
+            const double t = 0.01 * k;
+            stillImu(nav, t - 0.008, t);
+            const double held_x = (k <= 50) ? 0.001 : 0.002;   // changes once
+            nav.onOdometry(t, {held_x, 0.0, 1e-5 * k}, {});
+        }
+        const auto& d = nav.filter().diagnostics();
+        EXPECT_EQ(d.pos_updates, skip ? 2u : 100u);
+        EXPECT_EQ(d.yaw_updates, 100u);
     }
 }
 

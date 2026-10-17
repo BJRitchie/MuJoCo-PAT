@@ -18,6 +18,9 @@
   <depend>tf2</depend>
   <depend>tf2_ros</depend>
   <depend>pat_msgs</depend>
+  <!-- nav_bench only: drives pat_gnc's estimator against this simulator. -->
+  <depend>pat_gnc</depend>
+  <depend>yaml-cpp</depend>
   <test_depend>ament_cmake_gtest</test_depend>
   <export><build_type>ament_cmake</build_type></export>
 </package>

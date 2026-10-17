@@ -55,6 +55,17 @@ add_custom_command(
     VERBATIM)
 add_custom_target(pat_simulation_models ALL DEPENDS "${_abt_xml}")
 
+# ─── nav_bench: the base state estimator against MuJoCo truth, offline ─────
+# Drives pat_gnc's ImuEkfNavigator with this package's plant and SensorModel,
+# deterministically. Depends on pat_gnc's library, never the other way round:
+# the runtime image skips this package entirely.
+find_package(pat_gnc  REQUIRED)
+find_package(yaml-cpp REQUIRED)
+add_executable(nav_bench src/nav_bench.cpp)
+add_dependencies(nav_bench pat_simulation_models)
+target_link_libraries(nav_bench mujoco_sim pat_gnc::pat_gnc_lib yaml-cpp)
+install(TARGETS nav_bench RUNTIME DESTINATION lib/${PROJECT_NAME})
+
 if(BUILD_TESTING)
     find_package(ament_cmake_gtest REQUIRED)
     ament_add_gtest(test_pat_simulation

@@ -107,6 +107,15 @@ void SensorChannel::reset() {
 }
 
 int SensorModel::addChannel(const std::string& name, const ChannelConfig& cfg) {
+    return addChannel(name, cfg, dt_);
+}
+
+int SensorModel::addChannel(const std::string& name, const ChannelConfig& cfg,
+                            double dt) {
+    if (!(dt > 0.0)) {
+        throw std::invalid_argument("SensorModel: channel '" + name +
+                                    "' needs a positive call period");
+    }
     if (handle(name) >= 0) {
         throw std::invalid_argument("SensorModel: duplicate channel '" + name + "'");
     }
@@ -122,7 +131,7 @@ int SensorModel::addChannel(const std::string& name, const ChannelConfig& cfg) {
         throw std::invalid_argument("SensorModel: dropout_prob > 1 on channel '" +
                                     name + "'");
     }
-    channels_.emplace_back(name, cfg, dt_, seed_);
+    channels_.emplace_back(name, cfg, dt, seed_);
     return static_cast<int>(channels_.size()) - 1;
 }
 

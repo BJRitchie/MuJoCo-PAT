@@ -18,11 +18,28 @@ void ImuEkfNavigator::onOdometry(double t, const Eigen::Vector3d& pose,
         // the fix's age is absorbed by the initial uncertainty rather than by
         // an IMU interval longer than the gap limit.
         ekf_.initialise(have_imu_ ? ekf_.time() : t, pose.x(), pose.y(), pose.z());
+        last_pos_ = pose.head<2>();
+        last_yaw_ = pose.z();
+        last_vel_ = twist.head<2>();
+        have_last_ = true;
         return;
     }
-    ekf_.updatePosition(t - cfg_.latency_pos, pose.head<2>());
-    ekf_.updateYaw(t - cfg_.latency_yaw, pose.z());
-    if (cfg_.use_twist) ekf_.updateVelocity(t - cfg_.latency_vel, twist.head<2>());
+    // Exact comparison on purpose: a repeat is the same double the driver held,
+    // not a nearby one.
+    const bool skip = cfg_.skip_repeated && have_last_;
+    if (cfg_.use_position && !(skip && pose.head<2>() == last_pos_)) {
+        ekf_.updatePosition(t - cfg_.latency_pos, pose.head<2>());
+        last_pos_ = pose.head<2>();
+    }
+    if (!(skip && pose.z() == last_yaw_)) {
+        ekf_.updateYaw(t - cfg_.latency_yaw, pose.z());
+        last_yaw_ = pose.z();
+    }
+    if (cfg_.use_twist && !(skip && twist.head<2>() == last_vel_)) {
+        ekf_.updateVelocity(t - cfg_.latency_vel, twist.head<2>());
+        last_vel_ = twist.head<2>();
+    }
+    have_last_ = true;
 }
 
 INavigator::StateVec ImuEkfNavigator::state() const noexcept {

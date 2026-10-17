@@ -78,6 +78,11 @@ cp src/pat_arm_control/config/nmpc.yaml /tmp/try.yaml
 ./tools/nmpc_timing/run_trial.sh -d 300 -o /tmp/try.log /tmp/try.yaml
 
 ./tools/nmpc_timing/summarise_timing.py /tmp/base.log /tmp/try.log
+
+# launch arguments pass through with -a, repeatable, and are recorded in the
+# log header. visualise:=false runs headless, so nothing typed into a viewer
+# window can pause the simulation mid-trial.
+./tools/nmpc_timing/run_trial.sh -g -d 120 -a visualise:=false -a with_nav:=true -o /tmp/nav.log
 ```
 
 ```

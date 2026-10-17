@@ -12,7 +12,7 @@
 # Then: tools/nmpc_timing/summarise_timing.py /tmp/warm.log /tmp/cold.log
 usage() {
     cat <<USAGE
-usage: $(basename "$0") [-d SECONDS] [-o LOGFILE] [-T FILE] [-e] [-g] [PARAMS_FILE]
+usage: $(basename "$0") [-d SECONDS] [-o LOGFILE] [-T FILE] [-a ARG]... [-e] [-g] [PARAMS_FILE]
 
   -d SECONDS   how long to run after startup (default 300). The report window is
                1 s, so this is roughly how many windows you get per arm.
@@ -28,6 +28,11 @@ usage: $(basename "$0") [-d SECONDS] [-o LOGFILE] [-T FILE] [-e] [-g] [PARAMS_FI
                  sudo cpupower frequency-set -g performance
                and plug the laptop in - on battery, platform firmware caps the
                clock well below what the governor requests.
+  -a ARG       pass one launch argument through to full_stack_nmpc.launch.py,
+               repeatable, and record it in the log header. e.g.
+                 -a visualise:=false            headless: no viewer to bump
+                 -a with_nav:=true              arms on nav_node's estimate
+                 -a sensor_profile:=<yaml>      flight sensing
   -e           also bring up pat_telemetry, for EE-tracking plots
   PARAMS_FILE  an nmpc.yaml to use instead of the installed default. Copy
                src/pat_arm_control/config/nmpc.yaml, change one knob, pass it here --
@@ -40,11 +45,13 @@ LOGFILE="nmpc_trial.log"
 TELEMETRY=false
 TRACE=""
 REQUIRE_PERF=false
-while getopts ":d:o:T:egh" opt; do
+EXTRA=()
+while getopts ":d:o:T:a:egh" opt; do
     case $opt in
         d) DURATION=$OPTARG ;;
         o) LOGFILE=$OPTARG ;;
         T) TRACE=$OPTARG ;;
+        a) EXTRA+=("$OPTARG") ;;
         e) TELEMETRY=true ;;
         g) REQUIRE_PERF=true ;;
         h) usage; exit 0 ;;
@@ -215,6 +222,7 @@ ARGS=(launch/full_stack_nmpc.launch.py with_targets:=true)
 [ -n "$PARAMS" ]        && ARGS+=("params_file:=$PARAMS")
 [ -n "$TRACE" ]         && ARGS+=("trace_file:=$TRACE")
 [ "$TELEMETRY" = true ] && ARGS+=(telemetry:=true)
+ARGS+=("${EXTRA[@]}")
 
 echo "running ${DURATION}s trial -> $LOGFILE" >&2
 echo "  params: $EFFECTIVE" >&2
@@ -238,6 +246,7 @@ fi
 {
     echo "# pat_arm_control trial: $(date -Is), ${DURATION}s"
     echo "# params_file: $EFFECTIVE"
+    [ "${#EXTRA[@]}" -gt 0 ] && echo "# launch_args: ${EXTRA[*]}"
     echo "# cpu_governor: $GOVERNORS"
     [ -n "$EPP" ] && echo "# energy_perf_pref: $EPP"
     echo "# on_ac_power: $ON_AC"

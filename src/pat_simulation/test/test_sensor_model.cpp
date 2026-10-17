@@ -238,6 +238,57 @@ TEST(SensorModelRate, SlowSensorHoldsBetweenItsOwnUpdates) {
     EXPECT_EQ(refreshed[3], 400);
 }
 
+TEST(SensorModelPeriod, TimeSettingsMeanSecondsWhateverTheCallRate) {
+    // Two channels with the same configuration, one advanced at the 500 Hz
+    // physics rate and one at a 100 Hz publish rate. Delay, sample rate and
+    // bias walk are specified in seconds, so both must delay by 0.1 s, sample
+    // every 0.2 s and walk at the same density -- in their own call counts,
+    // 50 vs 10 calls, 100 vs 20 calls.
+    ChannelConfig cfg;
+    cfg.delay_s = 0.1;
+    cfg.rate_hz = 5.0;
+    SensorModel m(kDt, 42);
+    const int fast = m.addChannel("fast", cfg);              // model period, 2 ms
+    const int slow = m.addChannel("slow", cfg, 0.01);        // its own, 10 ms
+    EXPECT_EQ(m.channel(fast).delaySteps(), 50);
+    EXPECT_EQ(m.channel(slow).delaySteps(), 10);
+
+    // Samples land every 0.2 s of simulated time on both.
+    std::vector<int> fresh_slow;
+    double prev = m.apply(slow, 0.0);
+    for (int i = 1; i < 100; ++i) {               // 1 s at 100 Hz
+        const double v = m.apply(slow, static_cast<double>(i));
+        if (v != prev) fresh_slow.push_back(i);
+        prev = v;
+    }
+    ASSERT_GE(fresh_slow.size(), 2u);
+    EXPECT_EQ(fresh_slow[1] - fresh_slow[0], 20) << "0.2 s at 100 Hz";
+
+    // Bias walk: the same density per sqrt(second) on both periods.
+    ChannelConfig walk;
+    walk.bias_walk_std = 0.3;
+    std::vector<double> end_fast, end_slow;
+    for (int r = 0; r < 400; ++r) {
+        SensorModel w(kDt, 1000 + static_cast<std::uint64_t>(r));
+        const int a = w.addChannel("a", walk);
+        const int b = w.addChannel("b", walk, 0.01);
+        double va = 0.0, vb = 0.0;
+        for (int i = 0; i < 500; ++i) va = w.apply(a, 0.0);   // 1 s at 500 Hz
+        for (int i = 0; i < 100; ++i) vb = w.apply(b, 0.0);   // 1 s at 100 Hz
+        end_fast.push_back(va);
+        end_slow.push_back(vb);
+    }
+    // After 1 s a walk of density 0.3/sqrt(s) has sigma 0.3 at either rate.
+    EXPECT_NEAR(sampleStd(end_fast), 0.3, 0.03);
+    EXPECT_NEAR(sampleStd(end_slow), 0.3, 0.03);
+}
+
+TEST(SensorModelPeriod, RejectsANonPositivePeriod) {
+    SensorModel m(kDt, 42);
+    EXPECT_THROW(m.addChannel("x", ChannelConfig{}, 0.0), std::invalid_argument);
+    EXPECT_THROW(m.addChannel("y", ChannelConfig{}, -0.01), std::invalid_argument);
+}
+
 TEST(SensorModelRate, RateFasterThanTheSimUpdatesEveryStep) {
     ChannelConfig cfg;
     cfg.rate_hz = 5000.0;               // 10x the sim rate

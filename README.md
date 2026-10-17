@@ -8,6 +8,10 @@ Planar Air-bearing Table simulator for ISAM GNC and manipulation research.
 - Chaser + stationary target on a 2 m × 2 m air-bearing table (MuJoCo)
 - Rendezvous: chaser drives to a configurable hold point ahead of the target
 - **GNC** — PID controller (`IController`) + direct or EKF navigation (`INavigator`)
+- **Base state estimation for flight sensing** — `pat_gnc`'s `nav_node`: an
+  IMU-driven error-state EKF on its own realtime thread, fusing a 500 Hz IMU, a
+  late star tracker and a late relative-nav fix into `/chaser/nav/odom`, which
+  the arm NMPC can read in place of mocap (`with_nav:=true`)
 - **Arm control**
   - `pat_robotics` — per-joint PID (`IJointController`)
   - `pat_arm_control` — dual-arm task-space NMPC: planar (x, y, θz) receding-horizon
@@ -264,12 +268,26 @@ One channel ships non-zero: `imu_gyro_z.noise_std: 0.005`, because `/chaser/imu`
 has always carried that much noise and `pat_gnc`'s navigator consumes it. This
 was the `imu_noise_std` parameter, now folded into the channel it always meant.
 
-**The accelerometer was previously broken** — `publishImu` filled
-`linear_acceleration.x/y` with independent noise draws and no signal at all. It
-now carries MuJoCo's real proper acceleration. With gravity disabled there is no
-1 g term to remove, which is also true of a real IMU in free fall. Nothing
-consumed it (`pat_gnc` reads only `angular_velocity.z`), so the fix is not
-visible downstream today.
+The accelerometer carries MuJoCo's real proper acceleration. With gravity
+disabled there is no 1 g term to remove, which is also true of a real IMU in
+free fall. `pat_gnc`'s IMU-driven navigator integrates it.
+
+**Time-based settings are in seconds, whatever the publish rate.** `delay_s`,
+`rate_hz` and `bias_walk_std` are counted in calls of the channel, so each
+channel is built with the period it is actually advanced at: the IMU's for the
+`imu_*` channels, the publish period for the rest
+(`SensorModelPeriod.TimeSettingsMeanSecondsWhateverTheCallRate`). `/chaser/imu`
+publishes from the physics loop at `imu_rate_hz` (default `pub_rate_hz`, up to
+the 500 Hz physics rate), so the IMU can run fast while odometry and joint
+states stay at the rate the arm NMPC is matched to.
+
+**A flight profile** ships as an overlay: `config/sensors_flight.yaml`, loaded
+on top of `simulation.yaml` with `sensor_profile:=`. A 500 Hz IMU with biases
+and bias walk, a 5 Hz star tracker 100 ms late, a 2 Hz relative-nav fix 200 ms
+late, and ground truth switched on. It has no position dropout, deliberately:
+the sensor model drops `nav_x` and `nav_y` independently, which would produce
+fixes with one fresh coordinate and one stale one — something a real sensor,
+which loses the whole fix, never emits.
 
 ### Disturbances
 
@@ -340,7 +358,7 @@ PlotJuggler is installed in the `dev` image only.
 ## Test
 
 ```bash
-colcon test --packages-select pat_gnc pat_robotics pat_simulation pat_arm_control pat_telemetry
+colcon test --packages-select pat_rt pat_gnc pat_robotics pat_simulation pat_arm_control pat_telemetry
 colcon test-result --verbose
 ```
 
@@ -879,6 +897,118 @@ divided-difference error, the same one the unit tests bound, and the runaway
 base is already the documented confound for every free-base run past ~15 s.
 The other five rows stayed near zero throughout, so it attributed the force to
 the right DOF.
+
+### Base state estimator (`pat_gnc` `nav_node`)
+
+Flight has no mocap. The chaser has an IMU, a star tracker for attitude, and a
+relative-navigation sensor for position — the last two slow and late. `nav_node`
+fuses them into `/chaser/nav/odom` (pose, twist and covariance), which the arm
+NMPC reads instead of `/chaser/odom` when launched with `with_nav:=true`.
+
+```bash
+# flight sensing, end to end
+ros2 launch launch/full_stack_nmpc.launch.py with_targets:=true with_nav:=true \
+  sensor_profile:=$(ros2 pkg prefix pat_simulation)/share/pat_simulation/config/sensors_flight.yaml \
+  nav_params:=$(ros2 pkg prefix pat_gnc)/share/pat_gnc/config/nav_flight.yaml
+```
+
+The filter is `ImuEkf` (`pat_gnc/navigation/imu_ekf.hpp`, with the papers each
+part follows cited in its comments). The IMU drives it, so it needs no model of
+what moves the base — arm reaction and contact show up in the accelerometer
+directly. It estimates the gyro and accelerometer biases. It places a late
+measurement at the time it was taken by replaying the stored history, which
+gives exactly the result an on-time measurement would have (to rounding,
+`ALateMeasurementGivesExactlyTheOnTimeResult`). It also rejects outliers
+with an innovation gate, and never allocates after construction.
+
+`nav_node` runs it on its own `SCHED_FIFO` thread (`rt_priority_nav`,
+`rt_cpus_nav`), with the same lock-free hand-off as the arm controller, now
+shared in `pat_rt`. At startup it times a worst-case replay on the machine it
+is on and refuses to start if one odometry message's worth cannot fit half a
+wake: on the dev box, 232 µs for 256 steps against a 1 ms budget at 500 Hz.
+
+#### Scored against MuJoCo, deterministically
+
+`nav_bench` (in `pat_simulation`) runs the scene as the plant, corrupts its
+sensors through the simulator's own `SensorModel`, feeds `nav_node`'s own
+navigator, and compares against truth — including the biases actually applied,
+which only the simulator knows. One process, fixed seeds, byte-identical output.
+
+```bash
+ros2 run pat_simulation nav_bench              # one 60 s run, flight profile
+ros2 run pat_simulation nav_bench --seeds 20   # Monte-Carlo consistency
+```
+
+| state | error rms | filter's own σ |
+|---|---|---|
+| position | 4.4 / 3.7 mm | 4.2 mm |
+| yaw | 0.25 mrad | 0.21 mrad |
+| velocity | 2.6 / 2.4 mm/s | 2.8 mm/s |
+| gyro bias | 0.12 mrad/s | 0.09 mrad/s |
+| accelerometer bias | 0.7 / 1.0 mm/s² | 1.1 mm/s² |
+
+**The covariance is honest.** Over 20 seeds the seed-averaged NEES sits inside
+its 95% χ² band on 94.7% of instants (about 95% is what a consistent filter
+gives), mean 7.96 against 8, and the innovations average 0.96 and 1.95 against
+the 1 and 2 they should. That matters because the covariance is published: it
+is what anything downstream uses to decide how far to trust the estimate.
+
+**Without a position fix** (`--no-position`, `imu_ekf.use_position: false`)
+position drifts 24 m in a minute, but the filter's own σ grows to 26 m, so it
+says so, and the accelerometer bias stays at its prior: it cannot be told apart
+from real acceleration. Flight needs the relative-nav sensor; until Phase 3
+vision exists, arm work keeps a mocap-grade `/chaser/odom`.
+
+**Sensor latency has to be right to about a millisecond.** While the base
+turns, a timing error is a yaw error, and the star tracker is accurate enough to
+notice:
+
+| latency error | yaw error | NEES (8 is honest) | star-tracker fixes rejected |
+|---|---|---|---|
+| 0 | 0.25 mrad | 8.0 | 1 of 299 |
+| ±1 ms | 0.37–0.59 mrad | 11–15 | 1 |
+| ±5 ms | 1.1–1.6 mrad | 51–73 | 0–13 |
+| ±10 ms | 2.2–2.5 mrad | 125–201 | 12–79 |
+
+So on hardware the drivers must stamp each reading with its acquisition time
+and the configured latency should be zero; a fixed latency guessed to the
+nearest few milliseconds is not good enough. The same effect is why a late
+measurement goes to the *nearest* history step, not the one at or before it:
+`stamp - latency` routinely lands a rounding error below the right step, and
+one step early cost NEES 11 against 8.
+
+**A sensor slower than its message is fused once per reading.** The 2 Hz
+position fix and 5 Hz star tracker ride on 100 Hz odometry, so each reading
+arrives many times; `imu_ekf.skip_repeated` (on by default) fuses it once.
+Fusing every copy as new would make the filter wildly overconfident.
+
+#### What it costs the arms, live
+
+`tools/nav_score/score_tracking.py` recovers the arms' TRUE end-effector
+position from the simulator's ground truth. The arms' own `ee_pose` is in the
+frame they believe the base is in, which hides the estimate's error. Three
+45 s runs each, waypoint loop, headless:
+
+| | left arm true error | right arm true error | EE error from the estimate |
+|---|---|---|---|
+| perfect `/chaser/odom` | 29.4–29.6 mm | 25.6–25.8 mm | 0 |
+| flight sensing, `/chaser/nav/odom` | 29.9–30.2 mm | 28.3–28.5 mm | 4.4 mm mean, 11 mm worst |
+
+The means are dominated by the transient after each waypoint step; the
+estimate adds ~0.5 mm (+2%) on the left arm and ~2.7 mm (+10%) on the right, and
+the repeats agree to a few tenths of a millimetre, so that difference is real.
+
+Arm timing over 120 s, `run_trial.sh -g -a visualise:=false`, without and with
+the estimator, flight profile and the arms on the estimate:
+
+| | tick mean | max | p95 | over deadline | retries |
+|---|---|---|---|---|---|
+| perfect, no `nav_node` | 849 µs | 4.3 ms | 2.46 ms | 0.00% | 0 |
+| flight + `nav_node` | 905 µs | 4.9 ms | 2.53 ms | 0.00% | 0 |
+
++56 µs mean for everything added at once: the nav thread, a forward pass every
+physics step for the 500 Hz IMU, and `/clock` at 500 Hz into every node.
+`nav_node` itself averaged 11 µs a wake, 206 µs worst, no overruns.
 
 ### Settled by measurement — don't redo these
 

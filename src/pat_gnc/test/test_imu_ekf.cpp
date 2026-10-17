@@ -428,6 +428,32 @@ TEST(ImuEkf, ALateMeasurementGivesExactlyTheOnTimeResult) {
     EXPECT_EQ(late.diagnostics().pos_updates, 3u);
 }
 
+TEST(ImuEkf, AStampARoundingErrorOffAStepIsPlacedOnThatStep) {
+    // (message time - latency) routinely lands 1e-17 s either side of the
+    // step a measurement was really taken at. Either way it must be applied
+    // at that step: one interval early, while turning, is a yaw error several
+    // times the star tracker's noise.
+    const auto run_with = [](double offset) {
+        ImuEkf::Params prm;
+        ImuEkf f(prm);
+        Plant pl;
+        f.propagate(0.0, pl.accelMeas(), pl.gyroMeas());
+        f.initialise(0.0, pl.p.x(), pl.p.y(), pl.th);
+        double t_meas = 0.0;
+        for (int k = 1; k <= 100; ++k) {
+            pl.advance(0.002);
+            f.propagate(pl.t, pl.accelMeas(), pl.gyroMeas());
+            if (k == 40) t_meas = pl.t;
+        }
+        f.updateYaw(t_meas + offset, 0.41);
+        return f.state();
+    };
+    const ImuEkf::Vec exact = run_with(0.0);
+    EXPECT_TRUE(run_with(-1e-12) == exact) << "a hair before the step";
+    EXPECT_TRUE(run_with(+1e-12) == exact) << "a hair after the step";
+    EXPECT_FALSE(run_with(-0.0015) == exact) << "most of an interval early: the previous step";
+}
+
 TEST(ImuEkf, AMeasurementOlderThanTheHistoryIsDroppedAndCounted) {
     ImuEkf::Params prm;
     prm.history_len = 8;

@@ -3,6 +3,7 @@
 
 
 #include <array>
+#include <cstdint>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -48,6 +49,19 @@ private:
                      int h_pose, int h_vel);
 
     void publishImu(const rclcpp::Time& t);
+
+    //! MuJoCo's simulated time as a ROS stamp. Every message this node
+    //! publishes is stamped with it, never with the node's own ROS clock: that
+    //! clock only learns the time from the /clock published here, so it would
+    //! lag the physics. Stamping from the physics makes a stamp say exactly
+    //! when the simulated measurement was taken, which is what an estimator
+    //! integrating IMU intervals between stamps needs.
+    rclcpp::Time simStamp() const;
+
+    //! Publish /clock at `t`, unless it was already published at `t`. Called
+    //! before every stamped publish, so no subscriber ever receives a message
+    //! stamped ahead of its own clock.
+    void publishClock(const rclcpp::Time& t);
       
     void broadcastTF(const std::string& parent, const std::string& child,
                      const pat_simulation::PlanarState& s, const rclcpp::Time& t);
@@ -69,12 +83,19 @@ private:
      *
      *  The simulator is the workspace's time source: launch files default
      *  use_sim_time:=true, so every node's ROS clock follows this. Published
-     *  once per publish() tick, BEFORE the messages stamped with the same
-     *  time, so a subscriber's clock is never behind the stamps it receives.
-     *  Not once per physics step: every node with use_sim_time receives it,
-     *  and the stamps the estimators need come from the messages themselves,
-     *  which carry the exact simulated time regardless of the /clock rate. */
+     *  immediately before any message stamped with a new time (publishClock),
+     *  so it runs at the faster of pub_rate_hz and imu_rate_hz and never at
+     *  the full physics rate: every node with use_sim_time receives it, and
+     *  the stamps the estimators need come from the messages themselves. */
     rclcpp::Publisher<rosgraph_msgs::msg::Clock>::SharedPtr clock_pub_;
+    std::int64_t last_clock_ns_{-1};
+
+    /*! The IMU's own rate. /chaser/imu is published from the physics loop
+     *  every imu_every_steps_ steps rather than from publish(), so it can run
+     *  up to the 500 Hz physics rate while odometry and joint states stay at
+     *  pub_rate_hz -- which the arm NMPC's control_hz is matched to. */
+    int imu_every_steps_{5};
+    int imu_step_{0};
     std::unique_ptr<tf2_ros::TransformBroadcaster>        tf_br_;
     rclcpp::Subscription<pat_msgs::msg::ThrusterCommand>::SharedPtr thr_sub_;
     rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr arm_torque_sub_;
@@ -137,7 +158,10 @@ private:
     /// "sensors.<name>.*", register it, and return its handle. `default_sigma`
     /// seeds noise_std only, for the one channel that has a pre-existing
     /// non-zero default to preserve.
-    int declareChannel(const std::string& name, double default_sigma = 0.0);
+    //! `dt` is the period the channel is actually advanced at -- the IMU's
+    //! period for IMU channels, the publish period for the rest. Every
+    //! time-based channel setting is counted in calls through it.
+    int declareChannel(const std::string& name, double default_sigma, double dt);
 
     /// Declare and read a wrench profile under "disturbance.<name>.*".
     pat_simulation::WrenchProfile declareWrench(const std::string& name);
