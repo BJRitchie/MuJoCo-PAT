@@ -1,4 +1,6 @@
 #include <array>
+#include <cmath>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -230,6 +232,9 @@ SimulationNode::SimulationNode() : Node("pat_simulation") {
     }
 
     // Publishers
+    // ClockQoS: best-effort, depth 1 -- the standard profile for /clock, so
+    // every node's built-in time-source subscription matches it.
+    clock_pub_ = create_publisher<rosgraph_msgs::msg::Clock>("/clock", rclcpp::ClockQoS());
     ch_odom_ = create_publisher<nav_msgs::msg::Odometry>("/chaser/odom", 10);
     tg_odom_ = create_publisher<nav_msgs::msg::Odometry>("/target/odom", 10);
     ch_imu_  = create_publisher<sensor_msgs::msg::Imu>("/chaser/imu", 10);
@@ -370,8 +375,20 @@ void SimulationNode::publishTruth(const rclcpp::Time& t) {
 }
 
 void SimulationNode::publish() {
-    // Current time
-    const auto now = get_clock()->now();
+    // Every message on this tick is stamped with MuJoCo's simulated time, not
+    // with this node's ROS clock: that clock only learns the time from the
+    // /clock published here, so it would lag the physics by up to a tick.
+    // Stamping from the physics directly makes a stamp say exactly when the
+    // simulated measurement was taken, which is what an estimator that
+    // integrates IMU intervals between stamps needs.
+    const rclcpp::Time now(static_cast<std::int64_t>(std::llround(sim_->time() * 1e9)),
+                           RCL_ROS_TIME);
+
+    // /clock first, so no subscriber ever receives a message stamped ahead of
+    // its own clock.
+    rosgraph_msgs::msg::Clock clk;
+    clk.clock = now;
+    clock_pub_->publish(clk);
 
     // mj_step evaluates the dynamics before integrating, so mjData's derived
     // quantities -- the <sensor> outputs among them -- describe the state the

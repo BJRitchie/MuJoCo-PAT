@@ -187,11 +187,11 @@ private:
     void controlLoop();
 
     //! The clock every throttled log message is rate-limited against. Steady, NOT
-    //! the node clock: launch files default use_sim_time:=true and nothing
-    //! publishes /clock, so get_clock()->now() is frozen at zero and a throttle
-    //! gated on it fires once and is then silent for the rest of the run -- which
-    //! silently hid the "waiting for joint_states" and dropped-measurement
-    //! warnings. Rate-limiting output is a wall-clock concern either way.
+    //! the node clock: with use_sim_time the node clock follows the simulator's
+    //! /clock, which stands still whenever the simulator is not running -- and a
+    //! throttle gated on a clock that stands still fires once and then goes
+    //! silent, hiding exactly the "waiting for joint_states" warning that
+    //! situation should produce. Rate-limiting output is a wall-clock concern.
     rclcpp::Clock log_clock_{RCL_STEADY_TIME};
 
     std::string arm_side_;                        // "left" | "right"
@@ -281,10 +281,10 @@ private:
      *  `name` is filled once at construction and `effort` sized once, so a tick
      *  writes doubles into existing storage. The stamp comes from clock_gettime
      *  rather than get_clock()->now(): with use_sim_time the rclcpp clock takes a
-     *  mutex that the /clock subscription also takes, which is the priority
-     *  inversion this phase exists to remove. No consumer reads this stamp
-     *  (pat_simulation and pat_telemetry both match on name), and it was frozen at
-     *  zero before, since nothing publishes /clock. */
+     *  mutex that the /clock subscription also takes, and the simulator does
+     *  publish /clock, so on the control thread that would be a priority
+     *  inversion. No consumer reads this stamp (pat_simulation and pat_telemetry
+     *  both match on name). */
     sensor_msgs::msg::JointState torque_msg_;
 
     /*! What rclcpp::Publisher::publish actually costs, per call, per topic.
@@ -457,9 +457,9 @@ private:
     rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr ee_pose_pub_;  // measured EE pose (world)
 
     // --- Loop-level timing -------------------------------------------------
-    // Measured on steady_clock, never the ROS clock: launch files default
-    // use_sim_time:=true and nothing publishes /clock, so get_clock()->now() is
-    // frozen at zero and unusable for any elapsed-time measurement.
+    // Measured on steady_clock, never the ROS clock: with use_sim_time the ROS
+    // clock is the simulator's, which advances at whatever rate the simulation
+    // runs and only in /clock-sized steps, so it cannot time a tick.
     //
     // The controller times its own internal phases; these are the numbers only
     // the node can see -- when the tick actually woke relative to when it should

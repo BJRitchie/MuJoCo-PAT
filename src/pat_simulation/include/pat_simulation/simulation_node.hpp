@@ -9,6 +9,7 @@
 #include <vector>
 
 #include <rclcpp/rclcpp.hpp>
+#include <rosgraph_msgs/msg/clock.hpp>
 #include <nav_msgs/msg/odometry.hpp>
 #include <sensor_msgs/msg/imu.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
@@ -63,6 +64,17 @@ private:
     rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr ch_odom_, tg_odom_;
     rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr   ch_imu_;
     rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr arm_state_pub_;
+
+    /*! /clock, from MuJoCo's own simulated time.
+     *
+     *  The simulator is the workspace's time source: launch files default
+     *  use_sim_time:=true, so every node's ROS clock follows this. Published
+     *  once per publish() tick, BEFORE the messages stamped with the same
+     *  time, so a subscriber's clock is never behind the stamps it receives.
+     *  Not once per physics step: every node with use_sim_time receives it,
+     *  and the stamps the estimators need come from the messages themselves,
+     *  which carry the exact simulated time regardless of the /clock rate. */
+    rclcpp::Publisher<rosgraph_msgs::msg::Clock>::SharedPtr clock_pub_;
     std::unique_ptr<tf2_ros::TransformBroadcaster>        tf_br_;
     rclcpp::Subscription<pat_msgs::msg::ThrusterCommand>::SharedPtr thr_sub_;
     rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr arm_torque_sub_;
@@ -88,11 +100,11 @@ private:
     // the simulated actuators behave like the hardware they stand in for.
     // <= 0 disables the check.
     //
-    // Counted in sim steps rather than off a clock: use_sim_time is on by
-    // default and nothing in this workspace publishes /clock, so
-    // get_clock()->now() is frozen at zero. Counting steps also keeps the
-    // window in SIMULATED time, which is the time the arm dynamics actually
-    // experience, whatever wall rate the sim happens to run at.
+    // Counted in sim steps rather than off a clock, which keeps the window in
+    // SIMULATED time -- the time the arm dynamics actually experience,
+    // whatever wall rate the sim happens to run at -- and needs nothing from
+    // this node's own ROS clock, which only learns the time from the /clock
+    // this node publishes.
     double arm_torque_timeout_{0.0};        //!< [s], as configured
     int  arm_torque_timeout_steps_{0};      //!< the above, in sim steps
     int  arm_torque_silent_steps_{0};
@@ -152,10 +164,8 @@ private:
     void publishTruth(const rclcpp::Time& t);
 
     //! The clock the contact-pair log is throttled against. Steady, NOT the
-    //! node clock: launch files default use_sim_time:=true and nothing in this
-    //! workspace publishes /clock, so get_clock()->now() is frozen at zero and
-    //! a throttle gated on it fires once and is then silent for the rest of the
-    //! run. Rate-limiting output is a wall-clock concern either way.
+    //! node clock: with use_sim_time the node clock runs at whatever rate the
+    //! simulation does, and rate-limiting output is a wall-clock concern.
     rclcpp::Clock log_clock_{RCL_STEADY_TIME};
 };
 

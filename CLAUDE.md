@@ -121,6 +121,15 @@ identical in both cases.
 | `/chaser/arm/<side>/ee_setpoint` | `ee_target_publisher` (`pat_arm_control`) or a mission/teleop node | mission/teleop node | `pat_arm_control` (task-space, `geometry_msgs/PoseStamped`, planar — x, y, yaw) |
 | `/chaser/arm/<side>/ee_pose` | `pat_arm_control` (measured EE pose, `geometry_msgs/PoseStamped`, world) | `pat_arm_control` | mission/teleop node, diagnostics |
 | `/chaser/arm/torque_command` | `pat_robotics` **or** `pat_arm_control` | same | `pat_simulation` / arm motor driver |
+| `/clock` | `pat_simulation` (MuJoCo's simulated time, once per publish tick) | **none** — run with `use_sim_time:=false` | every node with `use_sim_time:=true` (the launch default) |
+
+`pat_simulation` stamps every message it publishes with simulated time and
+publishes `/clock` from the same value, so stamps and every node's ROS clock
+agree with the physics. Stamps are what `pat_gnc`'s IMU filter integrates
+between, so they must be real: on hardware the drivers stamp with acquisition
+time and `use_sim_time` is false. Periodic loops never run on the ROS clock —
+every timer here is a wall timer or a `pat_rt::PeriodicWaker`, and log
+throttles use a steady clock — so the sim clock changes stamps, not cadence.
 
 The three `JointState` arm topics are matched **by name** (not array position)
 — `joint_states` populates `name`+`position`+`velocity`; `joint_setpoint`

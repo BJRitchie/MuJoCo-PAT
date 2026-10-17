@@ -6,6 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(ament_cmake   REQUIRED)
 find_package(rclcpp        REQUIRED)
+find_package(rosgraph_msgs REQUIRED)
 find_package(nav_msgs      REQUIRED)
 find_package(sensor_msgs   REQUIRED)
 find_package(geometry_msgs REQUIRED)
@@ -34,7 +35,7 @@ add_executable(simulation_node src/simulation_node.cpp)
 target_include_directories(simulation_node PRIVATE include)
 target_link_libraries(simulation_node mujoco_sim)
 ament_target_dependencies(simulation_node
-    rclcpp nav_msgs sensor_msgs geometry_msgs tf2 tf2_ros pat_msgs)
+    rclcpp rosgraph_msgs nav_msgs sensor_msgs geometry_msgs tf2 tf2_ros pat_msgs)
 
 # Expand the scene xacro to a self-contained MJCF at build time. mj_loadXML
 # (via the `model_path` param) loads the generated .xml; the .xacro sources the

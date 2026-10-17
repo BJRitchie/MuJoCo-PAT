@@ -12,8 +12,7 @@
 #include "pat_gnc/interfaces/i_controller.hpp"
 #include "pat_gnc/interfaces/i_navigator.hpp"
 #include "pat_gnc/control/pid_controller.hpp"
-#include "pat_gnc/navigation/direct_navigator.hpp"
-#include "pat_gnc/navigation/ekf_navigator.hpp"
+#include "navigator_factory.hpp"
 
 using namespace std::chrono_literals;
 
@@ -30,18 +29,9 @@ public:
         hold_y_ = declare_parameter<double>("hold_offset_y", 0.0);
 
         // —— Navigator factory ——————————————————————————————————————————
-        // Add new navigators as else-if blocks; no other changes needed.
-        const auto nav_type = declare_parameter<std::string>("navigator", "direct");
-        if (nav_type == "direct") {
-            navigator_ = std::make_unique<pat_gnc::DirectNavigator>();
-        } else if (nav_type == "ekf") {
-            pat_gnc::PlanarEKF::Params ep;
-            ep.dt = 1.0 / nav_hz;
-            navigator_ = std::make_unique<pat_gnc::EkfNavigator>(ep);
-        } else {
-            RCLCPP_WARN(get_logger(), "Unknown navigator '%s', using 'direct'", nav_type.c_str());
-            navigator_ = std::make_unique<pat_gnc::DirectNavigator>();
-        }
+        // Shared with nav_node (navigator_factory.hpp); add navigators there.
+        std::string nav_type;
+        navigator_ = pat_gnc::makeNavigator(*this, nav_hz, nav_type);
         RCLCPP_INFO(get_logger(), "Navigator: %s", nav_type.c_str());
 
         // —— Controller factory ———————————————————————————————————————————
@@ -87,13 +77,15 @@ private:
         const Eigen::Vector3d twist{msg->twist.twist.linear.x,
                                     msg->twist.twist.linear.y,
                                     msg->twist.twist.angular.z};
-        navigator_->onOdometry(pose, twist);
+        navigator_->onOdometry(rclcpp::Time(msg->header.stamp).seconds(), pose, twist);
         has_chaser_ = true;
     }
 
     void onImu(const sensor_msgs::msg::Imu::SharedPtr msg) {
         std::lock_guard<std::mutex> lk(mu_);
-        navigator_->onImu(msg->angular_velocity.z);
+        navigator_->onImu(rclcpp::Time(msg->header.stamp).seconds(),
+                          {msg->linear_acceleration.x, msg->linear_acceleration.y},
+                          msg->angular_velocity.z);
     }
 
     void onTargetOdom(const nav_msgs::msg::Odometry::SharedPtr msg) {

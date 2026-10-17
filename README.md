@@ -1243,9 +1243,9 @@ Cleared, and worth knowing about because each was invisible rather than noisy:
   vector of `std::string` every tick. And the stamp comes from `clock_gettime`
   rather than `get_clock()->now()`, because with `use_sim_time` the rclcpp clock
   takes a mutex the `/clock` subscription also takes — the exact inversion this
-  work removes. That stamp is now real wall-clock time where it used to be frozen
-  at zero (nothing publishes `/clock`); no consumer reads it, since
-  `pat_simulation` and `pat_telemetry` both match on name.
+  work removes. That stamp is therefore wall-clock time, not the simulator's
+  `/clock`; no consumer reads it, since `pat_simulation` and `pat_telemetry`
+  both match on name.
 
   **A stalled subscriber does not stall the loop, and that is measured.** The
   hazard is specific: a reliable writer blocks up to `max_blocking_time` (100 ms by
@@ -1354,14 +1354,14 @@ Cleared, and worth knowing about because each was invisible rather than noisy:
   file is no longer created by a full run. `pat_simulation` keeps MuJoCo's defaults
   and is not affected by this (it is removed at deployment).
 - **Throttled log messages were permanently suppressed.** All five
-  `RCLCPP_*_THROTTLE` sites were gated on the node clock, which is frozen at zero
-  with `use_sim_time:=true` and nothing publishing `/clock`, so each fired once and
-  then went silent for the rest of the run -- including "waiting for joint_states"
-  and the dropped non-finite-measurement warnings. They now throttle against a
-  steady clock; the startup warning repeats every 2 s as intended. `header.stamp`
-  on `torque_command` is now real wall-clock time, set with `clock_gettime` by the
-  tick that computed it; `ee_pose` is still stamped from the ROS clock and so
-  still reads zero, since nothing publishes `/clock`.
+  `RCLCPP_*_THROTTLE` sites were gated on the node clock, which was frozen at zero
+  with `use_sim_time:=true` before the simulator published `/clock`, so each fired
+  once and then went silent for the rest of the run -- including "waiting for
+  joint_states" and the dropped non-finite-measurement warnings. They now throttle
+  against a steady clock; the startup warning repeats every 2 s as intended.
+  `header.stamp` on `torque_command` is wall-clock time, set with `clock_gettime`
+  by the tick that computed it; `ee_pose` is stamped from the ROS clock, which in
+  simulation is the simulator's `/clock`.
 - **The trust-region loop allocated a 3-vector per stage**, i.e. N per tick.
   Hoisted to a member: 1850 -> 1809 allocations per tick, and paired runs put the
   mean 81 us lower with `qp_iter` and tracking unchanged.

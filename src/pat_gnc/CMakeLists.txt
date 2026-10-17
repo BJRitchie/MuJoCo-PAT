@@ -18,7 +18,8 @@ add_library(pat_gnc_lib STATIC
     src/planar_dynamics.cpp
     src/pid_controller.cpp
     src/planar_ekf.cpp
-    src/imu_ekf.cpp)
+    src/imu_ekf.cpp
+    src/imu_ekf_navigator.cpp)
 target_include_directories(pat_gnc_lib PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>)
