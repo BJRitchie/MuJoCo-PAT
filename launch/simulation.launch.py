@@ -11,9 +11,13 @@ def generate_launch_description() -> LaunchDescription:
                                       "environment", "air_bearing_table.xml"])
     return LaunchDescription([
         DeclareLaunchArgument("use_sim_time", default_value="true"),
+        # false runs headless: no viewer window, so nothing typed into it can
+        # pause the simulation or toggle its rendering mid-run.
+        DeclareLaunchArgument("visualise", default_value="true"),
         Node(package="pat_simulation", executable="simulation_node",
              name="pat_simulation",
              parameters=[sim_cfg, {"model_path": model_xml,
+                                   "visualise": LaunchConfiguration("visualise"),
                                    "use_sim_time": LaunchConfiguration("use_sim_time")}],
              output="screen", emulate_tty=True),
     ])

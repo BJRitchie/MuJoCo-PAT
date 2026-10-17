@@ -11,6 +11,9 @@ reaction dynamics). Run it against an undriven chaser — do NOT also run GNC
 station-keeping, or the arm reaction is double-counted.
 
 Swap tuning sets with `params_file:=/path/to/other.yaml`.
+
+`odom_topic:=/chaser/nav/odom` reads the base state from pat_gnc's nav_node
+estimate instead of the /chaser/odom measurement.
 """
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
@@ -35,14 +38,17 @@ def generate_launch_description() -> LaunchDescription:
         # Per-tick timing trace, off when empty. Each node splices its own side
         # into the filename, so both arms can share this one value.
         DeclareLaunchArgument("trace_file", default_value=""),
+        DeclareLaunchArgument("odom_topic", default_value="/chaser/odom"),
         Node(name="pat_arm_nmpc_left", parameters=[
             LaunchConfiguration("params_file"),
             {"mjcf_path": LaunchConfiguration("mjcf_path"),
              "trace_file": LaunchConfiguration("trace_file"),
+             "odom_topic": LaunchConfiguration("odom_topic"),
              "use_sim_time": LaunchConfiguration("use_sim_time")}], **common),
         Node(name="pat_arm_nmpc_right", parameters=[
             LaunchConfiguration("params_file"),
             {"mjcf_path": LaunchConfiguration("mjcf_path"),
              "trace_file": LaunchConfiguration("trace_file"),
+             "odom_topic": LaunchConfiguration("odom_topic"),
              "use_sim_time": LaunchConfiguration("use_sim_time")}], **common),
     ])

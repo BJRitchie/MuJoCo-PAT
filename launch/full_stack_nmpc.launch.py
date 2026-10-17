@@ -18,6 +18,10 @@ its setpoint - see /chaser/telemetry/*).
 `params_file:=/path/to/nmpc.yaml` swaps the NMPC tuning set, forwarded to
 arm_nmpc.launch.py. Defaults to pat_arm_control's installed config/nmpc.yaml.
 
+`with_nav:=true` brings up pat_gnc's nav_node (the IMU-driven base state
+estimator, config `nav_params:=`, default pat_gnc/config/nav.yaml) and points
+both arm controllers at its /chaser/nav/odom instead of /chaser/odom.
+
 `trace_file:=/path/to/trace.csv` records every control tick's timing and writes
 it at exit, one file per arm (trace_left.csv / trace_right.csv). Off by default.
 Plot it with tools/nmpc_timing/plot_trace.py.
@@ -32,16 +36,26 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, ExecuteProcess, IncludeLaunchDescription, TimerAction
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, ThisLaunchFileDir
+from launch.substitutions import (LaunchConfiguration, PathJoinSubstitution,
+                                  PythonExpression, ThisLaunchFileDir)
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
 
 def generate_launch_description() -> LaunchDescription:
     use_sim_time = {"use_sim_time": LaunchConfiguration("use_sim_time")}.items()
+    # The arms read the estimate when nav_node is running, the measurement
+    # otherwise -- never a topic nobody publishes.
+    odom_topic = PythonExpression([
+        "'/chaser/nav/odom' if '", LaunchConfiguration("with_nav"),
+        "' == 'true' else '/chaser/odom'"])
     nmpc_args = {"use_sim_time": LaunchConfiguration("use_sim_time"),
                  "params_file": LaunchConfiguration("params_file"),
-                 "trace_file": LaunchConfiguration("trace_file")}.items()
+                 "trace_file": LaunchConfiguration("trace_file"),
+                 "odom_topic": odom_topic}.items()
+    nav_args = {"use_sim_time": LaunchConfiguration("use_sim_time"),
+                "nav_params": LaunchConfiguration("nav_params")}.items()
+    nav_params = PathJoinSubstitution([FindPackageShare("pat_gnc"), "config", "nav.yaml"])
     # Repeats arm_nmpc.launch.py's own default rather than forwarding an empty
     # string: launch_arguments is fixed when the description is built, so there is
     # no way to omit the argument conditionally on its value.
@@ -52,18 +66,27 @@ def generate_launch_description() -> LaunchDescription:
         DeclareLaunchArgument("params_file", default_value=nmpc_params),
         DeclareLaunchArgument("trace_file", default_value=""),
         DeclareLaunchArgument("with_gnc", default_value="false"),
+        DeclareLaunchArgument("with_nav", default_value="false"),
+        DeclareLaunchArgument("nav_params", default_value=nav_params),
         DeclareLaunchArgument("with_targets", default_value="false"),
         DeclareLaunchArgument("telemetry", default_value="false"),
         DeclareLaunchArgument("plotjuggler", default_value="false"),
+        DeclareLaunchArgument("visualise", default_value="true"),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
                 PathJoinSubstitution([ThisLaunchFileDir(), "simulation.launch.py"])),
-            launch_arguments=use_sim_time),
+            launch_arguments={"use_sim_time": LaunchConfiguration("use_sim_time"),
+                              "visualise": LaunchConfiguration("visualise")}.items()),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
                 PathJoinSubstitution([ThisLaunchFileDir(), "gnc.launch.py"])),
             launch_arguments=use_sim_time,
             condition=IfCondition(LaunchConfiguration("with_gnc"))),
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(
+                PathJoinSubstitution([ThisLaunchFileDir(), "nav.launch.py"])),
+            launch_arguments=nav_args,
+            condition=IfCondition(LaunchConfiguration("with_nav"))),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(PathJoinSubstitution(
                 [FindPackageShare("pat_arm_control"), "launch", "arm_nmpc.launch.py"])),

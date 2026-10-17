@@ -26,10 +26,17 @@ target_include_directories(pat_gnc_lib PUBLIC
 target_link_libraries(pat_gnc_lib PUBLIC Eigen3::Eigen)
 target_compile_options(pat_gnc_lib PRIVATE -Wall -Wextra -Wpedantic)
 
-# ROS 2 node wrapper
+# ROS 2 node wrappers
 add_executable(gnc_node src/gnc_node.cpp)
 target_link_libraries(gnc_node pat_gnc_lib)
 ament_target_dependencies(gnc_node rclcpp nav_msgs sensor_msgs geometry_msgs pat_msgs)
+
+# The base state estimator on its own realtime thread; pat_rt supplies the
+# lock-free hand-off and the thread helpers it shares with pat_arm_control.
+find_package(pat_rt REQUIRED)
+add_executable(nav_node src/nav_node.cpp)
+target_link_libraries(nav_node pat_gnc_lib pat_rt::pat_rt)
+ament_target_dependencies(nav_node rclcpp nav_msgs sensor_msgs)
 
 # GTest — no ROS dependency
 if(BUILD_TESTING)
@@ -42,7 +49,7 @@ if(BUILD_TESTING)
     target_link_libraries(test_pat_gnc pat_gnc_lib)
 endif()
 
-install(TARGETS pat_gnc_lib gnc_node
+install(TARGETS pat_gnc_lib gnc_node nav_node
     ARCHIVE DESTINATION lib  LIBRARY DESTINATION lib
     RUNTIME DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY include/ DESTINATION include/)

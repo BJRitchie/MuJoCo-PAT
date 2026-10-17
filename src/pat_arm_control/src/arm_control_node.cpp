@@ -107,8 +107,16 @@ ArmNMPCNode::ArmNMPCNode() : Node("pat_arm_nmpc") {
     state_sub_ = create_subscription<sensor_msgs::msg::JointState>(
         "/chaser/arm/joint_states", 10,
         std::bind(&ArmNMPCNode::onJointState, this, std::placeholders::_1));
+    
+        // Where the base state comes from. /chaser/odom is the measurement itself
+    // (mocap in the lab, exact in simulation); /chaser/nav/odom is pat_gnc's
+    // nav_node estimate fused from the IMU, star tracker and relative-nav fix,
+    // which is what flight provides. Same message, same meaning, so nothing
+    // downstream changes with the choice.
+    const std::string odom_topic =
+        declare_parameter<std::string>("odom_topic", "/chaser/odom");
     odom_sub_ = create_subscription<nav_msgs::msg::Odometry>(
-        "/chaser/odom", 10,
+        odom_topic, 10,
         std::bind(&ArmNMPCNode::onOdom, this, std::placeholders::_1));
     ee_setpoint_sub_ = create_subscription<geometry_msgs::msg::PoseStamped>(
         "/chaser/arm/" + arm_side_ + "/ee_setpoint", 10,

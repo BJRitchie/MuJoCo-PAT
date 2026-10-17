@@ -1,0 +1,74 @@
+# nav_node -- the base state estimator. Publishes /chaser/nav/odom.
+#
+# Point pat_arm_control at the estimate with odom_topic:=/chaser/nav/odom (or
+# with_nav:=true on full_stack_nmpc.launch.py). Every option is written out at
+# its default.
+pat_nav:
+  ros__parameters:
+    # direct  -- pass /chaser/odom straight through (no estimation)
+    # ekf     -- constant-velocity pose filter, IMU only paces it
+    # imu_ekf -- IMU-driven error-state EKF with gyro/accel bias and latency
+    navigator: "imu_ekf"
+
+    # --- Thread and output ---------------------------------------------------
+    nav_hz:       200.0              # nav thread wake rate [Hz]
+    publish_hz:   100.0              # /chaser/nav/odom publish rate [Hz]
+    output_topic: "/chaser/nav/odom"
+    # The IMU rate the filter should expect [Hz]. Used to size-check
+    # imu_ekf.history_len against the longest latency at startup, and as the
+    # "ekf" navigator's predict rate. Match pat_simulation's imu_rate_hz.
+    imu_hz:       100.0
+
+    # --- Realtime ------------------------------------------------------------
+    # Same meaning as pat_arm_control's rt_priority / rt_cpus / lock_memory.
+    # 0 leaves the thread at normal priority. The CPU set must differ from
+    # both arms' rt_cpus and rt_cpus_observer.
+    rt_priority_nav: 0
+    lock_memory:     false
+    # An empty list has no type ROS can infer, so it is left out; set it as
+    # e.g. the P-core pair nmpc.yaml's examples leave free (they use 4-11 for
+    # the two arms' control and observer threads):
+    # rt_cpus_nav: [2, 3]
+
+    # --- imu_ekf: noise model ------------------------------------------------
+    # Same units and meaning as pat_simulation's sensor channels: *_noise_std
+    # is a per-sample sigma (the channel's noise_std); *_bias_walk is a
+    # random-walk density in units/sqrt(s) (the channel's bias_walk_std).
+    imu_ekf.gyro_noise_std:  0.005   # [rad/s]
+    imu_ekf.accel_noise_std: 0.01    # [m/s^2]
+    imu_ekf.gyro_bias_walk:  0.0001  # [rad/s/sqrt(s)]
+    imu_ekf.accel_bias_walk: 0.001   # [m/s^2/sqrt(s)]
+
+    # Measurement noise, one sigma.
+    imu_ekf.yaw_meas_std: 0.002      # [rad] star tracker
+    imu_ekf.pos_meas_std: 0.005      # [m]   relative-nav position
+    imu_ekf.vel_meas_std: 0.01       # [m/s] odometry twist, if use_twist
+
+    # Initial uncertainty, one sigma, applied at the first pose fix.
+    imu_ekf.init_pos_std:        0.01
+    imu_ekf.init_yaw_std:        0.01
+    imu_ekf.init_vel_std:        0.05
+    imu_ekf.init_gyro_bias_std:  0.01
+    imu_ekf.init_accel_bias_std: 0.05
+
+    # --- imu_ekf: sensor latency ---------------------------------------------
+    # How old each instrument's reading is when its /chaser/odom message is
+    # stamped [s]. Match the sensor channels' delay_s (star_yaw, nav_x/nav_y).
+    imu_ekf.latency_yaw: 0.0
+    imu_ekf.latency_pos: 0.0
+    imu_ekf.latency_vel: 0.0
+    # Fuse the odometry twist as a velocity measurement. Off: flight has no
+    # velocity sensor, and the mocap twist is a differentiated pose.
+    imu_ekf.use_twist: false
+
+    # --- imu_ekf: robustness and realtime bound ------------------------------
+    # IMU steps of history kept for late measurements. Also the worst-case
+    # replay length, which startup times on this machine and refuses if it
+    # cannot fit half a nav_hz period. Must exceed latency x imu_hz.
+    imu_ekf.history_len: 256
+    # An IMU interval longer than this is not integrated [s].
+    imu_ekf.max_imu_gap: 0.1
+    # Chi-square innovation gates (99.9% points); 0 disables.
+    imu_ekf.gate_yaw: 10.83
+    imu_ekf.gate_pos: 13.82
+    imu_ekf.gate_vel: 13.82
