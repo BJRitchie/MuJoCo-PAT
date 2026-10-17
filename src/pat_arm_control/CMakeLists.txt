@@ -63,9 +63,10 @@ find_package(rclcpp        REQUIRED)
 find_package(sensor_msgs   REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(nav_msgs      REQUIRED)
+find_package(pat_rt        REQUIRED)   # mailbox, ring, RT thread helpers
 add_executable(arm_control_node src/arm_control_node.cpp)
 pat_arm_control_arch_flags(arm_control_node)
-target_link_libraries(arm_control_node pat_arm_control_lib)
+target_link_libraries(arm_control_node pat_arm_control_lib pat_rt::pat_rt)
 ament_target_dependencies(arm_control_node rclcpp sensor_msgs geometry_msgs nav_msgs)
 install(TARGETS arm_control_node RUNTIME DESTINATION lib/${PROJECT_NAME})
 
@@ -160,7 +161,8 @@ if(BUILD_TESTING)
     add_dependencies(test_pat_arm_control pat_arm_control_models)
     # ${CMAKE_DL_LIBS}: DISABLED_AllocStudy.Attribution resolves allocation call
     # sites to their shared object with dladdr.
-    target_link_libraries(test_pat_arm_control pat_arm_control_lib ${CMAKE_DL_LIBS})
+    target_link_libraries(test_pat_arm_control pat_arm_control_lib pat_rt::pat_rt
+                          ${CMAKE_DL_LIBS})
     target_compile_definitions(test_pat_arm_control PRIVATE
         PAT_NMPC_TEST_MJCF="${_model_xml}")
 endif()

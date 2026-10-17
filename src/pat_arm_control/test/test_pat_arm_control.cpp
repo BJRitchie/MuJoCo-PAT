@@ -32,7 +32,10 @@
 
 #include "pat_arm_control/control/arm_nmpc.h"
 #include "pat_arm_control/observers/momentum_observer.h"
-#include "pat_arm_control/rt/rt_mailbox.h"
+#include "pat_rt/rt_mailbox.h"
+
+using pat_rt::SeqlockMailbox;
+using pat_rt::SpscRing;
 
 // --- Heap-allocation counter ---------------------------------------------- //
 // Interposes glibc's malloc family so a test can count the heap operations of a

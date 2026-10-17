@@ -4,7 +4,7 @@
 #include <cstdint>
 #include <type_traits>
 
-namespace pat_arm_control {
+namespace pat_rt {
 
 /*! Single-producer snapshot hand-off for a small trivially copyable value,
  *  where no consumer may block.
@@ -38,8 +38,8 @@ namespace pat_arm_control {
  *  reader fails forever. ANY NUMBER of threads may call read() concurrently --
  *  it is const, keeps no state between calls, and each reader's retry loop is
  *  independent, so readers neither see nor affect one another. That is relied
- *  on: the observer thread reads the same joint and base mailboxes the control
- *  thread reads, rather than being given duplicates of them.
+ *  on: pat_arm_control's observer thread reads the same joint and base
+ *  mailboxes its control thread reads, rather than being given duplicates.
  */
 template <typename T>
 class SeqlockMailbox {
@@ -148,4 +148,4 @@ private:
     std::atomic<std::size_t>  tail_{0};   //!< consumer's cursor
 };
 
-}  // namespace pat_arm_control
+}  // namespace pat_rt

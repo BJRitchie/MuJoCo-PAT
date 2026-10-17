@@ -17,6 +17,7 @@ CompileFlags:
     - -isystem/usr/include/c++/11/backward
     - -I/usr/include/eigen3
     - -Isrc/pat_arm_control/include
+    - -Isrc/pat_rt/include
     - -Isrc/pat_gnc/include
     - -Isrc/pat_robotics/include
     - -Isrc/pat_simulation/include

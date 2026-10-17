@@ -1,8 +1,5 @@
 #include "pat_arm_control/arm_control_node.h"
 
-#include <pthread.h>
-#include <sched.h>
-#include <sys/mman.h>
 #include <time.h>
 
 #include <algorithm>
@@ -18,6 +15,8 @@
 #include <stdexcept>
 
 #include <Eigen/Dense>
+
+#include "pat_rt/rt_thread.h"
 
 using namespace std::chrono_literals;
 
@@ -681,19 +680,10 @@ void ArmNMPCNode::publishStats() {
 
 void ArmNMPCNode::start() {
     // Locked before the thread starts, so a major fault cannot stall a tick.
-    // Process-wide, which is why it lives here and not on the thread.
-    //
-    // MCL_ONFAULT is what makes the limit affordable: MCL_CURRENT|MCL_FUTURE
-    // alone locks the whole ADDRESS SPACE, which for this node is ~620 MB of
-    // mostly-untouched reservation against ~33 MB actually resident, and it fails
-    // with ENOMEM against any sane RLIMIT_MEMLOCK. ONFAULT locks each page as it
-    // is first touched instead, so the locked set tracks the resident set. The
-    // cost is that the first touch of a page still faults -- the startup ticks
-    // pay it, and everything the loop reaches stays locked thereafter.
+    // Process-wide, which is why it lives here and not on the thread. See
+    // pat_rt::lockMemory for why it is MCL_ONFAULT.
     if (lock_memory_) {
-        const int flags = MCL_CURRENT | MCL_FUTURE | MCL_ONFAULT;
-        mlock_result_.store(mlockall(flags) == 0 ? 0 : errno,
-                            std::memory_order_relaxed);
+        mlock_result_.store(pat_rt::lockMemory(), std::memory_order_relaxed);
     }
     ctrl_running_.store(true, std::memory_order_release);
     ctrl_thread_ = std::thread(&ArmNMPCNode::controlThread, this);
@@ -784,73 +774,23 @@ void ArmNMPCNode::start() {
     }
 }
 
-int ArmNMPCNode::applyRealtimePolicy(int priority) {
-    if (priority <= 0) return -1;             // not requested
-    sched_param sp{};
-    sp.sched_priority = priority;
-    // pthread_setschedparam returns the error rather than setting errno.
-    return pthread_setschedparam(pthread_self(), SCHED_FIFO, &sp);
-}
-
-int ArmNMPCNode::applyAffinity(const std::vector<long>& cpus) {
-    if (cpus.empty()) return -1;              // not requested
-    cpu_set_t set;
-    CPU_ZERO(&set);
-    for (const long cpu : cpus) {
-        if (cpu >= 0 && cpu < CPU_SETSIZE) CPU_SET(static_cast<int>(cpu), &set);
-    }
-    if (CPU_COUNT(&set) == 0) return EINVAL;   // every entry was out of range
-    return pthread_setaffinity_np(pthread_self(), sizeof(set), &set);
-}
-
 void ArmNMPCNode::controlThread() {
     // Both from inside the thread, so only this one is affected and nothing it
     // later creates inherits either. Affinity first: it decides which cores the
     // thread can use, and the realtime scheduler respects an affinity mask but
     // will not choose a fast core on its own. The results are latched for the
     // report, since this thread does no logging.
-    affinity_result_.store(applyAffinity(rt_cpus_), std::memory_order_relaxed);
-    rt_result_.store(applyRealtimePolicy(rt_priority_), std::memory_order_relaxed);
+    affinity_result_.store(pat_rt::applyAffinity(rt_cpus_), std::memory_order_relaxed);
+    rt_result_.store(pat_rt::applyRealtimePolicy(rt_priority_),
+                     std::memory_order_relaxed);
 
-    // Advance `next` by exactly one period. Written out rather than using
-    // std::chrono so the deadline stays the timespec clock_nanosleep wants.
-    const auto addPeriod = [this](timespec& t) {
-        t.tv_nsec += period_ns_;
-        while (t.tv_nsec >= 1000000000L) {
-            t.tv_nsec -= 1000000000L;
-            ++t.tv_sec;
-        }
-    };
-    const auto isBefore = [](const timespec& a, const timespec& b) {
-        return a.tv_sec < b.tv_sec ||
-               (a.tv_sec == b.tv_sec && a.tv_nsec < b.tv_nsec);
-    };
-
-    timespec next{};
-    clock_gettime(CLOCK_MONOTONIC, &next);
+    // An absolute-deadline schedule; an overrun steps to the next future
+    // deadline rather than catching up, and recordWake counts the lost periods
+    // as skipped. See pat_rt::PeriodicWaker.
+    pat_rt::PeriodicWaker waker(period_ns_);
+    waker.start();
     while (ctrl_running_.load(std::memory_order_acquire)) {
-        addPeriod(next);
-
-        // Only if that deadline is ALREADY past did the last tick overrun, and
-        // then the schedule steps forward to the next future one rather than
-        // firing back-to-back to catch up: those periods are lost either way, and
-        // running them at full rate only compounds the overrun. recordWake counts
-        // them as skipped. Checked here, after the advance and before the sleep --
-        // checking after the tick instead would always be true, since the deadline
-        // just woken for is by definition in the past, and would step the schedule
-        // twice per tick and halve the control rate.
-        timespec now{};
-        clock_gettime(CLOCK_MONOTONIC, &now);
-        while (isBefore(next, now)) addPeriod(next);
-
-        // An absolute deadline, so a late tick does not shift every tick after it:
-        // the schedule is fixed and lateness shows up as lateness. A relative
-        // sleep (or rclcpp's wall timer) re-anchors instead, which hides the
-        // overrun and reports the permanent offset as jitter.
-        while (clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &next, nullptr)
-               == EINTR) {
-            // A signal, not a deadline change: wait out the rest of the period.
-        }
+        waker.waitNext();
         if (!ctrl_running_.load(std::memory_order_acquire)) break;
 
         controlLoop();
@@ -946,37 +886,15 @@ void ArmNMPCNode::observerThread() {
     // Affinity then policy, from inside the thread, same order and for the same
     // reasons as controlThread: the scheduler respects a mask but will not pick
     // a fast core on its own.
-    obs_affinity_result_.store(applyAffinity(obs_rt_cpus_), std::memory_order_relaxed);
-    obs_rt_result_.store(applyRealtimePolicy(obs_rt_priority_),
+    obs_affinity_result_.store(pat_rt::applyAffinity(obs_rt_cpus_),
+                               std::memory_order_relaxed);
+    obs_rt_result_.store(pat_rt::applyRealtimePolicy(obs_rt_priority_),
                          std::memory_order_relaxed);
 
-    const auto addPeriod = [this](timespec& t) {
-        t.tv_nsec += obs_period_ns_;
-        while (t.tv_nsec >= 1000000000L) {
-            t.tv_nsec -= 1000000000L;
-            ++t.tv_sec;
-        }
-    };
-    const auto isBefore = [](const timespec& a, const timespec& b) {
-        return a.tv_sec < b.tv_sec ||
-               (a.tv_sec == b.tv_sec && a.tv_nsec < b.tv_nsec);
-    };
-
-    timespec next{};
-    clock_gettime(CLOCK_MONOTONIC, &next);
+    pat_rt::PeriodicWaker waker(obs_period_ns_);
+    waker.start();
     while (obs_running_.load(std::memory_order_acquire)) {
-        addPeriod(next);
-        // Resync before sleeping, never after the step: checking afterwards is
-        // always true -- the deadline just woken for is by definition past --
-        // and steps the schedule twice per iteration, halving the rate. That
-        // exact bug cost the control thread half its rate once already.
-        timespec now{};
-        clock_gettime(CLOCK_MONOTONIC, &now);
-        while (isBefore(next, now)) addPeriod(next);
-
-        while (clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &next, nullptr)
-               == EINTR) {
-        }
+        waker.waitNext();
         if (!obs_running_.load(std::memory_order_acquire)) break;
 
         // A throw here must not take the thread down: the observer is an

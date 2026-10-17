@@ -17,7 +17,7 @@
 
 #include "pat_arm_control/control/arm_nmpc.h"
 #include "pat_arm_control/observers/momentum_observer.h"
-#include "pat_arm_control/rt/rt_mailbox.h"
+#include "pat_rt/rt_mailbox.h"
 
 /// One ArmNMPC instance per arm (run two node processes, left + right).
 ///
@@ -229,9 +229,9 @@ private:
 
     //! The hand-off itself. Written by onJointState / onOdom / onEeSetpoint,
     //! read by controlLoop, with no lock between them -- see rt_mailbox.h.
-    pat_arm_control::SeqlockMailbox<JointSnapshot>    joint_mail_;
-    pat_arm_control::SeqlockMailbox<BaseSnapshot>     base_mail_;
-    pat_arm_control::SeqlockMailbox<SetpointSnapshot> setpoint_mail_;
+    pat_rt::SeqlockMailbox<JointSnapshot>    joint_mail_;
+    pat_rt::SeqlockMailbox<BaseSnapshot>     base_mail_;
+    pat_rt::SeqlockMailbox<SetpointSnapshot> setpoint_mail_;
 
     //! The control loop's private working copies: filled from the mailboxes at
     //! the top of each tick and owned by that thread alone for the rest of it, so
@@ -261,8 +261,8 @@ private:
     //! Outbound queues and the timer that drains them. The drain runs at twice
     //! the control rate so a tick's output waits well under one period, and the
     //! queues are deep enough that a late drain backs up rather than drops.
-    pat_arm_control::SpscRing<EePoseOut, 16>  ee_pose_out_;
-    pat_arm_control::SpscRing<ModeEvent, 16>  mode_events_;
+    pat_rt::SpscRing<EePoseOut, 16>  ee_pose_out_;
+    pat_rt::SpscRing<ModeEvent, 16>  mode_events_;
     rclcpp::TimerBase::SharedPtr           drain_tmr_;
     void drainOutputs();
 
@@ -369,18 +369,12 @@ private:
      *  same control. */
     std::vector<long> rt_cpus_;
     void controlThread();
-    
-    //! Restrict the calling thread to `cpus`. Returns 0 on success, an
-    //! errno-style code on failure, -1 if no affinity was asked for. Takes the
-    //! set as an argument rather than reading rt_cpus_, so the observer thread
-    //! can be pinned to a different core than the control thread -- which is
-    //! most of the point of giving it its own.
-    int  applyAffinity(const std::vector<long>& cpus);
+
+    // Outcomes of pat_rt::applyAffinity / applyRealtimePolicy / lockMemory,
+    // latched by the threads for the report (see pat_rt/rt_thread.h for the
+    // codes). The observer thread latches its own pair, since it is pinned to
+    // different cores -- which is most of the point of giving it its own.
     std::atomic<int> affinity_result_{-1};
-    //! Request SCHED_FIFO at `priority` for the calling thread. Returns 0 on
-    //! success, else the errno-style code, which the report turns into one log
-    //! line. Parameterised for the same reason as applyAffinity.
-    int  applyRealtimePolicy(int priority);
     std::atomic<int>  rt_result_{-1};      //!< -1 = not attempted yet
     std::atomic<int>  mlock_result_{-1};
     std::atomic<bool> rt_reported_{false}; //!< so the report says it once
@@ -435,11 +429,11 @@ private:
     //! Written by the control thread (its own joints) and by the torque_command
     //! subscription (whatever a message carries); both read by the observer
     //! thread. See TauSnapshot for why it takes two sources.
-    pat_arm_control::SeqlockMailbox<TauSnapshot>         tau_own_mail_;
-    pat_arm_control::SeqlockMailbox<TauSnapshot>         tau_ext_mail_;
+    pat_rt::SeqlockMailbox<TauSnapshot>         tau_own_mail_;
+    pat_rt::SeqlockMailbox<TauSnapshot>         tau_ext_mail_;
     //! The observer's output, read by the control thread, the publisher and the
     //! report -- three independent readers, which a seqlock allows.
-    pat_arm_control::SeqlockMailbox<DisturbanceSnapshot> dist_mail_;
+    pat_rt::SeqlockMailbox<DisturbanceSnapshot> dist_mail_;
     //! The control thread's retained copy and its Eigen view of it. Members so
     //! the tick allocates nothing and so a lost race keeps the last value.
     DisturbanceSnapshot ctrl_dist_{};
@@ -518,7 +512,7 @@ private:
     //! The statistics hand-off: the tick publishes here, the report reads, and
     //! `stats_reset_` is how the report asks the tick to start a fresh window.
     //! No lock, for the reason in StatsSnapshot's comment.
-    pat_arm_control::SeqlockMailbox<StatsSnapshot> stats_mail_;
+    pat_rt::SeqlockMailbox<StatsSnapshot> stats_mail_;
     std::atomic<bool>                          stats_reset_{false};
     //! Publish the tick's statistics, then clear them if the report has asked.
     //! Called at the end of every tick, from the control thread only.
