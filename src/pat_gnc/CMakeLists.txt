@@ -17,7 +17,8 @@ find_package(Eigen3        REQUIRED NO_MODULE)
 add_library(pat_gnc_lib STATIC
     src/planar_dynamics.cpp
     src/pid_controller.cpp
-    src/planar_ekf.cpp)
+    src/planar_ekf.cpp
+    src/imu_ekf.cpp)
 target_include_directories(pat_gnc_lib PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>)
@@ -35,7 +36,8 @@ if(BUILD_TESTING)
     ament_add_gtest(test_pat_gnc
         test/test_dynamics.cpp
         test/test_gnc.cpp
-        test/test_navigators.cpp)
+        test/test_navigators.cpp
+        test/test_imu_ekf.cpp)
     target_link_libraries(test_pat_gnc pat_gnc_lib)
 endif()
 
