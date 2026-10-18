@@ -44,6 +44,17 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 find_package(mujoco REQUIRED)
 find_package(acados REQUIRED)
 
+# ─── Reference trajectories — no dependencies at all ──────────────────────
+# Its own library so the planner (ee_target_publisher) can link the shape
+# generators without pulling in MuJoCo and acados; the controller library
+# links it too, so both build the same reference from the same code.
+add_library(pat_arm_control_reference STATIC src/reference_trajectory.cpp)
+target_include_directories(pat_arm_control_reference PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>)
+target_compile_options(pat_arm_control_reference PRIVATE -Wall -Wextra -Wpedantic)
+pat_arm_control_arch_flags(pat_arm_control_reference)
+
 # ─── Algorithm library — Eigen + MuJoCo + acados, zero ROS ─────────────────
 add_library(pat_arm_control_lib STATIC
     src/floating_base_dynamics.cpp
@@ -54,7 +65,7 @@ target_include_directories(pat_arm_control_lib PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>)
 target_link_libraries(pat_arm_control_lib PUBLIC
-    Eigen3::Eigen mujoco::mujoco acados::acados)
+    Eigen3::Eigen mujoco::mujoco acados::acados pat_arm_control_reference)
 target_compile_options(pat_arm_control_lib PRIVATE -Wall -Wextra -Wpedantic)
 pat_arm_control_arch_flags(pat_arm_control_lib)
 
@@ -63,19 +74,24 @@ find_package(rclcpp        REQUIRED)
 find_package(sensor_msgs   REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(nav_msgs      REQUIRED)
+find_package(trajectory_msgs REQUIRED)   # ee_trajectory
 find_package(pat_rt        REQUIRED)   # mailbox, ring, RT thread helpers
 add_executable(arm_control_node src/arm_control_node.cpp)
 pat_arm_control_arch_flags(arm_control_node)
 target_link_libraries(arm_control_node pat_arm_control_lib pat_rt::pat_rt)
-ament_target_dependencies(arm_control_node rclcpp sensor_msgs geometry_msgs nav_msgs)
+ament_target_dependencies(arm_control_node rclcpp sensor_msgs geometry_msgs nav_msgs
+                          trajectory_msgs)
 install(TARGETS arm_control_node RUNTIME DESTINATION lib/${PROJECT_NAME})
 
-# Fixed-waypoint task-space setpoint source (stand-in mission node). ROS-only,
-# no algorithm lib — just cycles PoseStamped targets onto ee_setpoint.
+# Stand-in mission node: cycles PoseStamped waypoints onto ee_setpoint, or
+# follows a circle / rectangle on ee_trajectory. Links only the reference
+# library -- no MuJoCo, no acados.
 add_executable(ee_target_publisher_node src/ee_target_publisher_node.cpp)
 target_include_directories(ee_target_publisher_node PRIVATE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
-ament_target_dependencies(ee_target_publisher_node rclcpp geometry_msgs)
+target_link_libraries(ee_target_publisher_node pat_arm_control_reference)
+pat_arm_control_arch_flags(ee_target_publisher_node)
+ament_target_dependencies(ee_target_publisher_node rclcpp geometry_msgs trajectory_msgs)
 install(TARGETS ee_target_publisher_node RUNTIME DESTINATION lib/${PROJECT_NAME})
 
 # ─── MuJoCo model: expand the xacro to a self-contained MJCF at build time ──
@@ -156,6 +172,7 @@ if(BUILD_TESTING)
         test/test_pat_arm_control.cpp
         test/test_momentum_observer.cpp
         test/test_bench_scoring.cpp
+        test/test_reference.cpp
         src/contact_scenario.cpp)
     pat_arm_control_arch_flags(test_pat_arm_control)
     add_dependencies(test_pat_arm_control pat_arm_control_models)

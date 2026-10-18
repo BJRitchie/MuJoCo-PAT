@@ -117,6 +117,10 @@ ArmNMPC::ArmNMPC(
             ff_max_vec_(i) = params_.ff_max_frac * torqueLimsByIndex[i];
         }
 
+        // One reference per rollout node, nodes 0..N. Sized here so filling
+        // them each tick never allocates.
+        node_ref_.resize(static_cast<std::size_t>(params_.N) + 1);
+
         for (const auto& [jname, bounds] : qlims) {
             int idx = jointIndexFromName(jname);
             // Intersect rather than replace: a configured range may tighten the
@@ -290,13 +294,20 @@ Eigen::VectorXd ArmNMPC::controlLawImpl(
     Q_N = Q * params_.terminal_cost_multiplier;   // == Q when multiplier is the default 1.0
     Eigen::VectorXd out;
 
+    // The reference every node is scored against this tick: the window at each
+    // node's own time when following a trajectory, the static setpoint
+    // otherwise.
+    sampleNodeReferences();
+
     if (params_.fullNonlinear) {
         TaskSpaceEval eval = [this](
+            int k,
             const Eigen::VectorXd& q_node, const Eigen::VectorXd& v_node,
             const Eigen::Vector3d& ee_pos, const Eigen::Vector4d& ee_quat,
             const Eigen::MatrixXd& J_g6, const Eigen::Matrix<double, 6, 1>& jdot_qdot6,
             NodeTaskSpace& ts_out) {
-            evalTaskSpace(q_node, v_node, ee_pos, ee_quat, J_g6, jdot_qdot6, ts_out);
+            evalTaskSpace(node_ref_[static_cast<std::size_t>(k)], q_node, v_node,
+                          ee_pos, ee_quat, J_g6, jdot_qdot6, ts_out);
         };
         out = solveNonlinearMPC(q, v, /*d=*/3, eval, Q, R, Q_N);
     } else {
@@ -314,12 +325,16 @@ Eigen::VectorXd ArmNMPC::controlLawImpl(
         J_g.row(2) = J_g6.row(5);   // angular-Z
         Eigen::Vector3d v_ee = J_g * v.tail(n_joints_);
 
-        Eigen::Vector2d p_d(desiredPos[0], desiredPos[1]);   // desiredPos[2] (Z) unused
-        Eigen::Vector2d v_d(desiredVel[0], desiredVel[1]);
-        Eigen::Vector2d a_d(desiredAcc[0], desiredAcc[1]);
-        mjtNum quat_d[4] = {desiredQuat[0], desiredQuat[1], desiredQuat[2], desiredQuat[3]};
-        double w_d  = desiredAngVel[2];
-        double aw_d = desiredAngAcc[2];
+        // This path solves a single stage, so it has no horizon to preview
+        // over: the reference at t_now, with its velocity and acceleration fed
+        // forward.
+        const NodeRef& r0 = node_ref_[0];
+        Eigen::Vector2d p_d(r0.p[0], r0.p[1]);
+        Eigen::Vector2d v_d(r0.v[0], r0.v[1]);
+        Eigen::Vector2d a_d(r0.a[0], r0.a[1]);
+        mjtNum quat_d[4] = {r0.quat[0], r0.quat[1], r0.quat[2], r0.quat[3]};
+        double w_d  = r0.w;
+        double aw_d = r0.aw;
 
         // World-frame angle-axis (log-map) orientation error, Z-component
         // only -- see evalTaskSpacePositionOnly2D's identical derivation.
@@ -1099,17 +1114,28 @@ ArmNMPC::NodeTaskSpace ArmNMPC::evalTaskSpace(
 }
 
 void ArmNMPC::evalTaskSpace(
+    const Eigen::VectorXd& q_node, const Eigen::VectorXd& v_node,
+    const Eigen::Vector3d& ee_pos, const Eigen::Vector4d& ee_quat,
+    const Eigen::MatrixXd& J_g6, const Eigen::Matrix<double, 6, 1>& jdot_qdot6,
+    NodeTaskSpace& ts) const
+{
+    evalTaskSpace(staticReference(), q_node, v_node, ee_pos, ee_quat, J_g6,
+                  jdot_qdot6, ts);
+}
+
+void ArmNMPC::evalTaskSpace(
+    const NodeRef& ref,
     const Eigen::VectorXd& /*q_node*/, const Eigen::VectorXd& v_node,
     const Eigen::Vector3d& ee_pos, const Eigen::Vector4d& ee_quat,
     const Eigen::MatrixXd& J_g6, const Eigen::Matrix<double, 6, 1>& jdot_qdot6,
     NodeTaskSpace& ts) const
 {
-    Eigen::Vector2d p_d(desiredPos[0], desiredPos[1]);   // desiredPos[2] (Z) unused
-    Eigen::Vector2d v_d(desiredVel[0], desiredVel[1]);
-    Eigen::Vector2d a_d(desiredAcc[0], desiredAcc[1]);
-    mjtNum quat_d[4] = {desiredQuat[0], desiredQuat[1], desiredQuat[2], desiredQuat[3]};
-    double w_d  = desiredAngVel[2];
-    double aw_d = desiredAngAcc[2];
+    Eigen::Vector2d p_d(ref.p[0], ref.p[1]);
+    Eigen::Vector2d v_d(ref.v[0], ref.v[1]);
+    Eigen::Vector2d a_d(ref.a[0], ref.a[1]);
+    mjtNum quat_d[4] = {ref.quat[0], ref.quat[1], ref.quat[2], ref.quat[3]};
+    double w_d  = ref.w;
+    double aw_d = ref.aw;
 
     ts.J_task.resize(3, n_joints_);
     ts.J_task.row(0) = J_g6.row(0);   // x
@@ -1132,6 +1158,55 @@ void ArmNMPC::evalTaskSpace(
     ts.edot << v_d - v_ee.head<2>(), w_d - v_ee(2);
     ts.bias.resize(3);
     ts.bias << a_d - jdot_qdot6.head<2>(), aw_d - jdot_qdot6(5);
+}
+
+// === Reference trajectory ====================================================
+
+void ArmNMPC::setReferenceWindow(const ReferenceWindow& window) {
+    window_ = window;   // fixed-size copy into existing storage
+    have_window_ = window_.n > 0;
+}
+
+ArmNMPC::NodeRef ArmNMPC::staticReference() const {
+    // desiredPos[2] (Z) and the X/Y angular components are unused: the task
+    // space is planar (x, y, theta_z).
+    NodeRef r;
+    r.p[0] = desiredPos[0];  r.p[1] = desiredPos[1];
+    r.v[0] = desiredVel[0];  r.v[1] = desiredVel[1];
+    r.a[0] = desiredAcc[0];  r.a[1] = desiredAcc[1];
+    for (int i = 0; i < 4; ++i) r.quat[i] = desiredQuat[i];
+    r.w  = desiredAngVel[2];
+    r.aw = desiredAngAcc[2];
+    return r;
+}
+
+void ArmNMPC::sampleNodeReferences() {
+    const std::size_t n_nodes = node_ref_.size();   // N + 1
+    if (!have_window_) {
+        // The static setpoint at every node: exactly what each node was scored
+        // against before trajectories existed.
+        const NodeRef r = staticReference();
+        for (std::size_t k = 0; k < n_nodes; ++k) node_ref_[k] = r;
+        return;
+    }
+    ++ref_ticks_;
+    const double Ts = params_.Ts;
+    RefPoint rp;
+    for (std::size_t k = 0; k < n_nodes; ++k) {
+        // With preview each node sees the reference at its own time; without,
+        // every node sees the reference at t_now.
+        const double t = params_.reference_preview
+                             ? t_ref_ + static_cast<double>(k) * Ts
+                             : t_ref_;
+        if (!window_.sample(t, rp)) ++ref_outside_;
+        NodeRef& r = node_ref_[k];
+        r.p[0] = rp.x;   r.p[1] = rp.y;
+        r.v[0] = rp.vx;  r.v[1] = rp.vy;
+        r.a[0] = rp.ax;  r.a[1] = rp.ay;
+        window_.orientation(rp.yaw, r.quat);
+        r.w  = rp.wz;
+        r.aw = rp.az;
+    }
 }
 
 // Multiple-shooting SQP: rolls the nonlinear plant forward N steps under the
@@ -1209,7 +1284,7 @@ Eigen::VectorXd ArmNMPC::solveNonlinearMPC(
             }
             // Same reasoning as nd_scratch_: one instance for all N+1 nodes.
             NodeTaskSpace& ts = ts_scratch_;
-            evalTaskSpace(q_k, v_k, nd.ee_pos, nd.ee_quat, nd.J_g6, nd.jdot_qdot6, ts);
+            evalTaskSpace(k, q_k, v_k, nd.ee_pos, nd.ee_quat, nd.J_g6, nd.jdot_qdot6, ts);
 
             // Straight into its slot: a local here, copied in below, cost an
             // allocation and a copy at every node.

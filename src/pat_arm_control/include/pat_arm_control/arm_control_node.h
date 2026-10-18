@@ -14,8 +14,10 @@
 #include <nav_msgs/msg/odometry.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
+#include <trajectory_msgs/msg/multi_dof_joint_trajectory.hpp>
 
 #include "pat_arm_control/control/arm_nmpc.h"
+#include "pat_arm_control/control/reference_window.h"
 #include "pat_arm_control/observers/momentum_observer.h"
 #include "pat_rt/rt_mailbox.h"
 
@@ -56,6 +58,11 @@ public:
         double        q[kMaxJoints]{};
         double        v[kMaxJoints]{};
         std::uint32_t n{0};          //!< how many of q/v are populated
+        //! The joint_states header stamp [s]: when this state was measured. The
+        //! reference trajectory is evaluated at this time, so the controller
+        //! compares a state with the reference for the instant it describes --
+        //! and the control thread never has to read a ROS clock to know it.
+        double        stamp{0.0};
     };
     struct BaseSnapshot {
         double x{0.0}, y{0.0}, yaw{0.0};
@@ -64,6 +71,7 @@ public:
     struct SetpointSnapshot {
         double x{0.0}, y{0.0};
         double quat[4]{1.0, 0.0, 0.0, 0.0};   //!< [w, x, y, z]
+        double stamp{0.0};                     //!< header stamp [s]
     };
 
     /*! The applied joint torque, model-joint order, for the observer.
@@ -161,6 +169,18 @@ public:
         long worst_consecutive_misses{0};
         long skipped_periods{0};
         pat_arm_control::ArmNMPC::ProfileSnapshot profile;
+        //! What the controller was tracking at the last tick, and the running
+        //! reference counters (see RefSource and ArmNMPC::referenceTicks).
+        int  ref_source{0};
+        long ref_ticks{0};
+        long ref_outside{0};
+    };
+
+    //! Where the tick's target came from.
+    enum RefSource : int {
+        kRefSetpoint = 0,     //!< ee_setpoint, or the seeded hold pose
+        kRefTrajectory = 1,   //!< a fresh ee_trajectory window
+        kRefTrajHeld = 2,     //!< a window that ran out: holding its last point
     };
 
     ArmNMPCNode();
@@ -514,6 +534,33 @@ private:
     //! No lock, for the reason in StatsSnapshot's comment.
     pat_rt::SeqlockMailbox<StatsSnapshot> stats_mail_;
     std::atomic<bool>                          stats_reset_{false};
+
+    // --- Reference trajectory (/chaser/arm/<side>/ee_trajectory) ----------- //
+    /*! A planner's sampled trajectory, which the controller follows with a
+     *  per-node reference instead of the single ee_setpoint.
+     *
+     *  The callback converts the message into a ReferenceWindow (~20 KB, fixed
+     *  size) and publishes it here; `traj_seq_` is bumped after each write so
+     *  the control thread copies the window only when a new one has arrived,
+     *  not on every tick.
+     *
+     *  Precedence, on the control thread: a window is followed while the
+     *  state's stamp lies inside it. When it runs out the arm holds the
+     *  window's last point -- not the stale ee_setpoint from before it -- until
+     *  an ee_setpoint stamped after the window's end arrives. */
+    void onEeTrajectory(trajectory_msgs::msg::MultiDOFJointTrajectory::SharedPtr msg);
+    rclcpp::Subscription<trajectory_msgs::msg::MultiDOFJointTrajectory>::SharedPtr traj_sub_;
+    pat_rt::SeqlockMailbox<pat_arm_control::ReferenceWindow> traj_mail_;
+    std::atomic<std::uint64_t> traj_seq_{0};
+    std::atomic<long> traj_rejected_{0};    //!< malformed messages dropped
+    std::atomic<long> traj_truncated_{0};   //!< longer than the window holds
+    // Control thread only:
+    pat_arm_control::ReferenceWindow ctrl_traj_;
+    std::uint64_t traj_seq_seen_{0};
+    bool   have_traj_{false};       //!< ctrl_traj_ is set on the controller
+    bool   hold_from_traj_{false};  //!< des_* is a run-out window's last point
+    double traj_hold_end_{0.0};     //!< ...whose window ended at this stamp
+    int    ref_source_{kRefSetpoint};
     //! Publish the tick's statistics, then clear them if the report has asked.
     //! Called at the end of every tick, from the control thread only.
     void publishStats();

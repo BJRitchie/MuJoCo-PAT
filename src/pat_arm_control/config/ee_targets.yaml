@@ -12,6 +12,40 @@ ee_target_publisher:
   ros__parameters:
     sides:         [left, right]
     mode:          relative      # relative | absolute
+
+    # waypoints -- the loop below, on ee_setpoint
+    # circle    -- a continuous circle, both arms, from each arm's start pose
+    # rectangle -- a rectangle with SHARP corners at constant speed. The corners
+    #              are deliberately infeasible: the NMPC has to decide what to
+    #              give up, and with preview it turns early and cuts them.
+    # circle/rectangle publish a sampled window on ee_trajectory, which the NMPC
+    # follows with a per-node reference (nmpc.yaml's reference_preview), and the
+    # current point on ee_setpoint. They need mode: relative.
+    pattern:       waypoints     # waypoints | circle | rectangle
+    trajectory_hz: 20.0          # how often a fresh window is sent [Hz]
+    window_s:      2.0           # how far ahead each window reaches [s]; the
+                                 # NMPC's horizon is ~1 s, so 2 s has margin
+    sample_dt:     0.01          # window spacing [s]
+    window_lookback_s: 0.1       # each window starts this far in the PAST [s]: the
+                                 # NMPC evaluates it at its state's stamp, which is
+                                 # always older than this node's clock
+    approach_s:    3.0           # smooth move from the start pose onto the shape [s]
+    circle:
+      center_dx:   0.17          # [m] centre, offset from the start pose
+      center_dy:   0.0
+      radius:      0.06          # [m]
+      period:      8.0           # [s] per lap
+      ccw:         true
+      ramp_s:      2.0           # [s] angular-rate ramp-in, so the circle is feasible
+    rectangle:
+      center_dx:   0.17          # [m] centre, offset from the start pose
+      center_dy:   0.0
+      width:       0.12          # [m] along world x
+      height:      0.10          # [m] along world y
+      speed:       0.055         # [m/s], constant. contact_bench measured the
+                                 # NMPC still well ahead of the baselines up to
+                                 # ~3x this; past ~4x its solves start to fail
+      ccw:         true
     dwell_sec:     4.0           # hold each waypoint this long
     republish_hz:  2.0           # re-send the current target this often (DDS drop guard)
     loop:          true         # false → stop on the last waypoint

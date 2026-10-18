@@ -77,6 +77,13 @@
  *  an inertia error produces torque only under acceleration -- which is why
  *  --mass-scale oscillates the setpoint rather than holding it.
  *
+ *    --trajectory circle|rectangle
+ *                   not an observer measurement: the NMPC following a reference
+ *                   trajectory, fed three ways that differ only in what the
+ *                   controller is told -- the window with preview, the window
+ *                   without it, and the current position streamed as a plain
+ *                   setpoint (--ab-preview, --sweep-speed).
+ *
  *  ========================== TRUTH CHANNELS ============================
  *
  *  Two, recorded side by side every tick:
@@ -99,6 +106,8 @@
  *    contact_bench --sweep-gain 20,60,150
  *    contact_bench --drag 0.5
  *    contact_bench --mass-scale 2.0 --ab-ff 1.0
+ *    contact_bench --trajectory rectangle --ab-preview
+ *    contact_bench --trajectory circle --sweep-speed 1,2,3,4
  */
 #include <algorithm>
 #include <cmath>
@@ -106,6 +115,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <set>
 #include <sstream>
 #include <string>
@@ -113,6 +123,7 @@
 
 #include "pat_arm_control/control/arm_nmpc.h"
 #include "pat_arm_control/observers/momentum_observer.h"
+#include "pat_arm_control/planning/reference_trajectory.h"
 #include "bench_yaml.h"
 #include "contact_scenario.h"
 
@@ -252,6 +263,38 @@ struct Options {
      *  the flight controller would ever see. So the oscillating modes default
      *  to the shipped table value instead of to pinning. */
     double base_damping = -1.0;
+
+    /*! Trajectory mode: the scored arm follows a reference trajectory --
+     *  "circle" or "rectangle" -- placed from its start pose by the same
+     *  library code ee_target_publisher uses, sampled into a fresh window every
+     *  tick exactly as the live planner sends one. Empty disables.
+     *
+     *  This is the measurement of what the NMPC's preview buys: the circle is
+     *  feasible, so it shows how closely the arm follows a reference it CAN
+     *  follow; the rectangle's sharp corners are not, so it shows what the
+     *  controller gives up and where. */
+    std::string trajectory;
+    //! Speeds the shape up: the circle's period is divided by it and the
+    //! rectangle's speed multiplied. 1 is the planner's default.
+    double traj_speed = 1.0;
+    //! Score every node against the reference NOW (reference_preview: false):
+    //! the reactive baseline. The horizon is then told the target stands still
+    //! at today's position while moving at today's velocity -- a contradiction
+    //! the solver resolves by lagging, which is what "no future knowledge"
+    //! means for this formulation.
+    bool no_preview = false;
+    /*! The other baseline: no window at all, the CURRENT reference position
+     *  streamed as an ordinary setpoint, velocity and acceleration zero. That
+     *  is what today's ee_setpoint interface does with a moving target, so it
+     *  is the comparison for "what does the trajectory interface buy". */
+    bool stream_setpoint = false;
+    //! Run preview on and off and compare them side by side.
+    bool ab_preview = false;
+    //! One preview A/B per speed factor, in one table.
+    std::vector<double> sweep_speed;
+    //! Whether --seconds was given; trajectory mode otherwise sizes the run to
+    //! the approach plus two laps.
+    bool seconds_set = false;
 };
 
 //! The air-bearing table's own damping, from simulation.yaml. The realistic
@@ -273,9 +316,24 @@ bool trackingMode(const Options& o) { return o.osc_amp > 0.0; }
 //! Whether a model error is actually in force within a tracking run.
 bool hasModelError(const Options& o) { return o.mass_scale != 1.0; }
 
-//! Both alternative modes park the target out of reach, so neither is scored
+//! True when --trajectory asked for trajectory following.
+bool trajMode(const Options& o) { return !o.trajectory.empty(); }
+
+//! The alternative modes park the target out of reach, so none is scored
 //! against a signal contaminated by contact.
-bool quietMode(const Options& o) { return dragMode(o) || trackingMode(o); }
+bool quietMode(const Options& o) {
+    return dragMode(o) || trackingMode(o) || trajMode(o);
+}
+
+/*! The planner's shape for this run: ee_target_publisher's defaults (the
+ *  library's), with the speed factor applied. */
+pat_arm_control::TrajectorySpec trajSpec(const Options& o) {
+    pat_arm_control::TrajectorySpec s;
+    s.pattern = o.trajectory;
+    s.circle.period /= o.traj_speed;
+    s.rectangle.speed *= o.traj_speed;
+    return s;
+}
 
 void usage() {
     std::cout <<
@@ -320,6 +378,18 @@ R"(contact_bench - deterministic scoring of the disturbance observer against
   --ab-ff G          run the trial twice, feedforward off then on at gain G, and
                      report EE tracking for both. The only test of whether
                      acting on the estimate actually improves anything
+  --trajectory circle|rectangle
+                     follow a reference trajectory from the start pose, built by
+                     the planner's own library code and sent as a fresh window
+                     every tick. The circle is feasible; the rectangle's sharp
+                     corners deliberately are not
+  --traj-speed F     speed the shape up by F (default 1, the planner's default)
+  --no-preview       score every horizon node against the reference now: the
+                     reactive baseline (reference_preview: false)
+  --stream-setpoint  no window: stream the current reference position as a plain
+                     setpoint, as today's ee_setpoint interface would
+  --ab-preview       run preview on, preview off and streamed setpoint, compared
+  --sweep-speed A,B  that three-way comparison per speed factor, in one table
   --out CSV          write the per-tick series
 )";
 }
@@ -351,7 +421,17 @@ bool parseArgs(int argc, char** argv, Options& o, int& code) {
             else if (a == "--model")   o.model   = next();
             else if (a == "--arm")     o.arm     = next();
             else if (a == "--out")     o.out_csv = next();
-            else if (a == "--seconds") o.seconds = std::stod(next());
+            else if (a == "--seconds") { o.seconds = std::stod(next()); o.seconds_set = true; }
+            else if (a == "--trajectory")  o.trajectory = next();
+            else if (a == "--traj-speed")  o.traj_speed = std::stod(next());
+            else if (a == "--no-preview")  o.no_preview = true;
+            else if (a == "--stream-setpoint") o.stream_setpoint = true;
+            else if (a == "--ab-preview")  o.ab_preview = true;
+            else if (a == "--sweep-speed") {
+                std::stringstream ss(next());
+                std::string tok;
+                while (std::getline(ss, tok, ',')) o.sweep_speed.push_back(std::stod(tok));
+            }
             else if (a == "--hz")      o.hz      = std::stod(next());
             else if (a == "--gain")    o.gain    = std::stod(next());
             else if (a == "--ff-gain") o.ff_gain = std::stod(next());
@@ -420,6 +500,36 @@ bool parseArgs(int argc, char** argv, Options& o, int& code) {
         code = 2;
         return false;
     }
+    if (trajMode(o)) {
+        if (dragMode(o) || trackingMode(o)) {
+            std::cerr << "contact_bench: --trajectory replaces the setpoint that "
+                         "--osc/--mass-scale/--drag drive; run them separately\n";
+            code = 2;
+            return false;
+        }
+        if (o.trajectory != "circle" && o.trajectory != "rectangle") {
+            std::cerr << "contact_bench: --trajectory must be circle or rectangle\n";
+            code = 2;
+            return false;
+        }
+        if (!(o.traj_speed > 0.0)) {
+            std::cerr << "contact_bench: --traj-speed must be positive\n";
+            code = 2;
+            return false;
+        }
+        for (const double f : o.sweep_speed) {
+            if (!(f > 0.0)) {
+                std::cerr << "contact_bench: --sweep-speed factors must be positive\n";
+                code = 2;
+                return false;
+            }
+        }
+    } else if (o.no_preview || o.stream_setpoint || o.ab_preview || !o.sweep_speed.empty()) {
+        std::cerr << "contact_bench: --no-preview, --stream-setpoint, --ab-preview and "
+                     "--sweep-speed need --trajectory\n";
+        code = 2;
+        return false;
+    }
     return true;
 }
 
@@ -466,9 +576,10 @@ ContactScenario::Config sceneConfig(const Options& o,
         // Moderate damping on all three planar DOFs, so the base moves (drag
         // is proportional to velocity) without drifting far.
         c.base_damping = {{o.drag_damping, o.drag_damping, o.drag_damping}};
-    } else if (trackingMode(o)) {
+    } else if (trackingMode(o) || trajMode(o)) {
         // NOT the pinning value: see Options::base_damping. Pinning would put
-        // the rig's own drag into the feedforward through the base elimination.
+        // the rig's own drag into the feedforward through the base elimination,
+        // and a trajectory run should see the free-floating base the arm has.
         c.base_damping = {{kTableDamping, kTableDamping, kTableDamping}};
     }
     if (o.base_damping >= 0.0) {
@@ -555,6 +666,24 @@ struct Trial {
      *  x force, y force, yaw torque. */
     std::vector<std::array<double, 3>> drag_truth;
     std::vector<std::array<double, 3>> drag_est;
+
+    /*! Trajectory mode only: per tick, the reference the arm was asked to be
+     *  at (position and velocity) and where its EE actually was, both world
+     *  frame, measured before the solve. */
+    struct TrajRow {
+        double t = 0.0;
+        double rx = 0.0, ry = 0.0, rvx = 0.0, rvy = 0.0;
+        double ex = 0.0, ey = 0.0;
+    };
+    std::vector<TrajRow> traj;
+    //! The trajectory the run followed, for the report's geometry.
+    std::shared_ptr<pat_arm_control::ReferenceTrajectory> traj_shape;
+    //! "preview", "no preview" or "setpoint" (streamed): how the run was fed.
+    std::string ref_mode = "preview";
+    long   tier1_entries = 0;
+    long   safe_ticks = 0;
+    long   ref_outside = 0;
+    double qp_iter_mean = 0.0, qp_iter_max = 0.0;
 };
 
 /*! The estimate must exceed this to count as having detected contact.
@@ -580,6 +709,7 @@ Trial runTrial(const Options& o, double gain_override) {
     auto cfg_other = pat_arm_control::bench::loadConfig(
         o.params, other, o.model, PAT_NMPC_BENCH_MODEL, kNotOurs, "contact_bench");
     if (o.ff_gain >= 0.0) cfg.params.ff_gain = o.ff_gain;
+    if (trajMode(o) && o.no_preview) cfg.params.reference_preview = false;
 
     const double dt = 1.0 / o.hz;
     // control_period drives the warm-start shift and the deadline accounting;
@@ -671,6 +801,23 @@ Trial runTrial(const Options& o, double gain_override) {
     };
 
     Trial t;
+
+    // Trajectory mode: the shape, placed from the start pose by the planner's
+    // own code, and the window it is sent in. The window's reference
+    // orientation is the start orientation, so holding yaw at 0 holds it.
+    // ~20 KB, so it lives for the run rather than being rebuilt from scratch.
+    pat_arm_control::ReferenceWindow window;
+    if (trajMode(o)) {
+        t.traj_shape = pat_arm_control::makeTrajectory(
+            trajSpec(o), pat_arm_control::Anchor{start.pos.x(), start.pos.y(), 0.0});
+        for (int i = 0; i < 4; ++i) window.quat0[i] = start.quat(i);
+        window.yaw0 = 0.0;
+        t.ref_mode = o.stream_setpoint ? "setpoint"
+                   : cfg.params.reference_preview ? "preview" : "no preview";
+    }
+    // The live planner's window: 2 s ahead at 10 ms, the horizon being ~1 s.
+    constexpr double kWindowS = 2.0, kSampleDt = 0.01;
+
     t.applied_gain   = op.gain(6);     // a joint row, past any base override
     t.applied_ff     = cfg.params.ff_gain;
     t.joint_names    = cfg.model_joints;
@@ -708,10 +855,38 @@ Trial runTrial(const Options& o, double gain_override) {
         //      this tick was asked to reach, so the number is a tracking error
         //      and not a comparison with where the arm is about to be sent.
         double sx = 0.0, sy = 0.0;
-        setpointAt(scene.time(), sx, sy);
-        scored.setDesiredPos(sx, sy, start.pos.z());
+        const double t_now = scene.time();
+        if (trajMode(o)) {
+            // A fresh window every tick, as the planner sends one, and the
+            // state's own time to evaluate it at -- or, streaming, just the
+            // reference position as a setpoint. The error is against the
+            // reference for NOW, whatever the horizon was shown.
+            const pat_arm_control::RefPoint r = t.traj_shape->at(t_now);
+            if (o.stream_setpoint) {
+                scored.setDesiredPos(r.x, r.y, start.pos.z());
+            } else {
+                pat_arm_control::sampleWindow(*t.traj_shape, 0.0, t_now, kWindowS,
+                                              kSampleDt, window);
+                scored.setReferenceWindow(window);
+                scored.setReferenceTime(t_now);
+            }
+            sx = r.x;
+            sy = r.y;
+            Trial::TrajRow tr;
+            tr.t = t_now;
+            tr.rx = r.x;   tr.ry = r.y;
+            tr.rvx = r.vx; tr.rvy = r.vy;
+            t.traj.push_back(tr);
+        } else {
+            setpointAt(t_now, sx, sy);
+            scored.setDesiredPos(sx, sy, start.pos.z());
+        }
         const ArmNMPC::EePose now_ee = scored.currentEePose(q, v);
         const double ee_err = std::hypot(now_ee.pos.x() - sx, now_ee.pos.y() - sy);
+        if (trajMode(o)) {
+            t.traj.back().ex = now_ee.pos.x();
+            t.traj.back().ey = now_ee.pos.y();
+        }
 
         // (b) Solve. Each returns a vector over ALL model joints with only its
         //     own entries meaningful.
@@ -840,6 +1015,13 @@ Trial runTrial(const Options& o, double gain_override) {
     t.obs_max_mdot    = obs.maxMdot();
     t.ff_saturated    = scored.ffSaturated();
     t.ff_slew_limited = scored.ffSlewLimited();
+    t.tier1_entries   = scored.tier1Entries();
+    t.safe_ticks      = scored.safeModeTicks();
+    t.ref_outside     = scored.referenceSamplesOutside();
+    ArmNMPC::ProfileSnapshot prof;
+    scored.snapshotProfile(prof);
+    t.qp_iter_mean = prof.qp_iters.mean();
+    t.qp_iter_max  = prof.qp_iters.max;
     return t;
 }
 
@@ -1008,7 +1190,13 @@ void reportTracking(const Options& o, const Trial& t) {
                 t.ff_slew_limited);
 }
 
+void reportTrajectory(const Options& o, const Trial& t);   // below, with its scoring
+
 void reportTrial(const Options& o, const Trial& t) {
+    if (trajMode(o)) {
+        reportTrajectory(o, t);
+        return;
+    }
     if (dragMode(o)) {
         reportDrag(t);
         return;
@@ -1140,6 +1328,265 @@ void reportAb(const Options& o, const Trial& off, const Trial& on) {
     }
 }
 
+// ========================= Trajectory scoring ============================= //
+
+/*! How a trajectory run went, over its settled part.
+ *
+ *  Plain tracking error does not separate the two things the preview changes,
+ *  so it is broken down by shape:
+ *
+ *    along / cross   the error resolved along the reference's direction of
+ *                    travel and across it. A negative mean along-track error
+ *                    is the EE trailing the reference: lag, which a reactive
+ *                    controller always has and a previewing one need not.
+ *    radial          circle only: distance from the centre minus the radius,
+ *                    negative inside the circle.
+ *    corner / edge   rectangle only: the error within kCornerWindow of a
+ *                    corner, and away from every corner.
+ *    overshoot       rectangle only: furthest the EE got OUTSIDE the
+ *                    rectangle. Turning late carries the EE past a corner.
+ *    cut             rectangle only: deepest the EE got INSIDE the rectangle
+ *                    near a corner. Turning early cuts the corner -- the
+ *                    trade a controller that sees the corner coming makes.
+ */
+struct TrajScore {
+    int    n = 0;
+    double from = 0.0;                              //!< scoring starts here [s]
+    double err_mean = 0.0, err_rms = 0.0, err_peak = 0.0;
+    double along_mean = 0.0, cross_rms = 0.0;
+    double radial_mean = 0.0, radial_rms = 0.0;     //!< circle
+    double corner_rms = 0.0, edge_rms = 0.0;        //!< rectangle
+    double overshoot = 0.0, cut = 0.0;              //!< rectangle
+    double inside_frac = 0.0;                       //!< rectangle, near corners
+};
+
+//! The half-width of the window around each corner passage [s].
+constexpr double kCornerWindow = 0.25;
+
+TrajScore scoreTrajectory(const Options& o, const Trial& t) {
+    using pat_arm_control::CircleTrajectory;
+    using pat_arm_control::RectangleTrajectory;
+    TrajScore s;
+    const auto& shape = *t.traj_shape;
+    // After the approach, the circle's ramp, and a second to settle: the
+    // transient onto the shape is not what is being compared.
+    s.from = shape.approachDuration() + 2.0;
+    const pat_arm_control::TrajectorySpec spec = trajSpec(o);
+
+    // Rectangle geometry: bounds, and the times of corner passages.
+    const auto* rect = dynamic_cast<const RectangleTrajectory*>(&shape);
+    double xmin = 1e300, xmax = -1e300, ymin = 1e300, ymax = -1e300;
+    std::vector<double> corner_t;   // within one lap, measured from the shape start
+    if (rect) {
+        double acc = 0.0;
+        const double speed = spec.rectangle.speed;
+        for (int k = 0; k < 4; ++k) {
+            double x0, y0, x1, y1;
+            rect->corner(k, x0, y0);
+            rect->corner(k + 1, x1, y1);
+            xmin = std::min(xmin, x0); xmax = std::max(xmax, x0);
+            ymin = std::min(ymin, y0); ymax = std::max(ymax, y0);
+            corner_t.push_back(acc);
+            acc += std::hypot(x1 - x0, y1 - y0) / speed;
+        }
+    }
+    const double cx = shape.anchor().x + spec.circle.center_dx;
+    const double cy = shape.anchor().y + spec.circle.center_dy;
+
+    double sq = 0.0, along = 0.0, cross_sq = 0.0, rad = 0.0, rad_sq = 0.0;
+    double corner_sq = 0.0, edge_sq = 0.0;
+    int n_corner = 0, n_edge = 0, n_inside = 0;
+    for (const auto& r : t.traj) {
+        if (r.t < s.from) continue;
+        const double ex = r.ex - r.rx, ey = r.ey - r.ry;
+        const double e = std::hypot(ex, ey);
+        ++s.n;
+        s.err_mean += e;
+        sq += e * e;
+        s.err_peak = std::max(s.err_peak, e);
+        const double sp = std::hypot(r.rvx, r.rvy);
+        if (sp > 1e-9) {
+            const double ux = r.rvx / sp, uy = r.rvy / sp;
+            along += ex * ux + ey * uy;
+            const double c = -ex * uy + ey * ux;
+            cross_sq += c * c;
+        }
+        if (!rect) {
+            const double radial = std::hypot(r.ex - cx, r.ey - cy) - spec.circle.radius;
+            rad += radial;
+            rad_sq += radial * radial;
+            continue;
+        }
+        // Signed distance to the rectangle's boundary: positive outside.
+        const double dx = std::max(xmin - r.ex, r.ex - xmax);
+        const double dy = std::max(ymin - r.ey, r.ey - ymax);
+        const double signed_d = (dx > 0.0 || dy > 0.0)
+                                    ? std::hypot(std::max(dx, 0.0), std::max(dy, 0.0))
+                                    : std::max(dx, dy);
+        s.overshoot = std::max(s.overshoot, signed_d);
+        // Time to the nearest corner passage, lap-wrapped.
+        const double lap = shape.loopPeriod();
+        const double phase = std::fmod(r.t - shape.approachDuration(), lap);
+        double near = 1e300;
+        for (const double tc : corner_t) {
+            const double d = std::fabs(phase - tc);
+            near = std::min({near, d, lap - d});
+        }
+        if (near < kCornerWindow) {
+            corner_sq += e * e;
+            ++n_corner;
+            if (signed_d < 0.0) {
+                ++n_inside;
+                s.cut = std::max(s.cut, -signed_d);
+            }
+        } else {
+            edge_sq += e * e;
+            ++n_edge;
+        }
+    }
+    if (s.n == 0) return s;
+    const double n = static_cast<double>(s.n);
+    s.err_mean /= n;
+    s.err_rms = std::sqrt(sq / n);
+    s.along_mean = along / n;
+    s.cross_rms = std::sqrt(cross_sq / n);
+    s.radial_mean = rad / n;
+    s.radial_rms = std::sqrt(rad_sq / n);
+    s.corner_rms = n_corner ? std::sqrt(corner_sq / n_corner) : 0.0;
+    s.edge_rms = n_edge ? std::sqrt(edge_sq / n_edge) : 0.0;
+    s.inside_frac = n_corner ? static_cast<double>(n_inside) / n_corner : 0.0;
+    return s;
+}
+
+//! The scored arm's peak torque and ticks at the rail, summed over its joints.
+void torqueUse(const Trial& t, double& peak, long& railed) {
+    peak = 0.0;
+    railed = 0;
+    for (const int idx : t.scored_joints) {
+        const auto u = static_cast<std::size_t>(idx);
+        peak = std::max(peak, t.tau_peak[u]);
+        railed += t.tau_railed[u];
+    }
+}
+
+void reportTrajectory(const Options& o, const Trial& t) {
+    const TrajScore s = scoreTrajectory(o, t);
+    const bool rect = o.trajectory == "rectangle";
+    const auto spec = trajSpec(o);
+    char shape[96];
+    if (rect) {
+        std::snprintf(shape, sizeof(shape), "%.0f x %.0f cm at %.1f cm/s",
+                      spec.rectangle.width * 100, spec.rectangle.height * 100,
+                      spec.rectangle.speed * 100);
+    } else {
+        std::snprintf(shape, sizeof(shape), "radius %.0f cm, period %.2f s",
+                      spec.circle.radius * 100, spec.circle.period);
+    }
+    std::printf("\n  %s, %s, scored from %.1f s (%d ticks); reference fed as: %s\n",
+                o.trajectory.c_str(), shape, s.from, s.n, t.ref_mode.c_str());
+    std::printf("    tracking error      mean %6.2f   rms %6.2f   peak %6.2f mm\n",
+                s.err_mean * 1e3, s.err_rms * 1e3, s.err_peak * 1e3);
+    std::printf("    along-track mean %+7.2f mm (negative = trailing)   cross-track rms "
+                "%6.2f mm\n", s.along_mean * 1e3, s.cross_rms * 1e3);
+    if (rect) {
+        std::printf("    near corners rms %6.2f   on edges rms %6.2f mm\n",
+                    s.corner_rms * 1e3, s.edge_rms * 1e3);
+        std::printf("    overshoot outside %6.2f mm   cut inside %6.2f mm   (%.0f%% of "
+                    "near-corner ticks inside)\n",
+                    s.overshoot * 1e3, s.cut * 1e3, 100.0 * s.inside_frac);
+    } else {
+        std::printf("    radial mean %+6.2f mm (negative = inside the circle)   rms "
+                    "%6.2f mm\n", s.radial_mean * 1e3, s.radial_rms * 1e3);
+    }
+    double peak = 0.0;
+    long railed = 0;
+    torqueUse(t, peak, railed);
+    std::printf("    torque peak %.3f N*m, %ld joint-ticks at the rail | QP iters mean "
+                "%.1f max %.0f | Tier 1 entries %ld, safe-mode ticks %ld | refs held "
+                "past the window %ld\n",
+                peak, railed, t.qp_iter_mean, t.qp_iter_max, t.tier1_entries,
+                t.safe_ticks, t.ref_outside);
+}
+
+/*! The three ways of feeding the same trajectory, one row each: preview, the
+ *  window without preview, and the current position streamed as a setpoint. */
+void reportPreviewAb(const Options& o, const std::vector<Trial>& runs) {
+    const bool rect = o.trajectory == "rectangle";
+    std::printf("\nidentical runs but for how the reference reaches the controller:\n");
+    std::printf("  %-11s %9s %9s %9s %10s", "fed as", "err mean", "err rms", "err peak",
+                "along");
+    if (rect) std::printf(" %10s %9s %9s", "corner rms", "overshoot", "cut");
+    else      std::printf(" %10s", "radial");
+    std::printf(" %7s %6s\n", "rail", "tier1");
+    for (const Trial& t : runs) {
+        const TrajScore s = scoreTrajectory(o, t);
+        double peak = 0.0;
+        long railed = 0;
+        torqueUse(t, peak, railed);
+        std::printf("  %-11s %9.2f %9.2f %9.2f %+10.2f", t.ref_mode.c_str(),
+                    s.err_mean * 1e3, s.err_rms * 1e3, s.err_peak * 1e3,
+                    s.along_mean * 1e3);
+        if (rect) std::printf(" %10.2f %9.2f %9.2f", s.corner_rms * 1e3,
+                              s.overshoot * 1e3, s.cut * 1e3);
+        else      std::printf(" %+10.2f", s.radial_mean * 1e3);
+        std::printf(" %7ld %6ld\n", railed, t.tier1_entries);
+    }
+    std::printf("  (mm; along negative = trailing; rail = joint-ticks at the torque "
+                "limit)\n");
+}
+
+/*! Run length for a trajectory run: the approach, two laps of the shape and a
+ *  second spare -- unless --seconds was given. Per speed, since a faster shape
+ *  has a shorter lap. */
+Options withTrajSeconds(Options o) {
+    if (o.seconds_set) return o;
+    const auto shape = pat_arm_control::makeTrajectory(trajSpec(o),
+                                                       pat_arm_control::Anchor{});
+    o.seconds = shape->approachDuration() + 2.0 * shape->loopPeriod() + 1.0;
+    return o;
+}
+
+/*! Preview on and off at each speed factor, one table. The accuracy-for-
+ *  feasibility trade read down the columns: as the shape speeds up past what
+ *  the torque limits allow, the error grows -- the question is how, and
+ *  whether the solver ever fails. */
+void reportSpeedSweep(const Options& o, const std::vector<double>& speeds,
+                      const std::vector<std::vector<Trial>>& runs) {
+    const bool rect = o.trajectory == "rectangle";
+    std::printf("\n%s speed sweep (mm; rail = joint-ticks at the torque limit):\n",
+                o.trajectory.c_str());
+    std::printf("  %6s  %-11s %8s %9s %9s %9s %7s %6s\n", "speed", "fed as", "err rms",
+                "along", rect ? "crnr rms" : "radial", rect ? "overshoot" : "",
+                "rail", "tier1");
+    for (std::size_t i = 0; i < speeds.size(); ++i) {
+        Options oi = o;
+        oi.traj_speed = speeds[i];
+        for (const Trial& t : runs[i]) {
+            const TrajScore s = scoreTrajectory(oi, t);
+            double pk = 0.0;
+            long railed = 0;
+            torqueUse(t, pk, railed);
+            std::printf("  %5.2fx  %-11s %8.2f %+9.2f %+9.2f ", speeds[i],
+                        t.ref_mode.c_str(), s.err_rms * 1e3, s.along_mean * 1e3,
+                        (rect ? s.corner_rms : s.radial_mean) * 1e3);
+            if (rect) std::printf("%9.2f", s.overshoot * 1e3);
+            else      std::printf("%9s", "");
+            std::printf(" %7ld %6ld\n", railed, t.tier1_entries);
+        }
+    }
+}
+
+void writeTrajCsv(const std::string& path, const Trial& t) {
+    std::ofstream os(path);
+    if (!os) throw std::runtime_error("cannot write " + path);
+    os << "t_s,ref_x,ref_y,ref_vx,ref_vy,ee_x,ee_y,err\n";
+    for (const auto& r : t.traj) {
+        os << r.t << ',' << r.rx << ',' << r.ry << ',' << r.rvx << ',' << r.rvy << ','
+           << r.ex << ',' << r.ey << ',' << std::hypot(r.ex - r.rx, r.ey - r.ry) << '\n';
+    }
+    std::printf("\n  wrote %zu rows to %s\n", t.traj.size(), path.c_str());
+}
+
 /*! One table across the sweep, so the gain's effect is read down a column. */
 void reportSweep(const Options& o, const std::vector<Trial>& trials) {
     std::printf("\ngain sweep -- valid because the scenario is deterministic, so "
@@ -1179,6 +1626,49 @@ int main(int argc, char** argv) {
     if (!parseArgs(argc, argv, o, code)) return code;
 
     try {
+        if (trajMode(o)) {
+            std::printf("contact_bench: mode=trajectory (%s), %.0f Hz, arm=%s; target "
+                        "parked out of reach\n  scene %s\n",
+                        o.trajectory.c_str(), o.hz, o.arm.c_str(), o.scene.c_str());
+            // Each set below differs ONLY in how the reference reaches the
+            // controller: the scenario is deterministic, so the differences are
+            // that and nothing else.
+            const auto three = [](Options base) {
+                base = withTrajSeconds(base);
+                std::vector<Trial> runs;
+                base.no_preview = false;  base.stream_setpoint = false;
+                runs.push_back(runTrial(base, base.gain));
+                base.no_preview = true;
+                runs.push_back(runTrial(base, base.gain));
+                base.no_preview = false;  base.stream_setpoint = true;
+                runs.push_back(runTrial(base, base.gain));
+                return runs;
+            };
+            if (!o.sweep_speed.empty()) {
+                std::vector<std::vector<Trial>> runs;
+                for (const double f : o.sweep_speed) {
+                    Options oi = o;
+                    oi.traj_speed = f;
+                    runs.push_back(three(oi));
+                }
+                reportSpeedSweep(o, o.sweep_speed, runs);
+                return 0;
+            }
+            if (o.ab_preview) {
+                const std::vector<Trial> runs = three(o);
+                const Options ot = withTrajSeconds(o);
+                for (const Trial& t : runs) reportTrial(ot, t);
+                reportPreviewAb(ot, runs);
+                if (!o.out_csv.empty()) writeTrajCsv(o.out_csv, runs.front());
+                return 0;
+            }
+            const Options ot = withTrajSeconds(o);
+            const Trial t = runTrial(ot, ot.gain);
+            reportTrial(ot, t);
+            if (!o.out_csv.empty()) writeTrajCsv(o.out_csv, t);
+            return 0;
+        }
+
         // The scenario, echoed up front: these numbers decide whether contact
         // happens at all, so a run is not interpretable without them.
         const char* mode = dragMode(o) ? "drag"

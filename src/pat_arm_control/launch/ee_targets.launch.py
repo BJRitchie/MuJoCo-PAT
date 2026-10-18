@@ -36,11 +36,16 @@ def generate_launch_description() -> LaunchDescription:
     return LaunchDescription([
         DeclareLaunchArgument("use_sim_time", default_value="true"),
         DeclareLaunchArgument("ee_targets_params_file", default_value=params_file),
+        # waypoints | circle | rectangle. A distinct name for the same reason
+        # as ee_targets_params_file above: launch arguments are global across
+        # the include tree, and `pattern` is too generic to be safe there.
+        DeclareLaunchArgument("target_pattern", default_value="waypoints"),
         Node(
             package="pat_arm_control", executable="ee_target_publisher_node",
             name="ee_target_publisher", output="screen", emulate_tty=True,
             parameters=[
                 LaunchConfiguration("ee_targets_params_file"),
-                {"use_sim_time": LaunchConfiguration("use_sim_time")}],
+                {"use_sim_time": LaunchConfiguration("use_sim_time"),
+                 "pattern": LaunchConfiguration("target_pattern")}],
         ),
     ])

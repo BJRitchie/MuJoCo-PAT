@@ -1,7 +1,9 @@
 #include "pat_arm_control/ee_target_publisher_node.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <stdexcept>
@@ -31,6 +33,34 @@ EeTargetPublisher::EeTargetPublisher() : Node("ee_target_publisher") {
     frame_id_ = declare_parameter<std::string>("frame_id", "map");
     loop_     = declare_parameter<bool>("loop", true);
     const double republish_hz = declare_parameter<double>("republish_hz", 2.0);
+    pattern_  = declare_parameter<std::string>("pattern", "waypoints");
+    const double trajectory_hz = declare_parameter<double>("trajectory_hz", 20.0);
+    window_s_  = declare_parameter<double>("window_s", 2.0);
+    sample_dt_ = declare_parameter<double>("sample_dt", 0.01);
+    lookback_s_ = declare_parameter<double>("window_lookback_s", 0.1);
+    const bool trajectory = pattern_ != "waypoints";
+    if (trajectory) {
+        if (pattern_ != "circle" && pattern_ != "rectangle")
+            throw std::runtime_error(
+                "ee_target_publisher: 'pattern' must be waypoints, circle or rectangle");
+        if (mode_ != "relative")
+            throw std::runtime_error(
+                "ee_target_publisher: circle/rectangle are placed from each arm's "
+                "start pose, so they need mode=relative");
+        if (!(trajectory_hz > 0.0) || !(sample_dt_ > 0.0) || !(window_s_ > 0.0) ||
+            lookback_s_ < 0.0)
+            throw std::runtime_error(
+                "ee_target_publisher: trajectory_hz, sample_dt and window_s must be > 0, "
+                "window_lookback_s >= 0");
+        const double points = (window_s_ + lookback_s_) / sample_dt_ + 1.0;
+        if (points > static_cast<double>(pat_arm_control::ReferenceWindow::kMaxPoints))
+            throw std::runtime_error(
+                "ee_target_publisher: (window_s + window_lookback_s) / sample_dt needs " +
+                std::to_string(static_cast<int>(points)) + " points, more than a window "
+                "holds (" + std::to_string(pat_arm_control::ReferenceWindow::kMaxPoints) +
+                ")");
+        loadTrajectorySpec();
+    }
 
     if (sides.empty())
         throw std::runtime_error("ee_target_publisher: 'sides' must be non-empty");
@@ -46,9 +76,15 @@ EeTargetPublisher::EeTargetPublisher() : Node("ee_target_publisher") {
     for (const auto& side : sides) {
         Arm arm;
         arm.side      = side;
-        arm.waypoints = loadWaypoints(side);
+        if (!trajectory) arm.waypoints = loadWaypoints(side);
         arm.pub = create_publisher<geometry_msgs::msg::PoseStamped>(
             "/chaser/arm/" + side + "/ee_setpoint", 10);
+        if (trajectory) {
+            // Depth 1, as the controller subscribes: each window supersedes the
+            // last entirely, so a backlog would only be stale windows.
+            arm.traj_pub = create_publisher<trajectory_msgs::msg::MultiDOFJointTrajectory>(
+                "/chaser/arm/" + side + "/ee_trajectory", rclcpp::QoS(1).reliable());
+        }
         if (mode_ == "relative") {
             const std::size_t idx = arms_.size();
             arm.home_sub = create_subscription<geometry_msgs::msg::PoseStamped>(
@@ -64,6 +100,16 @@ EeTargetPublisher::EeTargetPublisher() : Node("ee_target_publisher") {
 
     // Single-threaded executor (plain rclcpp::spin) serialises these two timers
     // and the /ee_pose callbacks — no locking needed.
+    if (trajectory) {
+        traj_tmr_ = create_wall_timer(
+            std::chrono::duration<double>(1.0 / trajectory_hz),
+            std::bind(&EeTargetPublisher::publishTrajectories, this));
+        RCLCPP_INFO(get_logger(),
+            "ee_target_publisher: pattern=%s for %zu arm(s), %.1f s window every "
+            "%.0f ms at %.0f Hz", pattern_.c_str(), arms_.size(), window_s_,
+            sample_dt_ * 1e3, trajectory_hz);
+        return;
+    }
     republish_tmr_ = create_wall_timer(
         std::chrono::duration<double>(1.0 / republish_hz),
         std::bind(&EeTargetPublisher::republish, this));
@@ -121,9 +167,107 @@ void EeTargetPublisher::onHome(std::size_t idx,
     arm.home_qy = m.pose.orientation.y;
     arm.home_qz = m.pose.orientation.z;
     arm.have_home = true;
+    if (pattern_ != "waypoints") {
+        // The shape is placed from here and its clock starts now. Yaw is held
+        // at 0 relative to the home orientation, which every point carries.
+        arm.traj = pat_arm_control::makeTrajectory(
+            spec_, pat_arm_control::Anchor{arm.home_x, arm.home_y, 0.0});
+        arm.t_start = now().seconds();
+        RCLCPP_INFO(get_logger(),
+            "ee_target_publisher[%s]: home EE pose (%.3f, %.3f) — %s, lap %.1f s "
+            "after a %.1f s approach",
+            arm.side.c_str(), arm.home_x, arm.home_y, pattern_.c_str(),
+            arm.traj->loopPeriod(), arm.traj->approachDuration());
+        return;
+    }
     RCLCPP_INFO(get_logger(),
         "ee_target_publisher[%s]: home EE pose (%.3f, %.3f) — cycling %zu waypoint(s)",
         arm.side.c_str(), arm.home_x, arm.home_y, arm.waypoints.size());
+}
+
+void EeTargetPublisher::loadTrajectorySpec() {
+    // Defaults are the library's, so an unset parameter means the same shape
+    // the benches measured.
+    spec_.pattern = pattern_;
+    auto& c = spec_.circle;
+    c.center_dx  = declare_parameter<double>("circle.center_dx", c.center_dx);
+    c.center_dy  = declare_parameter<double>("circle.center_dy", c.center_dy);
+    c.radius     = declare_parameter<double>("circle.radius", c.radius);
+    c.period     = declare_parameter<double>("circle.period", c.period);
+    c.ccw        = declare_parameter<bool>("circle.ccw", c.ccw);
+    c.ramp_s     = declare_parameter<double>("circle.ramp_s", c.ramp_s);
+    auto& r = spec_.rectangle;
+    r.center_dx  = declare_parameter<double>("rectangle.center_dx", r.center_dx);
+    r.center_dy  = declare_parameter<double>("rectangle.center_dy", r.center_dy);
+    r.width      = declare_parameter<double>("rectangle.width", r.width);
+    r.height     = declare_parameter<double>("rectangle.height", r.height);
+    r.speed      = declare_parameter<double>("rectangle.speed", r.speed);
+    r.ccw        = declare_parameter<bool>("rectangle.ccw", r.ccw);
+    const double approach = declare_parameter<double>("approach_s", c.approach_s);
+    c.approach_s = approach;
+    r.approach_s = approach;
+    // Validate now, not at the first home pose, so a bad config fails at launch.
+    (void)pat_arm_control::makeTrajectory(spec_, pat_arm_control::Anchor{});
+}
+
+void EeTargetPublisher::publishTrajectories() {
+    for (Arm& arm : arms_) {
+        if (!arm.have_home || !arm.traj) continue;
+        // The window starts a little in the PAST. The controller evaluates it at
+        // the stamp of the state it is solving on, which is always older than
+        // this node's clock, so a window starting now would leave the
+        // controller's first node just before it.
+        const double t_now = now().seconds();
+        // Never before time zero: a ROS stamp cannot be negative, and this runs
+        // from the very start of a simulation.
+        const double t0 = std::max(0.0, t_now - lookback_s_);
+        pat_arm_control::sampleWindow(*arm.traj, arm.t_start, t0,
+                                      window_s_ + lookback_s_, sample_dt_, window_);
+        const Quat home{arm.home_qw, arm.home_qx, arm.home_qy, arm.home_qz};
+
+        trajectory_msgs::msg::MultiDOFJointTrajectory msg;
+        msg.header.stamp = rclcpp::Time(static_cast<std::int64_t>(std::llround(t0 * 1e9)),
+                                        RCL_ROS_TIME);
+        msg.header.frame_id = frame_id_;
+        msg.joint_names = {"ee_" + arm.side};
+        msg.points.resize(window_.n);
+        for (std::uint32_t i = 0; i < window_.n; ++i) {
+            const auto& p = window_.p[i];
+            auto& pt = msg.points[i];
+            pt.transforms.resize(1);
+            pt.velocities.resize(1);
+            pt.accelerations.resize(1);
+            pt.transforms[0].translation.x = p.x;
+            pt.transforms[0].translation.y = p.y;
+            pt.transforms[0].translation.z = arm.home_z;
+            // Yaw about world Z on top of the home orientation: the EE frame
+            // is rolled relative to the world, so a bare yaw would be a tilt.
+            const Quat q = qmul(qz(p.yaw), home);
+            pt.transforms[0].rotation.w = q.w;
+            pt.transforms[0].rotation.x = q.x;
+            pt.transforms[0].rotation.y = q.y;
+            pt.transforms[0].rotation.z = q.z;
+            pt.velocities[0].linear.x = p.vx;
+            pt.velocities[0].linear.y = p.vy;
+            pt.velocities[0].angular.z = p.wz;
+            pt.accelerations[0].linear.x = p.ax;
+            pt.accelerations[0].linear.y = p.ay;
+            pt.accelerations[0].angular.z = p.az;
+            pt.time_from_start = rclcpp::Duration::from_seconds(p.t - t0);
+        }
+        arm.traj_pub->publish(msg);
+
+        // The current reference point as a plain setpoint as well.
+        const pat_arm_control::RefPoint cur = arm.traj->at(t_now - arm.t_start);
+        geometry_msgs::msg::PoseStamped ps;
+        ps.header.stamp = now();
+        ps.header.frame_id = frame_id_;
+        ps.pose.position.x = cur.x;
+        ps.pose.position.y = cur.y;
+        ps.pose.position.z = arm.home_z;
+        ps.pose.orientation = msg.points[0].transforms[0].rotation;
+        arm.pub->publish(ps);
+    }
 }
 
 geometry_msgs::msg::PoseStamped

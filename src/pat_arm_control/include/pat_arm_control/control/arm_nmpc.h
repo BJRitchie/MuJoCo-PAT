@@ -14,6 +14,7 @@
 #include <numeric>
 #include <mujoco/mujoco.h>
 
+#include "pat_arm_control/control/reference_window.h"
 #include "pat_arm_control/dynamics/floating_base_dynamics.h"
 #include "pat_arm_control/solvers/quad_prob_solver.h"
 
@@ -111,6 +112,18 @@ struct NMPCParams {
 
     bool   terminal_velocity_constraint = false;
     double terminal_cost_multiplier = 1.0;
+
+    /*! When following a reference trajectory (setReferenceWindow), score each
+     *  rollout node against the reference at THAT node's time, t_now + k*Ts,
+     *  so the optimiser knows where the target will be over the whole horizon.
+     *
+     *  false scores every node against the reference at t_now -- its velocity
+     *  and acceleration still fed forward, but no look-ahead. That is a
+     *  reactive controller, kept as the baseline that shows what the preview
+     *  buys. With a single static setpoint the two are identical. Only the
+     *  full-nonlinear path has a horizon to preview over; the linearized path
+     *  always uses the reference at t_now. */
+    bool   reference_preview = true;
 
     // --- Safe mode -----------------------------------------------------------
     /*! Joint damping gain for safe mode, as a fraction of the torque available
@@ -273,6 +286,31 @@ public:
      *  the compensation is not what the gain says it is. */
     long ffSaturated() const noexcept { return ff_saturated_; }
     long ffSlewLimited() const noexcept { return ff_slew_limited_; }
+
+    /*! Follow a sampled reference trajectory instead of the static setpoint.
+     *
+     *  The window is copied in, so the caller's may change afterwards. Each
+     *  tick then samples it at t_now + k*Ts for every rollout node k (see
+     *  NMPCParams::reference_preview), with t_now from setReferenceTime.
+     *  Past the window's end it holds the last position at rest, and counts
+     *  those samples (referenceSamplesOutside). Allocation-free: the window
+     *  and the per-node references are storage sized at construction. */
+    void setReferenceWindow(const ReferenceWindow& window);
+    //! Back to the static setpoint (setDesiredPos/Orient/...).
+    void clearReferenceWindow() noexcept { have_window_ = false; }
+    bool referenceActive() const noexcept { return have_window_; }
+
+    /*! The time [s] the next computeControl's state was measured at, on the
+     *  same clock as the window's sample times. The reference is evaluated
+     *  there, so a late tick still compares the state with the reference for
+     *  the instant it describes. */
+    void setReferenceTime(double t_now) noexcept { t_ref_ = t_now; }
+
+    //! Node references that fell outside the window and were held, and the
+    //! ticks that used a window at all. Health counters for the node's report:
+    //! a window that keeps running short means the planner is not keeping up.
+    long referenceSamplesOutside() const noexcept { return ref_outside_; }
+    long referenceTicks() const noexcept { return ref_ticks_; }
 
     ControlMode mode() const { return mode_; }
     /*! Ticks spent in safe mode since construction — a health counter for the
@@ -502,18 +540,47 @@ protected:
     //! Writes into a NodeTaskSpace the caller owns rather than returning one:
     //! NodeTaskSpace carries four dynamically-sized Eigen members, so a by-value
     //! return costs four allocations at every rollout node.
+    //! `k` is the rollout node, so the callback can score it against
+    //! node_ref_[k].
     using TaskSpaceEval = std::function<void(
+        int k,
         const Eigen::VectorXd& q_node, const Eigen::VectorXd& v_node,
         const Eigen::Vector3d& ee_pos, const Eigen::Vector4d& ee_quat,
         const Eigen::MatrixXd& J_g6, const Eigen::Matrix<double, 6, 1>& jdot_qdot6,
         NodeTaskSpace& out)>;
 
+    /*! The reference one rollout node is scored against: target EE position,
+     *  velocity and acceleration (planar), orientation and its rates. Filled
+     *  once per tick for every node by sampleNodeReferences(), either from
+     *  the reference window at that node's time or, with no window, from the
+     *  static desired* setpoint -- identically at every node, which is what
+     *  makes the setpoint path unchanged by the trajectory machinery. */
+    struct NodeRef {
+        double p[2] = {0.0, 0.0};
+        double v[2] = {0.0, 0.0};
+        double a[2] = {0.0, 0.0};
+        double quat[4] = {1.0, 0.0, 0.0, 0.0};   //!< [w, x, y, z]
+        double w = 0.0, aw = 0.0;                //!< angular rate / acceleration about Z
+    };
+
+    //! The static setpoint as a NodeRef: the desired* members, verbatim.
+    NodeRef staticReference() const;
+    //! Fill node_ref_[0..N] for this tick. Allocation-free.
+    void sampleNodeReferences();
+
     /*! TaskSpaceEval implementations. Each control law wraps it in a thin
      *  TaskSpaceEval lambda when calling solveNonlinearMPC()
      *  (a lambda is still needed to bind `this` into the std::function, but
      *  the actual per-dimension logic lives here, named and documented).
-     *  The out-parameter form is what the rollout uses; the by-value one remains
-     *  for the tests and for single-shot callers. */
+     *  The NodeRef form is what the rollout uses, one reference per node; the
+     *  others evaluate against the static setpoint, for the tests and for
+     *  single-shot callers. */
+    void evalTaskSpace(
+        const NodeRef& ref,
+        const Eigen::VectorXd& q_node, const Eigen::VectorXd& v_node,
+        const Eigen::Vector3d& ee_pos, const Eigen::Vector4d& ee_quat,
+        const Eigen::MatrixXd& J_g6, const Eigen::Matrix<double, 6, 1>& jdot_qdot6,
+        NodeTaskSpace& out) const;
     void evalTaskSpace(
         const Eigen::VectorXd& q_node, const Eigen::VectorXd& v_node,
         const Eigen::Vector3d& ee_pos, const Eigen::Vector4d& ee_quat,
@@ -595,6 +662,17 @@ protected:
     Eigen::VectorXd ff_max_vec_;
     long            ff_saturated_ = 0;
     long            ff_slew_limited_ = 0;
+
+    // Reference trajectory. The window is ~20 KB of fixed storage, held here
+    // so setReferenceWindow copies into memory that already exists; node_ref_
+    // is sized N+1 at construction. Neither allocates once the controller is
+    // built.
+    ReferenceWindow      window_;
+    bool                 have_window_ = false;
+    double               t_ref_ = 0.0;
+    std::vector<NodeRef> node_ref_;
+    long                 ref_outside_ = 0;
+    long                 ref_ticks_ = 0;
 
     // Safe mode. kd_ is sized n_joints_ and nonzero only on owned indices,
     // fixed at construction from the torque and velocity limits. The mode

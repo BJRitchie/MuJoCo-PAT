@@ -18,7 +18,10 @@ Planar Air-bearing Table simulator for ISAM GNC and manipulation research.
     control with joint position/velocity/torque limits solved by an acados/HPIPM
     QP, soft (penalised) or hard per constraint group. On a failed or non-finite
     solve it enters a sticky safe mode commanding pure joint damping, so the arm
-    slows to rest rather than acting on an untrustworthy plan
+    slows to rest rather than acting on an untrustworthy plan. Follows either a
+    setpoint or a continuous trajectory, scoring each horizon node against the
+    reference at its own time (circle and sharp-cornered rectangle shapes from
+    `ee_target_publisher`)
 - Arm-torque watchdog in `pat_simulation`: the simulated actuators zero on command
   silence, as a real motor driver's watchdog would, so a dead controller cannot
   leave a torque latched on
@@ -192,6 +195,91 @@ Edit `src/pat_arm_control/config/ee_targets.yaml` (or pass
 collided in `full_stack_nmpc.launch.py`'s shared launch-argument namespace)
 for a different set — `mode: absolute` takes world-frame `[x, y, yaw]`
 triples directly.
+
+#### Trajectory following
+
+The same publisher can drive both arms round a continuous shape instead, each
+from its own start pose:
+
+```bash
+ros2 launch launch/full_stack_nmpc.launch.py with_targets:=true target_pattern:=circle
+ros2 launch launch/full_stack_nmpc.launch.py with_targets:=true target_pattern:=rectangle
+```
+
+It sends a sampled window of the trajectory — 2 s ahead at 10 ms, 20 times a
+second — on `/chaser/arm/<side>/ee_trajectory`
+(`trajectory_msgs/MultiDOFJointTrajectory`), and the NMPC scores **each node
+of its horizon against the reference at that node's own time**, so the
+optimiser knows where the target will be rather than only where it is. Any
+planner can drive it the same way; the controller never sees the shape. The
+reference is evaluated at the stamp of the joint state being solved on, so a
+late tick still compares the state with the reference for its own instant.
+
+- **circle** — smooth and feasible (the angular rate ramps in). It shows how
+  closely the arm follows a reference it can follow.
+- **rectangle** — sharp corners at constant speed, deliberately: the velocity
+  turns 90° instantly, which no torque-limited arm can do, so the controller
+  has to decide what to give up.
+
+Shapes, sizes and speeds are in `ee_targets.yaml`, every option written out.
+`nmpc.yaml`'s `reference_preview: false` turns the look-ahead off — every node
+is then scored against the reference *now* — which is the reactive baseline
+below.
+
+**What the preview buys**, measured deterministically by `contact_bench`
+(`--trajectory circle|rectangle --ab-preview`). The same run fed three ways:
+with preview; the window without preview; and today's interface, the current
+reference position streamed as a plain `ee_setpoint`:
+
+| tracking error rms | preview | no preview | streamed setpoint |
+|---|---|---|---|
+| circle (6 cm radius, 8 s lap) | **2.5 mm** | 39.6 mm | 34.7 mm |
+| rectangle (12 × 10 cm, 5.5 cm/s) | **4.5 mm** | 42.8 mm | 38.1 mm |
+
+Both baselines mostly *lag* — the EE trails the reference by 32–37 mm —
+because this NMPC is tuned for point-to-point moves (terminal cost ×100, a hard
+zero-velocity terminal condition) and so follows a moving point like a heavily
+damped system. Knowing the future removes the lag. On the rectangle the
+difference is visible in *where* the error sits: with preview the EE is inside
+the rectangle on 98% of the ticks near a corner — it turns early and cuts each
+corner (8.8 mm deep) — where the baselines arrive late and are inside only
+about half the time.
+
+**Where it stops working.** Sped up (`--sweep-speed`), the preview keeps a
+3–14× advantage up to about 3× the default speed. From about 4× the arm runs
+out of torque and solves begin to fail — the warm solve and the cold retry
+both hitting the 60-iteration cap, the README's documented infeasibility
+signature — and at 6× the preview is the *worst* of the three (183 mm on the
+circle, against 69 mm for the streamed setpoint), with tens of Tier 1 entries
+and over a hundred safe-mode ticks. The likely mechanism, not yet confirmed:
+the torque rows are hard, and chasing a target that fast drives the predicted
+joint velocities up until the velocity-dependent torques alone exceed the
+0.25 N·m limit at later horizon nodes, leaving no feasible command — and the
+preview, chasing hardest, gets there first. So the reference being only in the
+cost keeps the *reference* from causing infeasibility, but not the states it
+drives the rollout into. At the default speed the rectangle's corners are
+infeasible only geometrically (peak 0.076 of 0.25 N·m); the regime where the
+solver trades accuracy for its torque limits and still wins clearly is about
+3× (`speed: 0.165`).
+
+**It costs less compute than the waypoint loop, not more.** 120 s each,
+`run_trial.sh -g -a visualise:=false -a target_pattern:=...`:
+
+| | tick mean | max | p95 | over deadline | QP iters mean / max |
+|---|---|---|---|---|---|
+| waypoints | 809 µs | 7.84 ms | 1.96 ms | 0.00% | 7.47 / 53 |
+| circle | 781 µs | 2.27 ms | 1.69 ms | 0.00% | 6.95 / 8 |
+| rectangle | 809 µs | 2.26 ms | 2.02 ms | 0.00% | 7.11 / 14 |
+
+The waypoint loop's expensive ticks are its setpoint *jumps*, each of which
+invalidates the warm start; a trajectory the controller can see coming keeps
+the last solution a good guess, even through the rectangle's corners.
+
+A window that runs out is held at its last point until a newer `ee_setpoint`
+arrives, and the arm node's report counts reference samples that fell outside
+the window — a planner that cannot keep up shows there. Each window starts
+`window_lookback_s` (0.1 s) in the past, since the controller evaluates it at
+its state's stamp, which is always older than the planner's clock.
 
 If nothing moves: check `ros2 node list` shows `/pat_arm_nmpc_left` and
 `/pat_arm_nmpc_right`, and `ros2 topic echo /chaser/arm/torque_command` is

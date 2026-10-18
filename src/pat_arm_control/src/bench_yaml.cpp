@@ -96,6 +96,8 @@ Loaded loadConfig(const std::string& yaml_path, const std::string& arm,
         asBool(f, "nmpc.terminal_velocity_constraint", p.terminal_velocity_constraint, used);
     p.terminal_cost_multiplier =
         asDouble(f, "nmpc.terminal_cost_multiplier", p.terminal_cost_multiplier, used);
+    p.reference_preview =
+        asBool(f, "nmpc.reference_preview", p.reference_preview, used);
 
     p.safe_mode_damping_frac =
         asDouble(f, "safe_mode.damping_frac", p.safe_mode_damping_frac, used);

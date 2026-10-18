@@ -24,6 +24,13 @@ using namespace std::chrono_literals;
 // deliberately — it gives them internal linkage, so they never reach the linker
 // and cannot collide with a same-named helper in another translation unit.
 namespace {
+/*! A stamp or duration as seconds, by plain arithmetic. Not rclcpp::Time or
+ *  rclcpp::Duration: those throw on a negative value, and nothing a message
+ *  carries may be able to take the controller down. */
+double toSeconds(std::int32_t sec, std::uint32_t nanosec) {
+    return static_cast<double>(sec) + 1e-9 * static_cast<double>(nanosec);
+}
+
 double quatToYaw(const geometry_msgs::msg::Quaternion& q) {
     return std::atan2(2.0 * (q.w * q.z + q.x * q.y),
                       1.0 - 2.0 * (q.y * q.y + q.z * q.z));
@@ -121,6 +128,11 @@ ArmNMPCNode::ArmNMPCNode() : Node("pat_arm_nmpc") {
     ee_setpoint_sub_ = create_subscription<geometry_msgs::msg::PoseStamped>(
         "/chaser/arm/" + arm_side_ + "/ee_setpoint", 10,
         std::bind(&ArmNMPCNode::onEeSetpoint, this, std::placeholders::_1));
+    // Depth 1: only the newest window matters, and each one supersedes the
+    // last entirely.
+    traj_sub_ = create_subscription<trajectory_msgs::msg::MultiDOFJointTrajectory>(
+        "/chaser/arm/" + arm_side_ + "/ee_trajectory", rclcpp::QoS(1).reliable(),
+        std::bind(&ArmNMPCNode::onEeTrajectory, this, std::placeholders::_1));
         
     // KEEP_LAST stated explicitly, because the control thread publishes this one
     // itself and KEEP_LAST is what makes that safe. A reliable writer whose reader
@@ -270,6 +282,8 @@ pat_arm_control::NMPCParams ArmNMPCNode::loadParams() {
     p.terminal_cost_multiplier =
         declare_parameter<double>("nmpc.terminal_cost_multiplier",
                                   p.terminal_cost_multiplier);
+    p.reference_preview =
+        declare_parameter<bool>("nmpc.reference_preview", p.reference_preview);
 
     const auto q_pos     = getVec3("weights.Q_pos",        {p.Qx, p.Qy, p.Qz});
     const auto q_vel     = getVec3("weights.Q_vel",        {p.Qdotx, p.Qdoty, p.Qdotz});
@@ -383,6 +397,7 @@ void ArmNMPCNode::onJointState(sensor_msgs::msg::JointState::SharedPtr msg) {
     // name every joint, so the running copy is the complete state and the
     // message is only the update to it.
     JointSnapshot snap;
+    snap.stamp = toSeconds(msg->header.stamp.sec, msg->header.stamp.nanosec);
     snap.n = static_cast<std::uint32_t>(q_joints_.size());
     for (std::size_t i = 0; i < q_joints_.size(); ++i) {
         snap.q[i] = q_joints_[i];
@@ -427,7 +442,69 @@ void ArmNMPCNode::onEeSetpoint(geometry_msgs::msg::PoseStamped::SharedPtr msg) {
     snap.quat[1] = msg->pose.orientation.x;
     snap.quat[2] = msg->pose.orientation.y;
     snap.quat[3] = msg->pose.orientation.z;
+    snap.stamp = toSeconds(msg->header.stamp.sec, msg->header.stamp.nanosec);
     setpoint_mail_.write(snap);
+}
+
+void ArmNMPCNode::onEeTrajectory(
+    trajectory_msgs::msg::MultiDOFJointTrajectory::SharedPtr msg) {
+    using pat_arm_control::ReferenceWindow;
+    // thread_local rather than a local: the window is 20 KB, too much to put on
+    // the stack of every callback.
+    static thread_local ReferenceWindow w;
+    // toSeconds, not rclcpp::Time: a malformed window is rejected and counted
+    // below, never thrown on.
+    const double t0 = toSeconds(msg->header.stamp.sec, msg->header.stamp.nanosec);
+    const std::size_t n = std::min(msg->points.size(), ReferenceWindow::kMaxPoints);
+    if (msg->points.size() > ReferenceWindow::kMaxPoints) {
+        traj_truncated_.fetch_add(1, std::memory_order_relaxed);
+    }
+    const auto reject = [this] {
+        traj_rejected_.fetch_add(1, std::memory_order_relaxed);
+    };
+    if (n == 0 || msg->points[0].transforms.empty()) return reject();
+
+    // The first point's orientation becomes the window's reference; every
+    // point's yaw is its rotation about world Z relative to it. The EE frame
+    // is rolled relative to the world, so carrying the orientation as a yaw
+    // on a reference quaternion is what keeps a target tilt-free.
+    const auto& r0 = msg->points[0].transforms[0].rotation;
+    w.quat0[0] = r0.w; w.quat0[1] = r0.x; w.quat0[2] = r0.y; w.quat0[3] = r0.z;
+    w.yaw0 = 0.0;
+    for (std::size_t i = 0; i < n; ++i) {
+        const auto& pt = msg->points[i];
+        if (pt.transforms.empty()) return reject();
+        auto& p = w.p[i];
+        p.t = t0 + toSeconds(pt.time_from_start.sec, pt.time_from_start.nanosec);
+        if (i > 0 && !(p.t > w.p[i - 1].t)) return reject();   // must increase
+        const auto& tr = pt.transforms[0];
+        p.x = tr.translation.x;
+        p.y = tr.translation.y;
+        // Yaw of q_i * conj(q0): the Z rotation that takes the reference
+        // orientation to this point's.
+        const auto& q = tr.rotation;
+        const double rw =  q.w * r0.w + q.x * r0.x + q.y * r0.y + q.z * r0.z;
+        const double rz = -q.w * r0.z - q.x * r0.y + q.y * r0.x + q.z * r0.w;
+        p.yaw = 2.0 * std::atan2(rz, rw);
+        p.vx = p.vy = p.wz = p.ax = p.ay = p.az = 0.0;
+        if (!pt.velocities.empty()) {
+            p.vx = pt.velocities[0].linear.x;
+            p.vy = pt.velocities[0].linear.y;
+            p.wz = pt.velocities[0].angular.z;
+        }
+        if (!pt.accelerations.empty()) {
+            p.ax = pt.accelerations[0].linear.x;
+            p.ay = pt.accelerations[0].linear.y;
+            p.az = pt.accelerations[0].angular.z;
+        }
+        const double vals[] = {p.t, p.x, p.y, p.yaw, p.vx, p.vy, p.wz, p.ax, p.ay, p.az};
+        for (const double v : vals) {
+            if (!std::isfinite(v)) return reject();
+        }
+    }
+    w.n = static_cast<std::uint32_t>(n);
+    traj_mail_.write(w);
+    traj_seq_.fetch_add(1, std::memory_order_release);
 }
 
 ArmNMPCNode::~ArmNMPCNode() {
@@ -531,11 +608,14 @@ void ArmNMPCNode::controlLoop() {
     // captured once. Both land in the loop's own desired pose, so a tick is never
     // tracking a target that changed halfway through it.
     SetpointSnapshot sp;
-    if (setpoint_mail_.read(sp)) {
+    if (setpoint_mail_.read(sp) && !(hold_from_traj_ && sp.stamp <= traj_hold_end_)) {
+        // (A setpoint from before a run-out trajectory ended is older than the
+        // point the arm is holding, so it does not pull the arm back.)
         des_x_    = sp.x;
         des_y_    = sp.y;
         des_quat_ = {sp.quat[0], sp.quat[1], sp.quat[2], sp.quat[3]};
         have_des_ = true;
+        hold_from_traj_ = false;
     } else if (!have_des_) {
         des_x_    = meas.pos.x();
         des_y_    = meas.pos.y();
@@ -545,6 +625,37 @@ void ArmNMPCNode::controlLoop() {
         seeded_x_ = des_x_;
         seeded_y_ = des_y_;
         seeded_hold_pose_.store(true, std::memory_order_release);
+    }
+
+    // A reference trajectory, when one is in force. Copied only when a new
+    // window has arrived (traj_seq_ moved), not every tick: it is 20 KB.
+    const std::uint64_t seq = traj_seq_.load(std::memory_order_acquire);
+    if (seq != traj_seq_seen_ && traj_mail_.read(ctrl_traj_)) {
+        traj_seq_seen_ = seq;
+        controller_->setReferenceWindow(ctrl_traj_);
+        have_traj_ = true;
+    }
+    ref_source_ = hold_from_traj_ ? kRefTrajHeld : kRefSetpoint;
+    if (have_traj_) {
+        const double t_now = joints_.stamp;
+        if (t_now <= ctrl_traj_.endTime()) {
+            controller_->setReferenceTime(t_now);
+            ref_source_ = kRefTrajectory;
+        } else {
+            // Run out: stop following it, and hold where it ended rather than
+            // falling back to whatever setpoint preceded it.
+            controller_->clearReferenceWindow();
+            have_traj_ = false;
+            const pat_arm_control::RefPoint& last = ctrl_traj_.p[ctrl_traj_.n - 1];
+            double q[4];
+            ctrl_traj_.orientation(last.yaw, q);
+            des_x_ = last.x;
+            des_y_ = last.y;
+            des_quat_ = {q[0], q[1], q[2], q[3]};
+            hold_from_traj_ = true;
+            traj_hold_end_ = ctrl_traj_.endTime();
+            ref_source_ = kRefTrajHeld;
+        }
     }
 
     controller_->setDesiredPos(des_x_, des_y_, 0.0);
@@ -667,6 +778,9 @@ void ArmNMPCNode::publishStats() {
     s.worst_consecutive_misses = worst_consecutive_misses_;
     s.skipped_periods          = skipped_periods_;
     controller_->snapshotProfile(s.profile);
+    s.ref_source  = ref_source_;
+    s.ref_ticks   = controller_->referenceTicks();
+    s.ref_outside = controller_->referenceSamplesOutside();
     stats_mail_.write(s);
 
     // Clear only once the copy above is published, so the window the report is
@@ -1197,6 +1311,20 @@ void ArmNMPCNode::reportDiagnostics() {
         s.loop.mean(), s.loop.max_us, s.cpu.mean(), s.cpu.max_us,
         s.deadline_misses, s.worst_consecutive_misses, s.skipped_periods,
         pat_arm_control::ArmNMPC::formatProfile(s.profile).c_str());
+
+    // Only once a trajectory has been seen, so a setpoint-only run's log is
+    // unchanged. Counts are cumulative: a window that keeps running short of
+    // the horizon shows as nodes held past it, a malformed one as rejected.
+    const long rejected = traj_rejected_.load(std::memory_order_relaxed);
+    const long truncated = traj_truncated_.load(std::memory_order_relaxed);
+    if (s.ref_ticks > 0 || rejected > 0) {
+        static const char* kSource[] = {"setpoint", "trajectory", "trajectory ended, holding"};
+        RCLCPP_INFO(get_logger(),
+            "pat_arm_nmpc[%s] reference: %s | %ld trajectory ticks, %ld node refs held "
+            "past the window | windows rejected %ld, truncated %ld",
+            arm_side_.c_str(), kSource[s.ref_source], s.ref_ticks, s.ref_outside,
+            rejected, truncated);
+    }
 
     // What publish() costs, with the histogram: the mean decides nothing here, the
     // worst case decides whether this call can go back on the control thread.

@@ -176,6 +176,12 @@
       du_max_frac: 1.0
       terminal_velocity_constraint: true
       terminal_cost_multiplier: 100.0
+      # When following a reference trajectory (/chaser/arm/<side>/ee_trajectory),
+      # score each horizon node against the reference at that node's own time,
+      # so the optimiser sees the trajectory coming. false scores every node
+      # against the reference now: a reactive baseline. No effect on a single
+      # static setpoint, and none on the linearized path (it has no horizon).
+      reference_preview: true
 
     weights:
       Q_pos:        [10.0,   10.0,   1.0   ]   

@@ -9,7 +9,9 @@ know you want that coupling.
 
 `with_targets:=true` also brings up ee_target_publisher, which walks each arm
 through a fixed loop of known-reachable EE setpoints (otherwise the arms just
-hold their start pose).
+hold their start pose). `target_pattern:=circle` or `rectangle` has both arms
+follow that shape as a continuous trajectory instead, which the NMPC tracks
+with a per-node reference (see ee_targets.yaml).
 
 `telemetry:=true` brings up pat_telemetry's telemetry_node (merges
 joint_states/torque_command by name, publishes each side's EE distance from
@@ -76,6 +78,7 @@ def generate_launch_description() -> LaunchDescription:
         DeclareLaunchArgument("with_nav", default_value="false"),
         DeclareLaunchArgument("nav_params", default_value=nav_params),
         DeclareLaunchArgument("with_targets", default_value="false"),
+        DeclareLaunchArgument("target_pattern", default_value="waypoints"),
         DeclareLaunchArgument("telemetry", default_value="false"),
         DeclareLaunchArgument("plotjuggler", default_value="false"),
         DeclareLaunchArgument("visualise", default_value="true"),
