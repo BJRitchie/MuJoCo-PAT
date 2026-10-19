@@ -1,15 +1,19 @@
 #pragma once
 
+#include <chrono>
 #include <cstddef>
 #include <memory>
 #include <string>
 #include <vector>
 
 #include <geometry_msgs/msg/pose_stamped.hpp>
+#include <geometry_msgs/msg/twist_stamped.hpp>
 #include <rclcpp/rclcpp.hpp>
+#include <std_msgs/msg/empty.hpp>
 #include <trajectory_msgs/msg/multi_dof_joint_trajectory.hpp>
 
 #include "pat_arm_control/planning/reference_trajectory.h"
+#include "pat_arm_control/planning/teleop_reference.h"
 
 /// Cycles each arm's task-space setpoint through a list of known-reachable
 /// end-effector poses — the simplest form of the "mission/teleop node" the
@@ -38,6 +42,16 @@
 ///       against where the target will be. The current reference point also
 ///       goes out on ee_setpoint, for the viewer's markers, telemetry and
 ///       anything else that tracks a single target.
+///   "teleop" — each arm's target is driven by a world-frame velocity command
+///       on /chaser/arm/<side>/ee_teleop (geometry_msgs/TwistStamped, from
+///       ee_teleop_node or any other teleop device), starting at its home pose
+///       (relative mode only). Only the latest command is kept; a
+///       TeleopReference turns it into the target's motion under speed,
+///       acceleration and workspace limits, and every `teleop.update_hz` tick
+///       publishes a window predicting where the target goes if that command
+///       is held. A command older than `teleop.cmd_timeout` counts as zero, so
+///       a dead teleop node stops the arms. An std_msgs/Empty on
+///       /chaser/arm/<side>/ee_teleop_reset sends that target back home.
 class EeTargetPublisher : public rclcpp::Node {
 public:
     EeTargetPublisher();
@@ -60,12 +74,30 @@ private:
         std::unique_ptr<pat_arm_control::ReferenceTrajectory> traj;
         double t_start = 0.0;
         rclcpp::Publisher<trajectory_msgs::msg::MultiDOFJointTrajectory>::SharedPtr traj_pub;
+
+        // Teleop only. The latest command and when it arrived (steady clock,
+        // so the deadman works whatever the simulation's pace); one value,
+        // overwritten by each message, never queued.
+        std::unique_ptr<pat_arm_control::TeleopReference> teleop;
+        pat_arm_control::TeleopCommand cmd;
+        std::chrono::steady_clock::time_point cmd_arrival{};
+        bool cmd_live = false;        //!< a fresh command is in hand (for logging)
+        bool home_requested = false;  //!< reset arrived; applied on the next tick
+        rclcpp::Subscription<geometry_msgs::msg::TwistStamped>::SharedPtr teleop_sub;
+        rclcpp::Subscription<std_msgs::msg::Empty>::SharedPtr reset_sub;
     };
 
     //! Read the trajectory pattern's parameters into spec_.
     void loadTrajectorySpec();
+    //! Read the teleop block into teleop_params_ / cmd_timeout_.
+    void loadTeleopParams();
     //! Sample every arm's trajectory and publish the window and current point.
     void publishTrajectories();
+    //! Advance every arm's teleop target and publish its predicted window.
+    void publishTeleop();
+    /*! Publish window_ (starting at absolute time `t0`) on the arm's
+     *  ee_trajectory, and `current` on its ee_setpoint. */
+    void publishWindow(const Arm& arm, double t0, const pat_arm_control::RefPoint& current);
 
     /// Read "<side>.waypoints" (flat [x,y,yaw] triples); fall back to a default
     /// relative diamond when absent (throws in absolute mode — no sane default).
@@ -91,4 +123,8 @@ private:
     double lookback_s_ = 0.1;   //!< how far before now each window starts
     rclcpp::TimerBase::SharedPtr traj_tmr_;
     pat_arm_control::ReferenceWindow window_;   //!< reused, 20 KB
+
+    pat_arm_control::TeleopReference::Params teleop_params_;
+    double cmd_timeout_ = 0.3;   //!< [s] a command older than this counts as zero
+    double teleop_hz_ = 50.0;
 };

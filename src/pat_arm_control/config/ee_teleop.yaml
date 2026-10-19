@@ -1,0 +1,29 @@
+# ee_teleop_node — keyboard teleop of the arms' EE targets.
+#
+#   ros2 run pat_arm_control ee_teleop_node --ros-args \
+#     --params-file $(ros2 pkg prefix pat_arm_control)/share/pat_arm_control/config/ee_teleop.yaml
+#
+# Run it in its own terminal, with the stack up on target_pattern:=teleop
+# (ee_target_publisher owns the targets, their limits and the trajectory).
+# Keys are X11 keysym names: letters as themselves, plus comma, period, Tab,
+# space, Escape, bracketleft, bracketright, Up, Left, ...
+# Directions are WORLD frame. No key may be bound twice.
+
+ee_teleop:
+  ros__parameters:
+    sides:         [left, right]
+    poll_hz:       50.0          # [Hz] key polling and command publish rate
+    linear_speed:  0.05          # [m/s] at 1.00x; ee_target_publisher caps at
+                                 # teleop.max_lin_speed (0.10)
+    angular_speed: 0.3           # [rad/s] at 1.00x; capped at teleop.max_yaw_rate
+    frame_id:      map
+    # Keys count only while the window focused at startup (the terminal this
+    # was launched from) still has focus. false: keys typed anywhere count.
+    focus_lock:    true
+    # active/paused, quit, stop (held), home, slower, faster
+    panel_keys:    [Tab, Escape, space, h, bracketleft, bracketright]
+    # +x, -x, +y, -y, ccw (+yaw), cw (-yaw)
+    left:
+      keys:        [w, s, a, d, z, x]
+    right:
+      keys:        [i, k, j, l, comma, period]

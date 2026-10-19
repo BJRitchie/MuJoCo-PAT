@@ -48,7 +48,9 @@ find_package(acados REQUIRED)
 # Its own library so the planner (ee_target_publisher) can link the shape
 # generators without pulling in MuJoCo and acados; the controller library
 # links it too, so both build the same reference from the same code.
-add_library(pat_arm_control_reference STATIC src/reference_trajectory.cpp)
+add_library(pat_arm_control_reference STATIC
+    src/reference_trajectory.cpp
+    src/teleop_reference.cpp)
 target_include_directories(pat_arm_control_reference PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>)
@@ -75,6 +77,7 @@ find_package(sensor_msgs   REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(nav_msgs      REQUIRED)
 find_package(trajectory_msgs REQUIRED)   # ee_trajectory
+find_package(std_msgs      REQUIRED)   # ee_teleop_reset
 find_package(pat_rt        REQUIRED)   # mailbox, ring, RT thread helpers
 add_executable(arm_control_node src/arm_control_node.cpp)
 pat_arm_control_arch_flags(arm_control_node)
@@ -84,15 +87,33 @@ ament_target_dependencies(arm_control_node rclcpp sensor_msgs geometry_msgs nav_
 install(TARGETS arm_control_node RUNTIME DESTINATION lib/${PROJECT_NAME})
 
 # Stand-in mission node: cycles PoseStamped waypoints onto ee_setpoint, or
-# follows a circle / rectangle on ee_trajectory. Links only the reference
-# library -- no MuJoCo, no acados.
+# follows a circle / rectangle / teleop command on ee_trajectory. Links only
+# the reference library -- no MuJoCo, no acados.
 add_executable(ee_target_publisher_node src/ee_target_publisher_node.cpp)
 target_include_directories(ee_target_publisher_node PRIVATE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
 target_link_libraries(ee_target_publisher_node pat_arm_control_reference)
 pat_arm_control_arch_flags(ee_target_publisher_node)
-ament_target_dependencies(ee_target_publisher_node rclcpp geometry_msgs trajectory_msgs)
+ament_target_dependencies(ee_target_publisher_node rclcpp geometry_msgs trajectory_msgs
+                          std_msgs)
 install(TARGETS ee_target_publisher_node RUNTIME DESTINATION lib/${PROJECT_NAME})
+
+# Keyboard teleop: reads held keys from the X server, publishes ee_teleop for
+# ee_target_publisher (pattern: teleop). Built only where X11 exists -- the
+# headless runtime image has none, and nothing else depends on this node.
+find_package(X11 QUIET)
+if(X11_FOUND)
+    add_executable(ee_teleop_node src/ee_teleop_node.cpp)
+    target_include_directories(ee_teleop_node PRIVATE
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> ${X11_INCLUDE_DIR})
+    target_link_libraries(ee_teleop_node ${X11_LIBRARIES})
+    target_compile_options(ee_teleop_node PRIVATE -Wall -Wextra -Wpedantic)
+    pat_arm_control_arch_flags(ee_teleop_node)
+    ament_target_dependencies(ee_teleop_node rclcpp geometry_msgs std_msgs)
+    install(TARGETS ee_teleop_node RUNTIME DESTINATION lib/${PROJECT_NAME})
+else()
+    message(STATUS "X11 not found: ee_teleop_node (keyboard teleop) is not built")
+endif()
 
 # ─── MuJoCo model: expand the xacro to a self-contained MJCF at build time ──
 # FloatingBaseDynamics mj_loadXML's the installed .xml; the .xacro sources
@@ -173,6 +194,7 @@ if(BUILD_TESTING)
         test/test_momentum_observer.cpp
         test/test_bench_scoring.cpp
         test/test_reference.cpp
+        test/test_teleop_reference.cpp
         src/contact_scenario.cpp)
     pat_arm_control_arch_flags(test_pat_arm_control)
     add_dependencies(test_pat_arm_control pat_arm_control_models)

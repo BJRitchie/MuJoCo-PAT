@@ -36,7 +36,7 @@ def generate_launch_description() -> LaunchDescription:
     return LaunchDescription([
         DeclareLaunchArgument("use_sim_time", default_value="true"),
         DeclareLaunchArgument("ee_targets_params_file", default_value=params_file),
-        # waypoints | circle | rectangle. A distinct name for the same reason
+        # waypoints | circle | rectangle | teleop. A distinct name for the same reason
         # as ee_targets_params_file above: launch arguments are global across
         # the include tree, and `pattern` is too generic to be safe there.
         DeclareLaunchArgument("target_pattern", default_value="waypoints"),

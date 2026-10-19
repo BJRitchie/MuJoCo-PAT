@@ -11,7 +11,9 @@ know you want that coupling.
 through a fixed loop of known-reachable EE setpoints (otherwise the arms just
 hold their start pose). `target_pattern:=circle` or `rectangle` has both arms
 follow that shape as a continuous trajectory instead, which the NMPC tracks
-with a per-node reference (see ee_targets.yaml).
+with a per-node reference (see ee_targets.yaml). `target_pattern:=teleop`
+hands each arm's target to the keyboard: run
+`ros2 run pat_arm_control ee_teleop_node` in a second terminal.
 
 `telemetry:=true` brings up pat_telemetry's telemetry_node (merges
 joint_states/torque_command by name, publishes each side's EE distance from

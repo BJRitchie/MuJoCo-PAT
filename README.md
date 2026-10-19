@@ -22,6 +22,8 @@ Planar Air-bearing Table simulator for ISAM GNC and manipulation research.
     setpoint or a continuous trajectory, scoring each horizon node against the
     reference at its own time (circle and sharp-cornered rectangle shapes from
     `ee_target_publisher`)
+  - Keyboard teleoperation of both arms at once (`ee_teleop_node`), world
+    frame, through the same trajectory interface
 - Arm-torque watchdog in `pat_simulation`: the simulated actuators zero on command
   silence, as a real motor driver's watchdog would, so a dead controller cannot
   leave a torque latched on
@@ -280,6 +282,60 @@ arrives, and the arm node's report counts reference samples that fell outside
 the window — a planner that cannot keep up shows there. Each window starts
 `window_lookback_s` (0.1 s) in the past, since the controller evaluates it at
 its state's stamp, which is always older than the planner's clock.
+
+#### Teleoperation
+
+Drive each arm's target from the keyboard. Bring the stack up with the
+publisher in teleop mode, then start the teleop node in a **second terminal**
+into the same container:
+
+```bash
+ros2 launch launch/full_stack_nmpc.launch.py with_targets:=true target_pattern:=teleop
+# second terminal (docker compose exec dev bash):
+ros2 run pat_arm_control ee_teleop_node
+```
+
+| | +x | −x | +y | −y | ccw | cw |
+|---|---|---|---|---|---|---|
+| left arm | w | s | a | d | z | x |
+| right arm | i | k | j | l | , | . |
+
+Directions are **world frame**. **Tab** toggles active/paused (it starts
+paused), **space** held stops both arms, **h** sends both targets home, **[** /
+**]** step the speed (0.25×–2× of 5 cm/s and 0.3 rad/s), **Esc** or Ctrl-C
+quits. Keys and speeds are in `config/ee_teleop.yaml`
+(`--ros-args --params-file ...`).
+
+The node reads which keys are *held* from the X server rather than characters
+from the terminal, so an arm moves exactly while its key is down, diagonals and
+both arms at once work, and letting go stops it. It needs the X display the
+viewer already uses (`xhost +local:docker`), which is why it is not in any
+launch file, and it is built only where X11 is available — the headless runtime
+image does not have it. Because the X server reports keys typed into *any*
+window, it only listens while the terminal it was started from has focus, and
+it starts paused.
+
+The teleop node only states intent: it publishes each arm's velocity command on
+`/chaser/arm/<side>/ee_teleop` 50 times a second (zero when idle) and a home
+request on `ee_teleop_reset`. `ee_target_publisher` owns the target. It keeps
+only the **latest** command — nothing queues — and moves the target under a
+speed cap, an acceleration ramp and a box around the start pose (+0 to +0.25 m
+in x, ±0.12 m in y, ±0.3 rad), slowing ahead of each wall so the target
+arrives at rest. Every tick it sends the NMPC the same kind of window as the
+shapes: where the target goes if the current command is held, so the
+controller sees a key press as a ramp across its whole horizon and a release
+as the stop it causes. A command that stops arriving counts as zero after
+0.3 s, so a dead teleop node stops the arms; on Ctrl-C it sends zero itself.
+Limits are in `ee_targets.yaml`'s `teleop:` block.
+
+Driven from a script in place of the keyboard, headless: both arms move
+together in the commanded directions, settle within a millimetre of the
+target, stop at the speed and yaw limits and at the walls, return home on
+request, and the tick costs the same as following the shapes (838 µs mean,
+3.6 ms max, at most 18 QP iterations, no safe-mode entries). The one gap: the
+box is the same for both arms, and the corner nearest the bus (small x, y
+toward the other arm) is outside the arm's reach — driven there, the right arm
+stopped about 2 cm short and held, with no solver trouble.
 
 If nothing moves: check `ros2 node list` shows `/pat_arm_nmpc_left` and
 `/pat_arm_nmpc_right`, and `ros2 topic echo /chaser/arm/torque_command` is
@@ -1709,9 +1765,11 @@ problem not yet observed. Revisit it only if step 4 leaves a tail that `cpu` ver
   `pat_robotics/include/pat_robotics/i_manipulator.hpp` declares it and nothing
   implements it. The NMPC takes its kinematics from MuJoCo directly, so nothing
   depends on it yet.
-- **`ee_target_publisher` is a stand-in**, cycling fixed reachable waypoints. A
-  planner or teleop node publishing `/chaser/arm/<side>/ee_setpoint` is the
-  intended replacement; the topic contract already accommodates it.
+- **`ee_target_publisher` is a stand-in** — waypoints, fixed shapes, or
+  keyboard teleop. A mission planner publishing `/chaser/arm/<side>/ee_trajectory`
+  is the intended replacement; the topic contract already accommodates it.
+- **The teleop box is the same for both arms**, so its corner nearest the bus is
+  out of reach (the arm stops ~2 cm short). Mirrored per-arm bounds would fix it.
 - **PID gains and `planar_dynamics.hpp` are still tuned for a 15 kg chaser**,
   where the modelled bus is 49.22 kg.
 - Trajectory tracking in NMPC 

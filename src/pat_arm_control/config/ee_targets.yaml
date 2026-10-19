@@ -18,10 +18,13 @@ ee_target_publisher:
     # rectangle -- a rectangle with SHARP corners at constant speed. The corners
     #              are deliberately infeasible: the NMPC has to decide what to
     #              give up, and with preview it turns early and cuts them.
-    # circle/rectangle publish a sampled window on ee_trajectory, which the NMPC
-    # follows with a per-node reference (nmpc.yaml's reference_preview), and the
-    # current point on ee_setpoint. They need mode: relative.
-    pattern:       waypoints     # waypoints | circle | rectangle
+    # teleop    -- each arm driven by velocity commands on
+    #              /chaser/arm/<side>/ee_teleop (run ee_teleop_node in its own
+    #              terminal), within the teleop block's limits below
+    # circle/rectangle/teleop publish a sampled window on ee_trajectory, which
+    # the NMPC follows with a per-node reference (nmpc.yaml's reference_preview),
+    # and the current point on ee_setpoint. They need mode: relative.
+    pattern:       waypoints     # waypoints | circle | rectangle | teleop
     trajectory_hz: 20.0          # how often a fresh window is sent [Hz]
     window_s:      2.0           # how far ahead each window reaches [s]; the
                                  # NMPC's horizon is ~1 s, so 2 s has margin
@@ -46,6 +49,23 @@ ee_target_publisher:
                                  # NMPC still well ahead of the baselines up to
                                  # ~3x this; past ~4x its solves start to fail
       ccw:         true
+    teleop:
+      update_hz:     50.0        # [Hz] target update + window publish; a key
+                                 # press reaches the NMPC within one tick
+      cmd_timeout:   0.3         # [s] a command older than this counts as zero
+                                 # (deadman: a dead teleop node stops the arms)
+      max_lin_speed: 0.10        # [m/s] cap on the target's planar speed
+      max_yaw_rate:  0.6         # [rad/s]
+      max_lin_accel: 0.25        # [m/s^2] key press / release ramp
+      max_yaw_accel: 2.0         # [rad/s^2]
+      # The box the target stays in, as offsets from the start pose [m]. Like
+      # the waypoint loop, it reaches out in +x, away from the bus; it must
+      # contain the start pose (0, 0).
+      dx_min:        0.0
+      dx_max:        0.25
+      dy_min:       -0.12
+      dy_max:        0.12
+      yaw_max:       0.3         # [rad] either side of the start orientation
     dwell_sec:     4.0           # hold each waypoint this long
     republish_hz:  2.0           # re-send the current target this often (DDS drop guard)
     loop:          true         # false → stop on the last waypoint
