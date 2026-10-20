@@ -44,13 +44,22 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 find_package(mujoco REQUIRED)
 find_package(acados REQUIRED)
 
+# Layout, by role (include/pat_arm_control/<role>/ mirrors src/<role>/):
+#   common/     profiling instruments every law and node shares
+#   dynamics/   FloatingBaseDynamics, the plant model the control laws use
+#   control/    the control laws; control/nmpc/ is the NMPC and its QP solver
+#   observers/  disturbance observers
+#   reference/  reference windows, trajectory shapes, teleop (no dependencies)
+#   src/nodes/  the ROS nodes -- their headers are private, never installed
+#   src/bench/  ROS-free benches and the support library they share with tests
+
 # ─── Reference trajectories — no dependencies at all ──────────────────────
 # Its own library so the planner (ee_target_publisher) can link the shape
 # generators without pulling in MuJoCo and acados; the controller library
 # links it too, so both build the same reference from the same code.
 add_library(pat_arm_control_reference STATIC
-    src/reference_trajectory.cpp
-    src/teleop_reference.cpp)
+    src/reference/reference_trajectory.cpp
+    src/reference/teleop_reference.cpp)
 target_include_directories(pat_arm_control_reference PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>)
@@ -59,10 +68,13 @@ pat_arm_control_arch_flags(pat_arm_control_reference)
 
 # ─── Algorithm library — Eigen + MuJoCo + acados, zero ROS ─────────────────
 add_library(pat_arm_control_lib STATIC
-    src/floating_base_dynamics.cpp
-    src/quad_prob_solver.cpp
-    src/arm_nmpc.cpp
-    src/momentum_observer.cpp)
+    src/dynamics/floating_base_dynamics.cpp
+    src/control/controller_config.cpp
+    src/control/task_space_controller.cpp
+    src/control/nmpc/quad_prob_solver.cpp
+    src/control/nmpc/arm_nmpc.cpp
+    src/control/nmpc/nmpc_config.cpp
+    src/observers/momentum_observer.cpp)
 target_include_directories(pat_arm_control_lib PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>)
@@ -71,7 +83,7 @@ target_link_libraries(pat_arm_control_lib PUBLIC
 target_compile_options(pat_arm_control_lib PRIVATE -Wall -Wextra -Wpedantic)
 pat_arm_control_arch_flags(pat_arm_control_lib)
 
-# ─── ROS 2 node wrapper ───────────────────────────────────────────────────
+# ─── ROS 2 nodes ──────────────────────────────────────────────────────────
 find_package(rclcpp        REQUIRED)
 find_package(sensor_msgs   REQUIRED)
 find_package(geometry_msgs REQUIRED)
@@ -79,19 +91,29 @@ find_package(nav_msgs      REQUIRED)
 find_package(trajectory_msgs REQUIRED)   # ee_trajectory
 find_package(std_msgs      REQUIRED)   # ee_teleop_reset
 find_package(pat_rt        REQUIRED)   # mailbox, ring, RT thread helpers
-add_executable(arm_control_node src/arm_control_node.cpp)
-pat_arm_control_arch_flags(arm_control_node)
-target_link_libraries(arm_control_node pat_arm_control_lib pat_rt::pat_rt)
-ament_target_dependencies(arm_control_node rclcpp sensor_msgs geometry_msgs nav_msgs
-                          trajectory_msgs)
-install(TARGETS arm_control_node RUNTIME DESTINATION lib/${PROJECT_NAME})
+# The arm controller node, law-agnostic: subscriptions, the realtime control
+# and observer threads, the report. One static library, linked into one
+# executable per control law (nmpc_node, later smc_node, ompc_node), each of
+# which adds only its law's factory.
+add_library(pat_arm_control_node STATIC
+    src/nodes/arm_control_node.cpp
+    src/nodes/arm_control_loop.cpp
+    src/nodes/arm_control_observer.cpp
+    src/nodes/arm_control_report.cpp)
+pat_arm_control_arch_flags(pat_arm_control_node)
+target_link_libraries(pat_arm_control_node PUBLIC pat_arm_control_lib pat_rt::pat_rt)
+ament_target_dependencies(pat_arm_control_node PUBLIC rclcpp sensor_msgs geometry_msgs
+                          nav_msgs trajectory_msgs)
+
+add_executable(nmpc_node src/nodes/nmpc_node.cpp)
+pat_arm_control_arch_flags(nmpc_node)
+target_link_libraries(nmpc_node pat_arm_control_node)
+install(TARGETS nmpc_node RUNTIME DESTINATION lib/${PROJECT_NAME})
 
 # Stand-in mission node: cycles PoseStamped waypoints onto ee_setpoint, or
 # follows a circle / rectangle / teleop command on ee_trajectory. Links only
 # the reference library -- no MuJoCo, no acados.
-add_executable(ee_target_publisher_node src/ee_target_publisher_node.cpp)
-target_include_directories(ee_target_publisher_node PRIVATE
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
+add_executable(ee_target_publisher_node src/nodes/ee_target_publisher_node.cpp)
 target_link_libraries(ee_target_publisher_node pat_arm_control_reference)
 pat_arm_control_arch_flags(ee_target_publisher_node)
 ament_target_dependencies(ee_target_publisher_node rclcpp geometry_msgs trajectory_msgs
@@ -103,7 +125,7 @@ install(TARGETS ee_target_publisher_node RUNTIME DESTINATION lib/${PROJECT_NAME}
 # headless runtime image has none, and nothing else depends on this node.
 find_package(X11 QUIET)
 if(X11_FOUND)
-    add_executable(ee_teleop_node src/ee_teleop_node.cpp)
+    add_executable(ee_teleop_node src/nodes/ee_teleop_node.cpp)
     target_include_directories(ee_teleop_node PRIVATE
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> ${X11_INCLUDE_DIR})
     target_link_libraries(ee_teleop_node ${X11_LIBRARIES})
@@ -135,6 +157,19 @@ add_custom_target(pat_arm_control_models ALL DEPENDS "${_model_xml}")
 install(FILES "${_model_xml}" "${CMAKE_CURRENT_SOURCE_DIR}/models/platform.xml"
         DESTINATION share/${PROJECT_NAME}/models/)
 
+# ─── Bench support: ROS-free config loading and the contact scenario ──────
+# Shared by both benches and by the tests, which score the bench outputs: one
+# compiled copy, so a test checks the code a bench actually runs.
+find_package(yaml-cpp REQUIRED)
+add_library(pat_arm_control_bench STATIC
+    src/bench/bench_yaml.cpp
+    src/bench/contact_scenario.cpp)
+target_include_directories(pat_arm_control_bench PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/bench)
+target_link_libraries(pat_arm_control_bench PUBLIC pat_arm_control_lib yaml-cpp)
+target_compile_options(pat_arm_control_bench PRIVATE -Wall -Wextra -Wpedantic)
+pat_arm_control_arch_flags(pat_arm_control_bench)
+
 # ─── nmpc_bench: ROS-free closed-loop timing ──────────────────────────────
 # Built into the runtime image so the Orin can be characterised with one
 # command: no ROS graph, no DDS, no simulator, no X11. Links the algorithm lib
@@ -145,14 +180,14 @@ install(FILES "${_model_xml}" "${CMAKE_CURRENT_SOURCE_DIR}/models/platform.xml"
 # no ROS: there is no FindPackageShare to resolve them at runtime. They point at
 # the INSTALLED copies, so the binary works from anywhere once installed, and
 # both are overridable with --params / --model.
-find_package(yaml-cpp REQUIRED)
-add_executable(nmpc_bench src/nmpc_bench.cpp src/bench_yaml.cpp)
+add_executable(nmpc_bench src/bench/nmpc_bench.cpp)
 pat_arm_control_arch_flags(nmpc_bench)
 add_dependencies(nmpc_bench pat_arm_control_models)
-target_link_libraries(nmpc_bench pat_arm_control_lib yaml-cpp)
+target_link_libraries(nmpc_bench pat_arm_control_bench)
 # The model too: nmpc.yaml ships mjcf_path as "" because the launch file fills it
 # from FindPackageShare, which a ROS-free binary cannot call.
 target_compile_definitions(nmpc_bench PRIVATE
+    PAT_NMPC_BENCH_COMMON="${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME}/config/arm_common.yaml"
     PAT_NMPC_BENCH_PARAMS="${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME}/config/nmpc.yaml"
     PAT_NMPC_BENCH_MODEL="${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME}/models/pat_platform_planar.xml")
 install(TARGETS nmpc_bench RUNTIME DESTINATION lib/${PROJECT_NAME})
@@ -170,11 +205,12 @@ install(TARGETS nmpc_bench RUNTIME DESTINATION lib/${PROJECT_NAME})
 # so the rule that algorithm packages must not depend on the simulator is not
 # in play. Overridable with --scene, which is how you would point it at a
 # different scene without rebuilding.
-add_executable(contact_bench src/contact_bench.cpp src/contact_scenario.cpp src/bench_yaml.cpp)
+add_executable(contact_bench src/bench/contact_bench.cpp)
 pat_arm_control_arch_flags(contact_bench)
 add_dependencies(contact_bench pat_arm_control_models)
-target_link_libraries(contact_bench pat_arm_control_lib yaml-cpp)
+target_link_libraries(contact_bench pat_arm_control_bench)
 target_compile_definitions(contact_bench PRIVATE
+    PAT_NMPC_BENCH_COMMON="${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME}/config/arm_common.yaml"
     PAT_NMPC_BENCH_PARAMS="${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME}/config/nmpc.yaml"
     PAT_NMPC_BENCH_MODEL="${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME}/models/pat_platform_planar.xml"
     PAT_CONTACT_BENCH_SCENE="${CMAKE_INSTALL_PREFIX}/share/pat_simulation/models/environment/air_bearing_table.xml")
@@ -186,24 +222,40 @@ install(TARGETS contact_bench RUNTIME DESTINATION lib/${PROJECT_NAME})
 # resolved via FindPackageShare the way the node does it.
 if(BUILD_TESTING)
     find_package(ament_cmake_gtest REQUIRED)
-    # contact_scenario.cpp is pulled in for the bench scorers: they turn a
-    # recorded run into the figures the README quotes, so an error in them
-    # produces a confident wrong number rather than a failure.
+    # One executable, one file per topic. test/support/ holds what they share:
+    # the NMPC fixtures, allocation attribution, and the one translation unit
+    # that defines pat_rt's malloc interposer (alloc_counter.cpp). The bench
+    # support library is linked for the bench scorers: they turn a recorded run
+    # into the figures the README quotes, so an error in them produces a
+    # confident wrong number rather than a failure.
     ament_add_gtest(test_pat_arm_control
-        test/test_pat_arm_control.cpp
+        test/support/alloc_counter.cpp
+        test/support/nmpc_fixtures.cpp
+        test/test_nmpc_dynamics.cpp
+        test/test_nmpc_model.cpp
+        test/test_nmpc_constraints.cpp
+        test/test_safe_mode.cpp
+        test/test_feedforward.cpp
+        test/test_reference_tracking.cpp
+        test/test_realtime_profile.cpp
+        test/test_studies.cpp
+        test/test_param_loading.cpp
         test/test_momentum_observer.cpp
         test/test_bench_scoring.cpp
         test/test_reference.cpp
-        test/test_teleop_reference.cpp
-        src/contact_scenario.cpp)
+        test/test_teleop_reference.cpp)
+    target_include_directories(test_pat_arm_control PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/test)
     pat_arm_control_arch_flags(test_pat_arm_control)
     add_dependencies(test_pat_arm_control pat_arm_control_models)
     # ${CMAKE_DL_LIBS}: DISABLED_AllocStudy.Attribution resolves allocation call
     # sites to their shared object with dladdr.
-    target_link_libraries(test_pat_arm_control pat_arm_control_lib pat_rt::pat_rt
-                          ${CMAKE_DL_LIBS})
+    target_link_libraries(test_pat_arm_control pat_arm_control_lib pat_arm_control_bench
+                          pat_rt::pat_rt ${CMAKE_DL_LIBS})
     target_compile_definitions(test_pat_arm_control PRIVATE
-        PAT_NMPC_TEST_MJCF="${_model_xml}")
+        PAT_NMPC_TEST_MJCF="${_model_xml}"
+        PAT_NMPC_TEST_COMMON="${CMAKE_CURRENT_SOURCE_DIR}/config/arm_common.yaml"
+        PAT_NMPC_TEST_PARAMS="${CMAKE_CURRENT_SOURCE_DIR}/config/nmpc.yaml")
 endif()
 
 install(TARGETS pat_arm_control_lib

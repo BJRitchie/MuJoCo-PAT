@@ -20,14 +20,9 @@
 
 #include <gtest/gtest.h>
 
-#include "pat_arm_control/planning/teleop_keys.h"
-#include "pat_arm_control/planning/teleop_reference.h"
-
-// The malloc counter defined in test_pat_arm_control.cpp, in this executable.
-namespace pat_rt_alloc {
-extern volatile bool counting;
-extern long count;
-}  // namespace pat_rt_alloc
+#include "pat_arm_control/reference/teleop_keys.h"
+#include "pat_arm_control/reference/teleop_reference.h"
+#include "pat_rt/testing/alloc_counter.h"
 
 using pat_arm_control::Anchor;
 using pat_arm_control::ArmKeys;
@@ -389,16 +384,18 @@ TEST(Teleop, RejectsNonsenseParameters) {
 TEST(Teleop, SteppingAndPredictingAllocateNothing) {
     TeleopReference r(kHome, params());
     ReferenceWindow w;
-    pat_rt_alloc::count = 0;
-    pat_rt_alloc::counting = true;
-    for (int i = 1; i <= 200; ++i) {   // long enough to cycle the history
-        r.step(kDt * i, {0.05, 0.02, 0.1});
-        r.predict(kDt * i - 0.1, 2.0, kDt, {0.05, 0.02, 0.1}, w);
+    long allocs = 0;
+    {
+        pat_rt::testing::AllocScope scope;
+        for (int i = 1; i <= 200; ++i) {   // long enough to cycle the history
+            r.step(kDt * i, {0.05, 0.02, 0.1});
+            r.predict(kDt * i - 0.1, 2.0, kDt, {0.05, 0.02, 0.1}, w);
+        }
+        r.goHome();
+        for (int i = 201; i <= 400; ++i) r.step(kDt * i, {});
+        allocs = scope.n();
     }
-    r.goHome();
-    for (int i = 201; i <= 400; ++i) r.step(kDt * i, {});
-    pat_rt_alloc::counting = false;
-    EXPECT_EQ(pat_rt_alloc::count, 0);
+    EXPECT_EQ(allocs, 0);
 }
 
 // ============================== keys ====================================== //

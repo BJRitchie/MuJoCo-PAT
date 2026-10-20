@@ -1,15 +1,15 @@
-# Constrained task-space NMPC arm controller — tuning parameters.
+# Constrained task-space NMPC arm controller (nmpc_node) — tuning parameters.
 #
-# Two node instances (pat_arm_nmpc_left / pat_arm_nmpc_right) share the /**
-# block; the per-node blocks set ee_site_name, joint_names, owned_joints and
-# per-joint limits. Swap this whole file per scenario with the `params_file`
-# launch arg. `mjcf_path` is filled by the launch file (FindPackageShare).
+# Loaded AFTER arm_common.yaml, which holds what every control law shares (the
+# model's joints and torque limits, safe-mode Tiers 2/3, the observer, realtime
+# scheduling). This file holds the NMPC's own tuning in its /** block, and the
+# per-arm blocks for its two node instances (pat_arm_nmpc_left / _right):
+# ee_site_name, joint_names, owned_joints, per-joint limits and CPU pinning.
+# Swap this whole file per scenario with the `params_file` launch arg.
 #
 # limits.* are parallel arrays: entry i belongs to that node's joint_names[i]
 #   (this arm's 3 joints — NOT the model's 6).
 # weights.* are 3-vectors [x, y, θz] for the planar task-space law.
-# model_joint_names is ALL model joints in MuJoCo body-tree order — used only
-#   to place measured joint values into the right q/v slots.
 
 # -------------------------------------------------------------------- #
 # ------------------- ITERATIVE LINEARIZATION NMPC ------------------- #
@@ -17,21 +17,6 @@
 
 # /**: # <--- wildcard: all nodes (that load this file) share these parameters 
 #   ros__parameters:
-#     mjcf_path: ""
-#     control_hz: 100.0
-#     model_joint_names: [joint2_L, joint3_L, joint5_L, joint2_R, joint3_R, joint5_R]
-#     # /chaser/odom's chaser_x/y are the chaser's slide-joint values relative
-#     # to air_bearing_table.xacro's own <body name="chaser" pos="-0.5 0 ...">
-#     # anchor, NOT true world-frame position -- this controller's own internal
-#     # model has zero anchor offset (pat_platform_planar.xacro's freejoint
-#     # body is at pos="0 0 0"), so this corrects odom's x at the read (see
-#     # arm_nmpc_node.h's onOdom comment). Confirmed via pat_simulation's
-#     # ee_setpoint marker: published ee_pose was off from the true MuJoCo site
-#     # position by exactly (0.5, 0, ...), matching this anchor. y needs no
-#     # correction (anchor y is 0), kept here for symmetry/future-proofing.
-#     base_anchor_x: -0.5
-#     base_anchor_y:  0.0
-
 #     nmpc:
 #       Ts: 0.5                    # [s] horizon-step interval (not the sim dt)
 #       N:  50                      # horizon steps. NOTE: VORTEX's own reference scenario
@@ -57,18 +42,15 @@
 #                                                 # undamped (already well-behaved); θz is
 #                                                 # damped because the wrist's rotational
 #                                                 # inertia is much lower than its
-#                                                 # translational one, so with Qdotwz=0 the
-#                                                 # yaw channel is far more lightly damped
-#                                                 # than x/y at the same Qwz/Rwz — it visibly
+#                                                 # translational one, so with Q_vel θz = 0
+#                                                 # the yaw channel is far more lightly damped
+#                                                 # than x/y at the same Q_pos/R — it visibly
 #                                                 # oscillates (edot_th swinging +-2.5 rad/s
 #                                                 # every tick even once e_th had converged)
 #                                                 # while x/y track cleanly. Confirmed 2.0
 #                                                 # tames it (edot_th mostly <0.7, several
 #                                                 # near 0) without hurting x/y or slack.
 #       R:            [  1.0e-2, 1.0e-2, 1.0e-1]  # task-space effort regularization
-#       Q_ori:        [ 10.0,   10.0,   10.0  ]   # unused in the planar law
-#       Q_angvel:     [  0.0,    0.0,    0.0  ]   # unused
-#       R_ori:        [  1.0e-3, 1.0e-3, 1.0e-3]  # unused
 #       du_max_trans: [ 50.0,   50.0,   50.0  ]   # SQP trust region (full-nonlinear only)
 #       du_max_rot:   [  5.0,    5.0,    5.0  ]   # SQP trust region (full-nonlinear only)
 
@@ -110,37 +92,13 @@
 # ------------------- SQP NMPC ------------------- #
 # ------------------------------------------------ #
 
-/**: # <--- wildcard: all nodes (that load this file) share these parameters 
+/**: # <--- wildcard: all nodes (that load this file) share these parameters
   ros__parameters:
-    mjcf_path: ""
-    # Matched to pat_simulation's pub_rate_hz (100): solving faster than the state
-    # arrives re-solves on an estimate already used. Doubling the period to 10 ms
-    # takes over-deadline ticks from 4.12% to 0.06% at no cost in tracking.
-    control_hz: 100.0
-    model_joint_names: [joint2_L, joint3_L, joint5_L, joint2_R, joint3_R, joint5_R]
-
-    # [N*m] per model joint, parallel to model_joint_names. THE single place arm
-    # torque limits are set -- a limit belongs to the actuator, not to whichever
-    # node drives that arm, and each node constrains all model joints. Position
-    # ranges are NOT here: they come from the MJCF, which is what MuJoCo enforces.
-    # NOTE disagrees with air_bearing_table.xacro's <motor ctrlrange> (+-10 on
-    # joint2/3, +-5 on joint5); whichever matches the real Piper, make them agree.
-    model_tau_max: [0.25, 0.25, 0.25, 0.25, 0.25, 0.25]
-
-    # On a failed or non-finite solve, stop tracking and command pure joint
-    # damping (tau = -kd*qdot) until the solver recovers. Each arm damps only its
-    # own joints. kd = damping_frac * model_tau_max / limits.qd_max, so it tracks
-    # the torque limits and stays within damping_frac*tau_max at rated speed --
-    # note the torque limit, not this number, sets how fast the arm can stop.
-    # Graded response to a solve that produced nothing usable:
-    #   Tier 1  replay the last accepted plan, time-shifted  (tier1_max_replay_ticks)
-    #   Tier 2  joint damping, task abandoned                (damping_frac)
-    #   Tier 3  latched damping, no auto-recovery            (tier3_latch_after_ticks)
-    # Tier 1 exists because the solver computes N stages and applies only the first,
-    # so one bad solve does not mean there is nothing sensible left to do.
+    # Tier 1 of the graded failure response (Tiers 2 and 3 are arm_common.yaml's):
+    # replay the last accepted plan, time-shifted. It exists because the solver
+    # computes N stages and applies only the first, so one bad solve does not
+    # mean there is nothing sensible left to do.
     safe_mode:
-      damping_frac: 1.0
-      recovery_ticks: 10   # good solves before leaving Tier 2; hysteresis, not a ramp
       # 5 ticks = 50 ms at 100 Hz. Sized for the transient, not the horizon: the
       # measured failures last one tick, and a replayed plan goes stale as the true
       # state leaves the one it was computed at. Raising it trades tracking error
@@ -151,17 +109,6 @@
       # replayed plan; once a path planner feeds a smooth reference the plan stays
       # valid for longer and this can afford to be larger.
       tier1_max_replay_ticks: 5
-      # 5 s of unbroken damping at 100 Hz. Past that the solver is not coming back
-      # and flapping between damping and tracking is worse than stopping; clearing
-      # the latch is an operator action. 0 never latches.
-      tier3_latch_after_ticks: 500
-
-    # /chaser/odom reports slide-joint values relative to air_bearing_table's
-    # <body name="chaser" pos="-0.5 0 ..."> anchor, not world position, while this
-    # controller's own model has zero anchor offset -- so correct odom's x at the
-    # read (see arm_nmpc_node.h's onOdom). y is 0, kept for symmetry.
-    base_anchor_x: -0.5
-    base_anchor_y:  0.0
 
     nmpc:
       Ts: 0.033
@@ -187,9 +134,6 @@
       Q_pos:        [10.0,   10.0,   1.0   ]   
       Q_vel:        [ 1.0,    1.0,   3.0   ]   
       R:            [ 1.0e-1, 1.0e-1, 1.0e-1]  # task-space effort regularization
-      Q_ori:        [10.0,   10.0,   10.0  ]   # unused in the planar law
-      Q_angvel:     [ 0.0,    0.0,    0.0  ]   # unused
-      R_ori:        [ 1.0e-3, 1.0e-3, 1.0e-3]  # unused
 
     qp:
       max_iter: 60
@@ -233,97 +177,6 @@
       soft_torque_limits: false
       relax_box_to_contain_x0: false   # hard box only; with a soft box it weakens
       relax_box_margin: 1.0e-3         #   the slack that does the restoring
-
-    # --- Realtime scheduling for the control thread ------------------------
-    # The control loop always runs on its own thread, woken against an absolute
-    # deadline. These only decide whether it also gets a realtime policy, and
-    # default to off so that turning it on is a deliberate, measurable change.
-    #
-    # rt_priority: 0 = normal priority. 70-80 is the useful band: above ordinary
-    #   work, below the kernel's own threads at 99. Needs RLIMIT_RTPRIO (see
-    #   docker-compose.yml's ulimits); if it is refused the node logs once and
-    #   keeps running at normal priority rather than failing to start.
-    # lock_memory: mlockall, so a page fault cannot stall a tick. Needs
-    #   ulimits.memlock to clear the node's VIRTUAL size, not its resident set.
-    #
-    # What this is worth, measured (README's "Realtime scheduling, measured"):
-    # with another normal-priority task competing for the same core, SCHED_FIFO
-    # HALVES the p95 tick and the max, 4 of 4 paired runs. With nothing competing
-    # it is ~6% WORSE on the mean. So it pays off only under load, which is the
-    # deployment case (vision + a planner alongside) and not the dev case -- hence
-    # 0 here, and 80 in whatever config the Jetson runs.
-    #
-    # ALWAYS set the per-node rt_cpus below when enabling rt_priority on a host
-    # whose cores differ in speed: the realtime scheduler ignores core capability,
-    # and on this box's E-cores under a battery cap that doubled the mean tick.
-    rt_priority: 0
-    lock_memory: false
-
-    # --- Disturbance observer --------------------------------------------- #
-    # Estimates the generalised force the model does not account for:
-    # unmodelled link inertia, air-bearing drag, contact reaction.
-    #
-    # "none" | "momentum". Off by default, and switching it on changes the
-    # torque command NOT AT ALL -- the estimate is published on
-    # /chaser/arm/<side>/disturbance for scoring and nothing consumes it.
-    # Feeding it to the control law is a separate change, because an unguarded
-    # estimate reaching the actuators makes things worse rather than better.
-    observer: "none"
-    # Observer rate [Hz]. Its own thread, so this is independent of control_hz.
-    # It must match the rate the thread actually runs at, which it does by
-    # construction here - the filter integrates, so a mismatch is a scale error
-    # on the estimate rather than just a timing detail.
-    observer.hz: 100.0
-    # Gain K per DOF [1/s]. The estimate reaches the true disturbance with time
-    # constant 1/K, so 20 is a 50 ms lag. Higher tracks contact sooner and
-    # passes more measurement noise through.
-    observer.gain: 20.0
-    # Separate gain for the 6 base rows; < 0 means use observer.gain for them
-    # too. Worth having because they are a different physical quantity (a base
-    # force in N against a joint torque in N*m) and they sit on the noisiest
-    # channel in the system, the odom-derived base velocity.
-    observer.gain_base: -1.0
-    # Clamp on |Mdot| entries [1/s]; 0 disables. Mdot is a divided difference,
-    # so a velocity glitch or a skipped period produces one enormous value and
-    # a matching spike in the estimate. Measured at 0.3% error against a
-    # configuration-space finite difference at operating speeds, so this is a
-    # guard against glitches rather than a correction for the method.
-    observer.mdot_clamp: 0.0
-    # Clamp on each estimate entry [N or N*m]; 0 disables. Bounds the state, and
-    # holds the integrator consistent with the clamped output so a transient
-    # cannot wind it up.
-    observer.estimate_clamp: 0.0
-    #
-    # Feedforward: how much of the estimate to actually cancel, as
-    #   tau = J^T u + Cv_joints - ff_gain * d_hat
-    # with the QP's torque bounds shifted by the same amount, so a torque limit
-    # still means what it says.
-    #
-    # 0 = the observer runs, publishes and is scored, and the command is
-    # untouched. That is the default even with observer: "momentum", because
-    # compensating an estimate closes a loop around it, and the estimate has its
-    # own lag (1/gain) and its own error floor. Bring it up in stages: measure
-    # the estimate first, then 0.5, then 1.0.
-    observer.ff_gain: 0.0
-    # Saturation, as a fraction of each joint's torque limit. NOT optional
-    # dressing: the estimate is unbounded by construction (a momentum residual
-    # during hard contact is whatever the contact was) and it goes straight to
-    # the actuators. This is what makes a bad estimate cost tracking accuracy
-    # instead of costing the arm.
-    observer.ff_max_frac: 0.3
-    # Maximum rate of change of the feedforward [N*m/s]; 0 disables. Catches a
-    # different failure from the saturation - that one bounds a wrong steady
-    # estimate, this one bounds a fast one. Contact makes the residual step
-    # within a tick or two, and handing that step to a motor is a torque
-    # discontinuity the arm feels.
-    observer.ff_slew: 0.0
-    # The observer thread's realtime priority and cores. Same meaning as
-    # rt_priority / rt_cpus above, and the same reason for the default of 0.
-    # Give it DIFFERENT cores from the control thread, per arm: sharing a core
-    # is most of what having its own thread was meant to avoid. Set per node
-    # below, like rt_cpus, and left unset here for the empty-list reason given
-    # there.
-    rt_priority_observer: 0
 
 pat_arm_nmpc_left:
   ros__parameters:

@@ -23,7 +23,12 @@ ament_export_dependencies(Threads)
 
 if(BUILD_TESTING)
     find_package(ament_cmake_gtest REQUIRED)
-    ament_add_gtest(test_pat_rt test/test_rt_thread.cpp)
+    # alloc_counter.cpp is the one translation unit that defines the malloc
+    # interposer (pat_rt/testing/alloc_counter_impl.h).
+    ament_add_gtest(test_pat_rt
+        test/test_rt_thread.cpp
+        test/test_rt_mailbox.cpp
+        test/alloc_counter.cpp)
     target_link_libraries(test_pat_rt pat_rt)
 endif()
 

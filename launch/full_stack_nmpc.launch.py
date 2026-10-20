@@ -21,6 +21,8 @@ its setpoint - see /chaser/telemetry/*).
 
 `params_file:=/path/to/nmpc.yaml` swaps the NMPC tuning set, forwarded to
 arm_nmpc.launch.py. Defaults to pat_arm_control's installed config/nmpc.yaml.
+`common_params_file:=` likewise swaps the settings every arm control law shares
+(config/arm_common.yaml), which load first.
 
 `with_nav:=true` brings up pat_gnc's nav_node (the IMU-driven base state
 estimator, config `nav_params:=`, default pat_gnc/config/nav.yaml) and points
@@ -61,6 +63,7 @@ def generate_launch_description() -> LaunchDescription:
         "'/chaser/nav/odom' if '", LaunchConfiguration("with_nav"),
         "' == 'true' else '/chaser/odom'"])
     nmpc_args = {"use_sim_time": LaunchConfiguration("use_sim_time"),
+                 "common_params_file": LaunchConfiguration("common_params_file"),
                  "params_file": LaunchConfiguration("params_file"),
                  "trace_file": LaunchConfiguration("trace_file"),
                  "odom_topic": odom_topic}.items()
@@ -72,8 +75,11 @@ def generate_launch_description() -> LaunchDescription:
     # no way to omit the argument conditionally on its value.
     nmpc_params = PathJoinSubstitution(
         [FindPackageShare("pat_arm_control"), "config", "nmpc.yaml"])
+    common_params = PathJoinSubstitution(
+        [FindPackageShare("pat_arm_control"), "config", "arm_common.yaml"])
     return LaunchDescription([
         DeclareLaunchArgument("use_sim_time", default_value="true"),
+        DeclareLaunchArgument("common_params_file", default_value=common_params),
         DeclareLaunchArgument("params_file", default_value=nmpc_params),
         DeclareLaunchArgument("trace_file", default_value=""),
         DeclareLaunchArgument("with_gnc", default_value="false"),

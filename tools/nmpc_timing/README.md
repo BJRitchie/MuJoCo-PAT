@@ -77,6 +77,11 @@ cp src/pat_arm_control/config/nmpc.yaml /tmp/try.yaml
 #   ... edit /tmp/try.yaml ...
 ./tools/nmpc_timing/run_trial.sh -d 300 -o /tmp/try.log /tmp/try.yaml
 
+# a knob shared by every law (safe_mode Tiers 2/3, observer.*, rt_priority,
+# model_tau_max, ...) lives in arm_common.yaml instead: copy that and pass it
+cp src/pat_arm_control/config/arm_common.yaml /tmp/common.yaml
+./tools/nmpc_timing/run_trial.sh -d 300 -o /tmp/try.log -a common_params_file:=/tmp/common.yaml
+
 ./tools/nmpc_timing/summarise_timing.py /tmp/base.log /tmp/try.log
 
 # launch arguments pass through with -a, repeatable, and are recorded in the
@@ -337,16 +342,18 @@ mode  tick_mean  tick_max  over_bud  it_mean   it_max retries    avail    ee_err
 0          1838      3855     0.000     7.41       14       0    1.000   0.09585
 ```
 
-The studies live in `src/pat_arm_control/test/test_pat_arm_control.cpp`:
+The studies live in `src/pat_arm_control/test/test_studies.cpp`:
 
 - `DISABLED_WarmStartStudy.Ladder` — `qp.warm_start` across a setpoint step.
 - `DISABLED_ConstraintStudy.Ladder` / `.BoxIsActuallyEnforced` — soft vs hard
   constraints and the slack weights.
-- `RealtimeProfile.ControlTickAllocationCountIsBounded` — heap allocations per
-  tick (not disabled; it prints the count and asserts a ceiling).
+- `RealtimeProfile.ControlTickAllocationCountIsBounded`, in
+  `test_realtime_profile.cpp` — heap allocations per tick (not disabled; it
+  prints the count and asserts a ceiling).
 
 To study a knob the ladders do not cover, copy `DISABLED_WarmStartStudy.Ladder`
-and loop over it. `runClosedLoop(params, scenario, ticks)` returns `RunMetrics`
+and loop over it. `runClosedLoop(params, scenario, ticks)` (in
+`test/support/nmpc_fixtures.h`) returns `RunMetrics`
 with tick timing, QP iterations, availability, EE error and realised constraint
 violations. Use `Scenario::step_at_tick`/`step_offset` for a mid-run target jump —
 a single fixed setpoint never stresses the solver, so a study without one will

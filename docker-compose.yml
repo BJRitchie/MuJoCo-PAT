@@ -54,7 +54,7 @@ services:
     # negatively, or to change another process's policy - none of which this needs.
     #
     # memlock is for mlockall, so a page fault cannot stall a control tick. The
-    # number has to clear arm_control_node's VIRTUAL size (~750 MB), not its ~33 MB
+    # number has to clear nmpc_node's VIRTUAL size (~750 MB), not its ~33 MB
     # resident set: the kernel admits an MCL_CURRENT mlockall by comparing
     # RLIMIT_MEMLOCK against the process's total_vm, and it does that even with
     # MCL_ONFAULT, which only changes how much memory ends up locked afterwards.

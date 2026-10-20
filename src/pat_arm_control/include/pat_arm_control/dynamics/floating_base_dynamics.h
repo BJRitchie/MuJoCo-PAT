@@ -1,8 +1,9 @@
 #pragma once
 
-#include <chrono>
 #include <memory>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include <Eigen/Dense>
 #include <mujoco/mujoco.h>
@@ -15,9 +16,8 @@ typedef struct mjData_ mjData;
 
 namespace pat_arm_control {
 
-/*! Opaque MuJoCo model + data bundle. Fully defined in the .cpp so raw MuJoCo
- *  headers never leak into this heade
- r (relic from the Basilisk port). */
+/*! Opaque MuJoCo model + data bundle. Fully defined in the .cpp so the MuJoCo
+ *  data structures stay out of this header. */
 struct MjImpl;
 
 /*! Opaque scratch mjData bundle — a SEPARATE mjData sharing MjImpl's mjModel,
@@ -37,83 +37,14 @@ struct NodeDynamics {
     Eigen::Matrix<double,6,1> jdot_qdot6;   //!< GJM-corrected bias accel, 6-vector
 };
 
-/*! Timing accumulator for one phase of the control tick.
- *
- *  Carries a max and a histogram as well as the mean, because for a deadline the
- *  mean is nearly useless: a cumulative average over thousands of ticks barely
- *  moves for the one spike that blows the period. Everything here is fixed-cost —
- *  no allocation, no sorting, no branching on data size — so it is affordable on
- *  the control path.
- *
- *  Bin edges straddle a 5 ms period so the deadline itself is a boundary: the last
- *  two bins are "most of the period" and "over it". */
-struct PhaseStat {
-    static constexpr int kBins = 8;
-    //! Upper edges in microseconds; the final bin is everything above 5 ms.
-    static constexpr double kEdgeUs[kBins] = {50, 100, 250, 500, 1000, 2500, 5000, 1e30};
-
-    double sum_us = 0.0;
-    double max_us = 0.0;
-    long   count  = 0;
-    long   bins[kBins] = {};
-
-    //! Deadline for this phase, in microseconds; 0 means "not a deadline". Counted
-    //! exactly rather than read off the histogram, whose bins are far coarser than
-    //! any period of interest and whose last one is open-ended.
-    double budget_us = 0.0;
-    long   over      = 0;
-
-    void add(double us) {
-        sum_us += us;
-        ++count;
-        if (us > max_us) max_us = us;
-        if (budget_us > 0.0 && us > budget_us) ++over;
-        for (int i = 0; i < kBins; ++i) {
-            if (us <= kEdgeUs[i]) { ++bins[i]; break; }
-        }
-    }
-    //! Clears the measurements but keeps the deadline — that is configuration.
-    void reset() {
-        const double budget = budget_us;
-        *this     = PhaseStat{};
-        budget_us = budget;
-    }
-    double mean() const { return count > 0 ? sum_us / static_cast<double>(count) : 0.0; }
-};
-
-/*! Mean and max of a quantity that is not a duration. Separate from PhaseStat
- *  rather than a reuse of it: PhaseStat's histogram edges are microseconds, and a
- *  count binned against them would read as a time. */
-struct Tally {
-    double sum   = 0.0;
-    double max   = 0.0;
-    long   count = 0;
-
-    void add(double v) { sum += v; ++count; if (v > max) max = v; }
-    void reset() { *this = Tally{}; }
-    double mean() const { return count > 0 ? sum / static_cast<double>(count) : 0.0; }
-};
-
-//! RAII stopwatch feeding a PhaseStat. Kept out of the tick's own accounting: the
-//! measurement itself is two clock reads and a handful of adds.
-struct ScopedTimer {
-    explicit ScopedTimer(PhaseStat& stat)
-        : stat_(stat), start_(std::chrono::steady_clock::now()) {}
-    ~ScopedTimer() {
-        const auto stop = std::chrono::steady_clock::now();
-        stat_.add(std::chrono::duration<double, std::micro>(stop - start_).count());
-    }
-    PhaseStat& stat_;
-    std::chrono::steady_clock::time_point start_;
-};
-
-/*! Base class for a task-space arm controller.
+/*! The plant model a task-space arm controller is built on.
  *
  *  Loads its own MJCF and uses MuJoCo purely as a rigid-body dynamics library
  *  (mass matrix, generalized Jacobian, bias forces) — it is NOT the simulator.
- *  Subclasses implement controlLaw(). Ported from VORTEX FloatingBaseDynamics
- *  with the Basilisk SysModel / message-port plumbing removed; ROS I/O lives
- *  in the node wrapper, never here. */
+ *  TaskSpaceController derives from it and implements controlLaw(); a control
+ *  law derives from that. Ported from VORTEX FloatingBaseDynamics with the
+ *  Basilisk SysModel / message-port plumbing removed; ROS I/O lives in the
+ *  node wrapper, never here. */
 class FloatingBaseDynamics {
 public:
     explicit FloatingBaseDynamics(const std::string& mjcf_path);
@@ -125,32 +56,6 @@ public:
     /*! Arm DOF of the loaded model (mjModel.nv - 6). Valid immediately after
      *  construction. The q/v the caller feeds must be sized 7+this / 6+this. */
     int numArmJoints() const { return n_joints_; }
-
-    /*! Number of active joints to control (≤ MAX_JOINTS).
-     *  Must equal the URDF arm DOF and be set before Reset(). */
-    int numJoints = 0;
-
-    // Setter functions
-    void setDesiredPos(double x, double y, double z) {
-        desiredPos[0] = x; desiredPos[1] = y; desiredPos[2] = z; }
-    void setDesiredVel(double x, double y, double z) {
-        desiredVel[0] = x; desiredVel[1] = y; desiredVel[2] = z; }
-    void setDesiredAcc(double x, double y, double z) {
-        desiredAcc[0] = x; desiredAcc[1] = y; desiredAcc[2] = z; }
-
-    /*! Desired EE orientation setpoint, as a unit quaternion [w, x, y, z]
-     *  (MuJoCo convention). Only consumed by subclasses that opt into
-     *  orientation tracking (e.g. ArmNMPController with
-     *  NMPCParams.trackOrientation = true) — subclasses that never read
-     *  desiredQuat are unaffected. */
-    void setDesiredOrient(double w, double x, double y, double z) {
-        desiredQuat[0] = w; desiredQuat[1] = x; desiredQuat[2] = y; desiredQuat[3] = z; }
-    /*! Desired EE angular velocity setpoint, world frame [rad/s]. */
-    void setDesiredAngVel(double x, double y, double z) {
-        desiredAngVel[0] = x; desiredAngVel[1] = y; desiredAngVel[2] = z; }
-    /*! Desired EE angular acceleration setpoint, world frame [rad/s^2]. */
-    void setDesiredAngAcc(double x, double y, double z) {
-        desiredAngAcc[0] = x; desiredAngAcc[1] = y; desiredAngAcc[2] = z; }
 
     /*! Full-system DOF count (6 base + arm joints), i.e. mjModel.nv. */
     int numDof() const { return 6 + n_joints_; }
@@ -425,7 +330,8 @@ protected:
      *  check that solve against. */
     static Eigen::MatrixXd pinvDLS(const Eigen::MatrixXd& A, double damping);
 
-    /*! Log a BSK_ERROR and throw if hasNaN is true. */
+    /*! Throw std::runtime_error naming `label` if hasNaN is true. The control
+     *  law's guard turns that into safe mode. */
     void checkNaN(bool hasNaN, const char* label);
 
     /*! Redirect MuJoCo's error and warning hooks away from their defaults, which
@@ -459,22 +365,7 @@ protected:
     //! The dynamics helpers' Eigen temporaries, for the same reason again. Sized
     //! once by initNodeScratch() at construction.
     mutable NodeScratch ns_;
-    int      n_joints_ = 0;          //!< arm DOF from URDF (nv − 6)
-    uint64_t prevTime_ = 0;
-
-    /*! Desired task-space trajectory — update each timestep or leave at zero. */
-    double desiredPos[3] = {0.0, 0.0, 0.0};  //!< [m]    EE position setpoint
-    double desiredVel[3] = {0.0, 0.0, 0.0};  //!< [m/s]  EE velocity setpoint
-    double desiredAcc[3] = {0.0, 0.0, 0.0};  //!< [m/s²] EE acceleration setpoint
-
-    /*! Desired EE orientation trajectory — only meaningful to subclasses
-     *  that opt into orientation tracking. desiredQuat defaults to the
-     *  identity quaternion; a subclass must read the arm's own initial
-     *  orientation (or have the scenario call setDesiredOrient) before
-     *  using it as an error reference. */
-    double desiredQuat[4]   = {1.0, 0.0, 0.0, 0.0};  //!< [w,x,y,z] EE orientation setpoint
-    double desiredAngVel[3] = {0.0, 0.0, 0.0};       //!< [rad/s]   EE angular velocity setpoint
-    double desiredAngAcc[3] = {0.0, 0.0, 0.0};       //!< [rad/s²]  EE angular acceleration setpoint
+    int      n_joints_ = 0;          //!< arm DOF of the model (nv − 6)
 };
 
 }  // namespace pat_arm_control

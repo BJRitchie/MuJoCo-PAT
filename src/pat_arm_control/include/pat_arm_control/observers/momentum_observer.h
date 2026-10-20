@@ -3,7 +3,7 @@
 
 #include <Eigen/Dense>
 
-#include "pat_arm_control/interfaces/i_disturbance_observer.h"
+#include "pat_arm_control/observers/i_disturbance_observer.h"
 
 namespace pat_arm_control {
 

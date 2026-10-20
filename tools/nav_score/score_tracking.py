@@ -177,7 +177,7 @@ def main():
     ap.add_argument("--base-topic", default="/chaser/odom",
                     help="the base state the arms read (their odom_topic)")
     ap.add_argument("--anchor", type=float, nargs=2, default=(-0.5, 0.0),
-                    help="nmpc.yaml base_anchor_x base_anchor_y")
+                    help="arm_common.yaml base_anchor_x base_anchor_y")
     a = ap.parse_args()
 
     rclpy.init()

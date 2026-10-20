@@ -20,7 +20,7 @@
 
 #include <gtest/gtest.h>
 
-#include "../src/contact_scenario.h"
+#include "contact_scenario.h"
 
 using pat_arm_control::bench::ContactRow;
 using pat_arm_control::bench::JointScore;

@@ -1,0 +1,147 @@
+# Arm controller settings shared by EVERY control law.
+#
+# Loaded by every arm controller node (nmpc_node today; smc_node, ompc_node
+# later) before its own law's file (nmpc.yaml, ...), which holds that law's
+# tuning and the per-arm blocks keyed by its node names. Everything here is
+# about the arm, the platform and the node, not about how a law controls it,
+# so changing it changes every law the same way.
+#
+# A /** block applies to every node that loads this file; ROS applies a key
+# only to a node that declares it, so a law that does not read one is not
+# affected by it.
+#
+# model_joint_names is ALL model joints in MuJoCo body-tree order -- used to
+#   place measured joint values into the right q/v slots, and the order of every
+#   per-model array (model_tau_max).
+
+/**:
+  ros__parameters:
+    mjcf_path: ""
+    # Matched to pat_simulation's pub_rate_hz (100): solving faster than the state
+    # arrives re-solves on an estimate already used. Doubling the period to 10 ms
+    # takes over-deadline ticks from 4.12% to 0.06% at no cost in tracking.
+    control_hz: 100.0
+    model_joint_names: [joint2_L, joint3_L, joint5_L, joint2_R, joint3_R, joint5_R]
+
+    # [N*m] per model joint, parallel to model_joint_names. THE single place arm
+    # torque limits are set -- a limit belongs to the actuator, not to whichever
+    # node drives that arm, and each node constrains all model joints. Position
+    # ranges are NOT here: they come from the MJCF, which is what MuJoCo enforces.
+    # NOTE disagrees with air_bearing_table.xacro's <motor ctrlrange> (+-10 on
+    # joint2/3, +-5 on joint5); whichever matches the real Piper, make them agree.
+    model_tau_max: [0.25, 0.25, 0.25, 0.25, 0.25, 0.25]
+
+    # When a tick produces nothing usable, stop tracking and command pure joint
+    # damping (tau = -kd*qdot) until the law recovers. Each arm damps only its
+    # own joints. kd = damping_frac * model_tau_max / limits.qd_max, so it tracks
+    # the torque limits and stays within damping_frac*tau_max at rated speed --
+    # note the torque limit, not this number, sets how fast the arm can stop.
+    # Graded response:
+    #   Tier 1  replay the last accepted plan, time-shifted  (a law with a plan:
+    #           nmpc.yaml's safe_mode.tier1_max_replay_ticks)
+    #   Tier 2  joint damping, task abandoned                (damping_frac)
+    #   Tier 3  latched damping, no auto-recovery            (tier3_latch_after_ticks)
+    safe_mode:
+      damping_frac: 1.0
+      recovery_ticks: 10   # good ticks before leaving Tier 2; hysteresis, not a ramp
+      # 5 s of unbroken damping at 100 Hz. Past that the law is not coming back
+      # and flapping between damping and tracking is worse than stopping; clearing
+      # the latch is an operator action. 0 never latches.
+      tier3_latch_after_ticks: 500
+
+    # /chaser/odom reports slide-joint values relative to air_bearing_table's
+    # <body name="chaser" pos="-0.5 0 ..."> anchor, not world position, while the
+    # controller's own model has zero anchor offset -- so correct odom's x at the
+    # read (see src/nodes/arm_control_node.h's base_anchor comment). y is 0, kept for
+    # symmetry.
+    base_anchor_x: -0.5
+    base_anchor_y:  0.0
+
+    # --- Realtime scheduling for the control thread ------------------------
+    # The control loop always runs on its own thread, woken against an absolute
+    # deadline. These only decide whether it also gets a realtime policy, and
+    # default to off so that turning it on is a deliberate, measurable change.
+    #
+    # rt_priority: 0 = normal priority. 70-80 is the useful band: above ordinary
+    #   work, below the kernel's own threads at 99. Needs RLIMIT_RTPRIO (see
+    #   docker-compose.yml's ulimits); if it is refused the node logs once and
+    #   keeps running at normal priority rather than failing to start.
+    # lock_memory: mlockall, so a page fault cannot stall a tick. Needs
+    #   ulimits.memlock to clear the node's VIRTUAL size, not its resident set.
+    #
+    # What this is worth, measured (README's "Realtime scheduling, measured"):
+    # with another normal-priority task competing for the same core, SCHED_FIFO
+    # HALVES the p95 tick and the max, 4 of 4 paired runs. With nothing competing
+    # it is ~6% WORSE on the mean. So it pays off only under load, which is the
+    # deployment case (vision + a planner alongside) and not the dev case -- hence
+    # 0 here, and 80 in whatever config the Jetson runs.
+    #
+    # ALWAYS set the per-node rt_cpus (in the law's file) when enabling
+    # rt_priority on a host whose cores differ in speed: the realtime scheduler
+    # ignores core capability, and on this box's E-cores under a battery cap that
+    # doubled the mean tick.
+    rt_priority: 0
+    lock_memory: false
+
+    # --- Disturbance observer --------------------------------------------- #
+    # Estimates the generalised force the model does not account for:
+    # unmodelled link inertia, air-bearing drag, contact reaction.
+    #
+    # "none" | "momentum". Off by default. Switched on, it publishes its estimate
+    # on /chaser/arm/<side>/disturbance for scoring, and the command changes only
+    # through observer.ff_gain below, which ships at 0.
+    observer: "none"
+    # Observer rate [Hz]. Its own thread, so this is independent of control_hz.
+    # It must match the rate the thread actually runs at, which it does by
+    # construction here - the filter integrates, so a mismatch is a scale error
+    # on the estimate rather than just a timing detail.
+    observer.hz: 100.0
+    # Gain K per DOF [1/s]. The estimate reaches the true disturbance with time
+    # constant 1/K, so 20 is a 50 ms lag. Higher tracks contact sooner and
+    # passes more measurement noise through.
+    observer.gain: 20.0
+    # Separate gain for the 6 base rows; < 0 means use observer.gain for them
+    # too. Worth having because they are a different physical quantity (a base
+    # force in N against a joint torque in N*m) and they sit on the noisiest
+    # channel in the system, the odom-derived base velocity.
+    observer.gain_base: -1.0
+    # Clamp on |Mdot| entries [1/s]; 0 disables. Mdot is a divided difference,
+    # so a velocity glitch or a skipped period produces one enormous value and
+    # a matching spike in the estimate. Measured at 0.3% error against a
+    # configuration-space finite difference at operating speeds, so this is a
+    # guard against glitches rather than a correction for the method.
+    observer.mdot_clamp: 0.0
+    # Clamp on each estimate entry [N or N*m]; 0 disables. Bounds the state, and
+    # holds the integrator consistent with the clamped output so a transient
+    # cannot wind it up.
+    observer.estimate_clamp: 0.0
+    #
+    # Feedforward: how much of the estimate to actually cancel, as
+    #   tau = J^T u + Cv_joints - ff_gain * d_hat
+    # with any torque bounds the law uses shifted by the same amount, so a torque
+    # limit still means what it says.
+    #
+    # 0 = the observer runs, publishes and is scored, and the command is
+    # untouched. That is the default even with observer: "momentum", because
+    # compensating an estimate closes a loop around it, and the estimate has its
+    # own lag (1/gain) and its own error floor. Bring it up in stages: measure
+    # the estimate first, then 0.5, then 1.0.
+    observer.ff_gain: 0.0
+    # Saturation, as a fraction of each joint's torque limit. NOT optional
+    # dressing: the estimate is unbounded by construction (a momentum residual
+    # during hard contact is whatever the contact was) and it goes straight to
+    # the actuators. This is what makes a bad estimate cost tracking accuracy
+    # instead of costing the arm.
+    observer.ff_max_frac: 0.3
+    # Maximum rate of change of the feedforward [N*m/s]; 0 disables. Catches a
+    # different failure from the saturation - that one bounds a wrong steady
+    # estimate, this one bounds a fast one. Contact makes the residual step
+    # within a tick or two, and handing that step to a motor is a torque
+    # discontinuity the arm feels.
+    observer.ff_slew: 0.0
+    # The observer thread's realtime priority and cores. Same meaning as
+    # rt_priority / rt_cpus above, and the same reason for the default of 0.
+    # Give it DIFFERENT cores from the control thread, per arm: sharing a core
+    # is most of what having its own thread was meant to avoid. rt_cpus_observer
+    # is set per node, like rt_cpus, in the law's file.
+    rt_priority_observer: 0

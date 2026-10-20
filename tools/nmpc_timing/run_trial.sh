@@ -86,13 +86,13 @@ fi
 # numbers. Refuse rather than quietly produce a contaminated log.
 #
 # Matched on the command line, not with `pgrep -x`: the kernel truncates comm to
-# 15 characters and "arm_control_node" is 16, so it appears as
-# "arm_control_nod" and an exact-name match silently never fires. The predecessor
-# name, arm_nmpc_node, was 13 characters and fit, so the rename broke this guard
-# without any visible symptom -- which is the worst kind, because a guard that
-# never fires looks exactly like a box that is always clean. The bracket keeps
-# pgrep from matching its own command line.
-if pgrep -f '[a]rm_control_node' >/dev/null 2>&1 || pgrep -x simulation_node >/dev/null 2>&1; then
+# 15 characters, so a longer executable name never matches exactly -- and a guard
+# that never fires looks exactly like a box that is always clean. ARM_NODES names
+# every arm controller executable, one per control law (nmpc_node; smc_node and
+# the like when they exist). The brackets keep pgrep from matching its own
+# command line.
+ARM_NODES='[n]mpc_node'
+if pgrep -f "$ARM_NODES" >/dev/null 2>&1 || pgrep -x simulation_node >/dev/null 2>&1; then
     echo "a sim or NMPC node is already running -- stop it first, or this trial" >&2
     echo "will share the CPU (and the topics) with it" >&2
     exit 1
@@ -118,6 +118,23 @@ else
         echo "  or pass it:      $(basename "$0") ... $SRC_PARAMS" >&2
         exit 1
     fi
+fi
+# The settings every arm controller shares (control_hz, the torque limits, the
+# observer, ...) load first, from arm_common.yaml, and are the installed copy
+# unless a launch argument overrides it: the same stale-copy check applies.
+SRC_COMMON="$ROOT/src/pat_arm_control/config/arm_common.yaml"
+PREFIX=$(ros2 pkg prefix pat_arm_control 2>/dev/null)
+COMMON="$PREFIX/share/pat_arm_control/config/arm_common.yaml"
+for arg in "${EXTRA[@]}"; do
+    case $arg in common_params_file:=*) COMMON=$(readlink -f "${arg#*:=}") ;; esac
+done
+if [ "$COMMON" = "$PREFIX/share/pat_arm_control/config/arm_common.yaml" ] \
+   && [ -f "$SRC_COMMON" ] && [ -f "$COMMON" ] \
+   && ! diff -q "$SRC_COMMON" "$COMMON" >/dev/null 2>&1; then
+    echo "REFUSING: the installed arm_common.yaml differs from src/." >&2
+    diff "$SRC_COMMON" "$COMMON" | sed 's/^/    /' >&2
+    echo "  Rebuild:  colcon build --packages-select pat_arm_control" >&2
+    exit 1
 fi
 
 # The CPU governor, which this box's measurements are extremely sensitive to:
@@ -245,14 +262,15 @@ fi
 # from is worth very little a day later.
 {
     echo "# pat_arm_control trial: $(date -Is), ${DURATION}s"
+    echo "# common_params_file: $COMMON"
     echo "# params_file: $EFFECTIVE"
     [ "${#EXTRA[@]}" -gt 0 ] && echo "# launch_args: ${EXTRA[*]}"
     echo "# cpu_governor: $GOVERNORS"
     [ -n "$EPP" ] && echo "# energy_perf_pref: $EPP"
     echo "# on_ac_power: $ON_AC"
     [ -n "$PD_WATTS" ] && echo "# usb_pd_watts: $PD_WATTS"
-    grep -E '^\s+(control_hz|warm_start|max_iter|N|Ts|full_nonlinear|sqp_iters):' \
-        "$EFFECTIVE" 2>/dev/null | sed 's/^/#   /'
+    grep -hE '^\s+(control_hz|warm_start|max_iter|N|Ts|full_nonlinear|sqp_iters):' \
+        "$COMMON" "$EFFECTIVE" 2>/dev/null | sed 's/^/#   /'
 } > "$LOGFILE"
 
 # Sample the clock through the run, as provenance rather than as a gate. The PEAK
@@ -295,9 +313,9 @@ FREQ_MEAN=0
 rm -f "$FREQ_FILE"
 
 sleep 3
-if pgrep -f '[a]rm_control_node' >/dev/null 2>&1; then
+if pgrep -f "$ARM_NODES" >/dev/null 2>&1; then
     echo "WARNING: nodes survived teardown; kill them before the next trial" >&2
-    pgrep -af '[a]rm_control_node' >&2
+    pgrep -af "$ARM_NODES" >&2
 fi
 
 WINDOWS=$(grep -c 'ticks @' "$LOGFILE" 2>/dev/null || echo 0)

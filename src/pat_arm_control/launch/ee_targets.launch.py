@@ -3,7 +3,7 @@
 A stand-in mission node: cycles each arm through a loop of known-reachable
 end-effector poses on /chaser/arm/<side>/ee_setpoint. In the default
 `relative` mode it reads /chaser/arm/<side>/ee_pose (published by
-arm_control_node) and offsets from there, so the targets are reachable by
+each arm's controller node, e.g. nmpc_node) and offsets from there, so the targets are reachable by
 construction. Run it alongside full_stack_nmpc.launch.py.
 
 Swap the waypoint set with `ee_targets_params_file:=/path/to/other.yaml`.

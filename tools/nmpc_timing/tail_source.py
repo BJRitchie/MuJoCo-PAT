@@ -28,7 +28,8 @@ import sys
 
 from plot_trace import read
 
-# The flush timer's period, as arm_control_node.cpp creates it.
+# The flush timer's period, as the arm controller node creates it
+# (src/nodes/arm_control_node.cpp's diagnostics timer).
 FLUSH_PERIOD_US = 1_000_000.0
 
 

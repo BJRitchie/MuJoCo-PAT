@@ -18,8 +18,8 @@
 
 #include <gtest/gtest.h>
 
-#include "pat_arm_control/control/reference_window.h"
-#include "pat_arm_control/planning/reference_trajectory.h"
+#include "pat_arm_control/reference/reference_trajectory.h"
+#include "pat_arm_control/reference/reference_window.h"
 
 using pat_arm_control::Anchor;
 using pat_arm_control::CircleTrajectory;

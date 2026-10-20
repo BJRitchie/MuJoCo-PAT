@@ -136,5 +136,5 @@ Run either script with `--help` for the full list with rationale in-line.
 - **Leftover ROS processes after a crash**: `pinn_datagen.launch.py` wires
   the whole tree to shut down when the recorder exits, but a hard crash mid-
   episode can leave orphans — `pkill -f simulation_node; pkill -f
-  arm_control_node; pkill -f ee_target_publisher; pkill -f pinn_recorder` before
+  nmpc_node; pkill -f ee_target_publisher; pkill -f pinn_recorder` before
   retrying.

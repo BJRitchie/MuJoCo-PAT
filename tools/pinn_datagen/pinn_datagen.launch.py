@@ -43,6 +43,8 @@ def generate_launch_description() -> LaunchDescription:
     model_path_default = PathJoinSubstitution(
         [FindPackageShare("pat_simulation"), "models", "environment", "air_bearing_table.xml"])
     nmpc_params_default = PathJoinSubstitution([FindPackageShare("pat_arm_control"), "config", "nmpc.yaml"])
+    common_params_default = PathJoinSubstitution(
+        [FindPackageShare("pat_arm_control"), "config", "arm_common.yaml"])
     mjcf_path_default = PathJoinSubstitution(
         [FindPackageShare("pat_arm_control"), "models", "pat_platform_planar.xml"])
 
@@ -57,12 +59,15 @@ def generate_launch_description() -> LaunchDescription:
         output="screen", emulate_tty=True,
     )
 
-    nmpc_common = dict(package="pat_arm_control", executable="arm_control_node",
+    # The shared arm settings first, then the NMPC's own (as arm_nmpc.launch.py).
+    nmpc_common = dict(package="pat_arm_control", executable="nmpc_node",
                         output="screen", emulate_tty=True)
     nmpc_left = Node(name="pat_arm_nmpc_left", parameters=[
+        LaunchConfiguration("common_params_file"),
         LaunchConfiguration("nmpc_params_file"),
         {"mjcf_path": LaunchConfiguration("mjcf_path"), "use_sim_time": use_sim_time}], **nmpc_common)
     nmpc_right = Node(name="pat_arm_nmpc_right", parameters=[
+        LaunchConfiguration("common_params_file"),
         LaunchConfiguration("nmpc_params_file"),
         {"mjcf_path": LaunchConfiguration("mjcf_path"), "use_sim_time": use_sim_time}], **nmpc_common)
 
@@ -92,6 +97,7 @@ def generate_launch_description() -> LaunchDescription:
         # watch one episode live.
         DeclareLaunchArgument("visualise", default_value="false"),
         DeclareLaunchArgument("model_path", default_value=model_path_default),
+        DeclareLaunchArgument("common_params_file", default_value=common_params_default),
         DeclareLaunchArgument("nmpc_params_file", default_value=nmpc_params_default),
         DeclareLaunchArgument("mjcf_path", default_value=mjcf_path_default),
         DeclareLaunchArgument("trial_params_file"),  # required -- no default

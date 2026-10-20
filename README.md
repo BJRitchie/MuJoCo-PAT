@@ -44,13 +44,22 @@ Planar Air-bearing Table simulator for ISAM GNC and manipulation research.
 | `pat_simulation` | MuJoCo sim node + viewer — the hardware stand-in |
 | `pat_gnc` | PID controller, direct/EKF navigation |
 | `pat_robotics` | per-joint arm PID |
-| `pat_arm_control` | dual-arm task-space NMPC |
+| `pat_arm_control` | dual-arm task-space control: one node type per control law (`nmpc_node` today), sharing one law-agnostic node and the safe mode, reference and feedforward handling |
 | `pat_telemetry` | merges joint state/torque, publishes EE-to-setpoint distance |
 
 `tools/pinn_datagen/` (offline training-data generator, not a ROS package) and
 `src/PAT_digital_twin-main/` (RViz digital-twin viewer and CAD source) live
 alongside these; see their own READMEs. Architecture rules and conventions for
-contributors are in [`CLAUDE.md`](CLAUDE.md).
+contributors are in [`CLAUDE.md`](CLAUDE.md), including `pat_arm_control`'s
+layout and the recipe for adding a control law alongside the NMPC.
+
+Each arm controller node loads two parameter files, in order:
+`config/arm_common.yaml` (what every control law shares: the model's joints and
+torque limits, safe mode, the observer, realtime scheduling) and the law's own
+file (`config/nmpc.yaml`: the NMPC's horizon, weights, QP, and the per-arm
+blocks). The launch files expose them as `common_params_file` and
+`params_file`. Both are read at start-up, so a retune or a different law needs a
+restart, never a rebuild.
 
 ## Docker (recommended)
 
@@ -164,7 +173,8 @@ ros2 topic pub -r 2 /chaser/arm/left/ee_setpoint geometry_msgs/msg/PoseStamped \
 ```
 
 Same for `/chaser/arm/right/ee_setpoint`. With no setpoint each arm holds its
-start pose. Swap tuning: `ros2 launch launch/full_stack_nmpc.launch.py params_file:=/path/to/nmpc.yaml`.
+start pose. Swap tuning: `ros2 launch launch/full_stack_nmpc.launch.py params_file:=/path/to/nmpc.yaml`
+(the shared settings: `common_params_file:=/path/to/arm_common.yaml`).
 
 Each arm also publishes its measured EE pose on `/chaser/arm/<side>/ee_pose`
 (world frame) — useful for eyeballing tracking (`ros2 topic echo`) or seeding
@@ -567,7 +577,7 @@ otherwise have to rediscover. None are regressions.
 ### NMPC formulation (`pat_arm_control`)
 
 - **The arm's real torque limit is unsettled, and the two models disagree.**
-  `nmpc.yaml`'s `model_tau_max` is 0.25 N·m per joint; `air_bearing_table.xacro`'s
+  `arm_common.yaml`'s `model_tau_max` is 0.25 N·m per joint; `air_bearing_table.xacro`'s
   `<motor ctrlrange>` is ±10 N·m (joint2/joint3) and ±5 N·m (joint5), so the
   simulated actuators deliver up to 40× what the controller will command. One of
   the two is wrong about the hardware. Everything downstream scales off whichever
@@ -615,10 +625,6 @@ otherwise have to rediscover. None are regressions.
   not. The velocity rows also carry a milder version of the clamp problem fixed
   for positions: the clamp sits at 2× the limit, so the velocity box can only be
   masked once the rollout exceeds twice its bound.
-- **`nmpc.yaml` still carries dead weights.** `Q_ori`, `Q_angvel` and `R_ori` are
-  unused by the planar law (the θz channel reads `Q_pos`/`Q_vel`/`R`'s third
-  entry). The commented-out reference block's `full_nonlinear` comment also still
-  describes the SQP path as untuned and QP-failing.
 
 ### Disturbance observer (`pat_arm_control`)
 
@@ -947,7 +953,7 @@ no observer compensates an impulse.
 
 #### Running it
 
-`observer: "momentum"` in `nmpc.yaml` starts it on its own thread, at
+`observer: "momentum"` in `arm_common.yaml` starts it on its own thread, at
 `observer.hz`, pinned by `rt_cpus_observer`. It publishes
 `/chaser/arm/<side>/disturbance` — this arm's joint rows plus `base_fx`,
 `base_fy`, `base_tz` — and **nothing consumes it**, so switching it on does not
@@ -1453,7 +1459,7 @@ problem pays both more iterations and somewhat dearer ones. Two consequences:
     QP -- not the toolchain.
 - **Realtime scheduling is available but off by default.** The control loop runs on
   its own thread woken against an absolute deadline, and `rt_priority` /
-  `lock_memory` / `rt_cpus` in `nmpc.yaml` turn on `SCHED_FIFO`, `mlockall` and core
+  `lock_memory` (`arm_common.yaml`) and the per-arm `rt_cpus` (`nmpc.yaml`) turn on `SCHED_FIFO`, `mlockall` and core
   pinning. They default to off so enabling them stays a deliberate, measurable
   change, and a refused policy logs once and keeps running rather than failing to
   start. See "Realtime scheduling, measured" below.
@@ -1735,7 +1741,8 @@ Expect little: the same class of flags moved nothing measurable on x86 (see
 "Settled by measurement"). The point is not leaving the target unstated.
 
 **4. Realtime scheduling, which is a config change and not a kernel one.** Set
-`rt_priority: 80` and the per-arm `rt_cpus` in the deployment `nmpc.yaml`, and
+`rt_priority: 80` in the deployment `arm_common.yaml` and the per-arm `rt_cpus`
+in its `nmpc.yaml`, and
 grant the limits -- `ulimits: {rtprio: 99, memlock: <clears VmSize>}`. It is
 `RLIMIT_RTPRIO` that permits `SCHED_FIFO` for an unprivileged user, NOT
 `CAP_SYS_NICE`, and `cap_add` is inert when the container runs as a non-root user.
