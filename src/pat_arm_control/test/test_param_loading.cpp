@@ -217,6 +217,38 @@ TEST(ParamLoading, TheShippedFileLoadsForBothArms) {
     }
 }
 
+TEST(ParamLoading, EveryLawsShippedFileLoadsThroughTheBenchLoader) {
+    // The benches pick a law's node block and loader by name. Each law's shipped
+    // file, with arm_common.yaml, has to load for both arms with every key
+    // mapped -- the same check the NMPC's file gets above.
+    const std::set<std::string> node_only = {
+        "control_hz", "arm_side", "rt_priority", "lock_memory", "rt_cpus",
+        "rt_priority_observer", "rt_cpus_observer", "trace_file",
+        "trace_capacity", "pub_rate_hz"};
+    const struct { const char* law; const char* file; } laws[] = {
+        {"nmpc", PAT_NMPC_TEST_PARAMS},
+        {"ompc", PAT_OMPC_TEST_PARAMS},
+        {"smc",  PAT_SMC_TEST_PARAMS}};
+    for (const auto& l : laws) {
+        for (const std::string arm : {"left", "right"}) {
+            const Loaded L = loadConfig(
+                std::vector<std::string>{PAT_NMPC_TEST_COMMON, l.file}, arm,
+                "model.xml", "default.xml", node_only, "test", l.law);
+            EXPECT_EQ(L.law, l.law);
+            EXPECT_EQ(L.common().joint_lims.size(), 3u) << l.law << " " << arm;
+            EXPECT_EQ(L.common().ee_site_name, arm == "left" ? "ee_site_L" : "ee_site_R")
+                << l.law << " " << arm;
+        }
+    }
+}
+
+TEST(ParamLoading, AnUnknownLawIsRefused) {
+    EXPECT_THROW(loadConfig(std::vector<std::string>{PAT_NMPC_TEST_COMMON,
+                                                     PAT_NMPC_TEST_PARAMS},
+                            "left", "model.xml", "default.xml", {}, "test", "lqr"),
+                 std::runtime_error);
+}
+
 TEST(ParamLoading, AKeyNothingMapsIsRefused) {
     const std::string path = writeYaml("unknown.yaml", R"(
 /**:

@@ -6,20 +6,6 @@
 
 namespace pat_arm_control {
 
-namespace {
-
-//! A [x, y, thetaz] weight vector; exactly three entries.
-std::array<double, 3> vec3(ParamSource& src, const std::string& key,
-                           std::array<double, 3> def) {
-    const auto v = src.getDoubles(key, {def[0], def[1], def[2]});
-    if (v.size() != 3)
-        throw std::runtime_error(key + ": expected 3 entries, got " +
-                                 std::to_string(v.size()));
-    return {v[0], v[1], v[2]};
-}
-
-}  // namespace
-
 NMPCParams loadNmpcParams(ParamSource& src, const ArmJoints& joints) {
     NMPCParams p;
     loadControllerParams(src, joints, p);
@@ -41,9 +27,9 @@ NMPCParams loadNmpcParams(ParamSource& src, const ArmJoints& joints) {
     p.reference_preview = src.getBool("nmpc.reference_preview", p.reference_preview);
 
     // [x, y, θz] each: the planar law's three task channels.
-    p.Q_pos = vec3(src, "weights.Q_pos", p.Q_pos);
-    p.Q_vel = vec3(src, "weights.Q_vel", p.Q_vel);
-    p.R     = vec3(src, "weights.R",     p.R);
+    p.Q_pos = loadTriple(src, "weights.Q_pos", p.Q_pos);
+    p.Q_vel = loadTriple(src, "weights.Q_vel", p.Q_vel);
+    p.R     = loadTriple(src, "weights.R",     p.R);
     p.du_max_frac = src.getDouble("nmpc.du_max_frac", p.du_max_frac);
 
     p.qp_max_iter    = src.getInt("qp.max_iter", p.qp_max_iter);

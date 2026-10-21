@@ -50,6 +50,7 @@ public:
         PhaseStat tick, dynamics, jdotqdot, lambda, qpsolve;
         PhaseStat rollout_dynamics, rollout_integrate, pinv;
         PhaseStat build_model, defect, trust_region, finalize;
+        PhaseStat law;   //!< a closed-form law's own computation (OneStepController)
         Tally     qp_iters, qp_time_ms;
         long      qp_retries    = 0;
         long      spd_fallbacks = 0;
@@ -154,6 +155,9 @@ public:
     //! The solver's status from the last tick (0 = converged); 0 for a law
     //! with no solver.
     virtual int lastQpStatus() const = 0;
+    //! Whether the law solves an optimisation each tick, which decides how the
+    //! node words a failure: "solve failed (QP status n)" or "tick failed".
+    virtual bool hasSolver() const { return false; }
 
     // --- Diagnostics ------------------------------------------------------- //
 

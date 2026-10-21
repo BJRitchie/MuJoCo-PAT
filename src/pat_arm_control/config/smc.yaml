@@ -1,0 +1,73 @@
+# Sliding-mode task-space arm controller (smc_node) — tuning parameters.
+#
+# Loaded AFTER arm_common.yaml, which holds what every control law shares (the
+# model's joints and torque limits, safe-mode Tiers 2/3, the observer, realtime
+# scheduling). This file holds the SMC's own tuning in its /** block, and the
+# per-arm blocks for its two node instances (pat_arm_smc_left / _right):
+# ee_site_name, joint_names, owned_joints, per-joint limits and CPU pinning.
+# Swap this whole file per scenario with the `params_file` launch arg.
+#
+# The law (Shi et al. 2017, Eq. 26/27) drives sigma = edot + lam*e to zero with
+# a switching term rho*sat(sigma/epsilon), then slides along the surface to the
+# target. It has no horizon and no constraints: the per-joint torque limit is a
+# clamp, so a command that wants more than the limit saturates.
+#
+# smc.lam and smc.alpha are 3-vectors [x, y, θz], as the NMPC's weights are.
+# limits.* are parallel arrays: entry i belongs to that node's joint_names[i]
+#   (this arm's 3 joints — NOT the model's 6).
+
+/**: # <--- wildcard: all nodes (that load this file) share these parameters
+  ros__parameters:
+    smc:
+      # Surface slope per axis [1/s]: how fast the error decays once on the
+      # surface. Higher is faster and demands more torque.
+      lam:   [3.0, 3.0, 3.0]
+      # Floor added to the switching gain rho on each axis [m/s^2, rad/s^2].
+      alpha: [0.5, 0.5, 0.5]
+      # Boundary-layer width, in units of sigma. Inside it the switching term is
+      # linear instead of a sign: a smaller epsilon is a stiffer approach and more
+      # chatter, a larger one a smoother command and a wider steady-state band.
+      epsilon: 0.05
+      # Shi's bound on the model-error ratio, and the gains k2, b2 of the
+      # robustness term in rho.
+      pi_bound: 0.3
+      k2: 1.3
+      b2: 1.3
+      # Force bound in rho [N.m]; 0 means the largest model torque limit.
+      tau_bound: 0.0
+      # DLS damping for the task-space inertia pinv(J H_g^-1 J^T).
+      lambda_damping: 0.02
+      # DLS damping for H_g^-1, used only when H_g is not positive definite (a
+      # degenerate model); the normal path is an exact Cholesky inverse.
+      Hg_damping: 0.0001
+
+pat_arm_smc_left:
+  ros__parameters:
+    arm_side: "left"
+    # Fast cores for this arm only, so the two arms never share one. See
+    # nmpc.yaml's note on why this is commented out rather than set to [].
+    # rt_cpus: [4, 5]      # one physical P-core's SMT pair
+    # rt_cpus_observer: [8, 9]   # a DIFFERENT pair from rt_cpus above
+    ee_site_name: "ee_site_L"
+    joint_names:  [joint2_L, joint3_L, joint5_L]
+    owned_joints: [joint2_L, joint3_L, joint5_L]
+    limits:
+      # A software margin 0.05 rad inside the MJCF ranges; may only TIGHTEN them.
+      # The SMC has no position constraint, so these only bound what safe mode
+      # and the report see.
+      q_min:   [ 0.05,  -2.917, -1.17 ]   # [rad]
+      q_max:   [ 3.09,  -0.05,   1.17 ]   # [rad]
+      qd_max:  [ 2.0,    2.0,    1.50 ]   # [rad/s], symmetric
+
+pat_arm_smc_right:
+  ros__parameters:
+    arm_side: "right"
+    # rt_cpus: [6, 7]      # see the left arm's note
+    # rt_cpus_observer: [10, 11]  # see the left arm's note
+    ee_site_name: "ee_site_R"
+    joint_names:  [joint2_R, joint3_R, joint5_R]
+    owned_joints: [joint2_R, joint3_R, joint5_R]
+    limits:
+      q_min:   [ 0.05,  -2.917, -1.17 ]   # see the left arm's note above
+      q_max:   [ 3.09,  -0.05,   1.17 ]
+      qd_max:  [ 2.0,    2.0,    1.50 ]

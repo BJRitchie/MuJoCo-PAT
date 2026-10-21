@@ -21,6 +21,15 @@ std::vector<double> perJoint(ParamSource& src, const std::string& key,
 
 }  // namespace
 
+std::array<double, 3> loadTriple(ParamSource& src, const std::string& key,
+                                 std::array<double, 3> def) {
+    const auto v = src.getDoubles(key, {def[0], def[1], def[2]});
+    if (v.size() != 3)
+        throw std::runtime_error(key + ": expected 3 entries, got " +
+                                 std::to_string(v.size()));
+    return {v[0], v[1], v[2]};
+}
+
 ArmJoints loadArmJoints(ParamSource& src) {
     ArmJoints j;
     j.owned = src.getStrings("joint_names", {});

@@ -3,6 +3,8 @@
 #include <stdexcept>
 
 #include "pat_arm_control/control/nmpc/nmpc_config.h"
+#include "pat_arm_control/control/ompc/ompc_config.h"
+#include "pat_arm_control/control/smc/smc_config.h"
 
 namespace pat_arm_control {
 namespace bench {
@@ -67,7 +69,12 @@ Loaded loadConfig(const std::vector<std::string>& yaml_paths, const std::string&
                   const std::string& mjcf_override,
                   const std::string& default_model,
                   const std::set<std::string>& not_ours,
-                  const std::string& tool) {
+                  const std::string& tool,
+                  const std::string& law) {
+    if (law != "nmpc" && law != "ompc" && law != "smc") {
+        throw std::runtime_error("unknown control law '" + law +
+                                 "' (wanted nmpc, ompc or smc)");
+    }
     std::vector<YAML::Node> roots;
     std::string files;   // for messages
     for (const auto& path : yaml_paths) {
@@ -84,7 +91,7 @@ Loaded loadConfig(const std::vector<std::string>& yaml_paths, const std::string&
         if (root[shared] && root[shared]["ros__parameters"])
             flatten(root[shared]["ros__parameters"], "", f);
     }
-    const std::string node_name = "pat_arm_nmpc_" + arm;
+    const std::string node_name = "pat_arm_" + law + "_" + arm;
     bool have_node = false;
     for (const auto& root : roots) {
         if (root[node_name] && root[node_name]["ros__parameters"]) {
@@ -100,8 +107,11 @@ Loaded loadConfig(const std::vector<std::string>& yaml_paths, const std::string&
     // The library's loaders, the same ones the node runs.
     YamlParamSource src(f);
     Loaded L;
+    L.law      = law;
     L.joints   = loadArmJoints(src);
-    L.params   = loadNmpcParams(src, L.joints);
+    if (law == "nmpc")      L.params = loadNmpcParams(src, L.joints);
+    else if (law == "ompc") L.ompc   = loadOmpcParams(src, L.joints);
+    else                    L.smc    = loadSmcParams(src, L.joints);
     L.observer = loadObserverConfig(src);
     L.anchor   = loadBaseAnchor(src);
 
@@ -127,7 +137,7 @@ Loaded loadConfig(const std::vector<std::string>& yaml_paths, const std::string&
         std::string msg = tool + " does not know these keys in " + files + ":";
         for (const auto& k : unknown) msg += "\n    " + k;
         msg += "\n  Map them in the library's config loaders (controller_config.cpp, "
-               "nmpc_config.cpp), or add them to the tool's not_ours set if they "
+               "nmpc_config.cpp, ompc_config.cpp, smc_config.cpp), or add them to the tool's not_ours set if they "
                "cannot affect what it measures.";
         throw std::runtime_error(msg);
     }

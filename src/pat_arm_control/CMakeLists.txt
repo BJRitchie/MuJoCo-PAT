@@ -74,6 +74,11 @@ add_library(pat_arm_control_lib STATIC
     src/control/nmpc/quad_prob_solver.cpp
     src/control/nmpc/arm_nmpc.cpp
     src/control/nmpc/nmpc_config.cpp
+    src/control/one_step_controller.cpp
+    src/control/ompc/arm_ompc.cpp
+    src/control/ompc/ompc_config.cpp
+    src/control/smc/arm_smc.cpp
+    src/control/smc/smc_config.cpp
     src/observers/momentum_observer.cpp)
 target_include_directories(pat_arm_control_lib PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -109,6 +114,16 @@ add_executable(nmpc_node src/nodes/nmpc_node.cpp)
 pat_arm_control_arch_flags(nmpc_node)
 target_link_libraries(nmpc_node pat_arm_control_node)
 install(TARGETS nmpc_node RUNTIME DESTINATION lib/${PROJECT_NAME})
+
+add_executable(ompc_node src/nodes/ompc_node.cpp)
+pat_arm_control_arch_flags(ompc_node)
+target_link_libraries(ompc_node pat_arm_control_node)
+install(TARGETS ompc_node RUNTIME DESTINATION lib/${PROJECT_NAME})
+
+add_executable(smc_node src/nodes/smc_node.cpp)
+pat_arm_control_arch_flags(smc_node)
+target_link_libraries(smc_node pat_arm_control_node)
+install(TARGETS smc_node RUNTIME DESTINATION lib/${PROJECT_NAME})
 
 # Stand-in mission node: cycles PoseStamped waypoints onto ee_setpoint, or
 # follows a circle / rectangle / teleop command on ee_trajectory. Links only
@@ -210,6 +225,8 @@ pat_arm_control_arch_flags(contact_bench)
 add_dependencies(contact_bench pat_arm_control_models)
 target_link_libraries(contact_bench pat_arm_control_bench)
 target_compile_definitions(contact_bench PRIVATE
+    PAT_OMPC_BENCH_PARAMS="${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME}/config/ompc.yaml"
+    PAT_SMC_BENCH_PARAMS="${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME}/config/smc.yaml"
     PAT_NMPC_BENCH_COMMON="${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME}/config/arm_common.yaml"
     PAT_NMPC_BENCH_PARAMS="${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME}/config/nmpc.yaml"
     PAT_NMPC_BENCH_MODEL="${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME}/models/pat_platform_planar.xml"
@@ -240,6 +257,8 @@ if(BUILD_TESTING)
         test/test_realtime_profile.cpp
         test/test_studies.cpp
         test/test_param_loading.cpp
+        test/test_ompc.cpp
+        test/test_smc.cpp
         test/test_momentum_observer.cpp
         test/test_bench_scoring.cpp
         test/test_reference.cpp
@@ -255,7 +274,9 @@ if(BUILD_TESTING)
     target_compile_definitions(test_pat_arm_control PRIVATE
         PAT_NMPC_TEST_MJCF="${_model_xml}"
         PAT_NMPC_TEST_COMMON="${CMAKE_CURRENT_SOURCE_DIR}/config/arm_common.yaml"
-        PAT_NMPC_TEST_PARAMS="${CMAKE_CURRENT_SOURCE_DIR}/config/nmpc.yaml")
+        PAT_NMPC_TEST_PARAMS="${CMAKE_CURRENT_SOURCE_DIR}/config/nmpc.yaml"
+        PAT_OMPC_TEST_PARAMS="${CMAKE_CURRENT_SOURCE_DIR}/config/ompc.yaml"
+        PAT_SMC_TEST_PARAMS="${CMAKE_CURRENT_SOURCE_DIR}/config/smc.yaml")
 endif()
 
 install(TARGETS pat_arm_control_lib

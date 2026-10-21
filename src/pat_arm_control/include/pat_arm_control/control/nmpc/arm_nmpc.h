@@ -115,6 +115,7 @@ public:
     /*! HPIPM status from the most recent solve (0 = converged), for the node to
      *  report when it logs a transition into safe mode. */
     int lastQpStatus() const override;
+    bool hasSolver() const override { return true; }
 
     /*! The control period in microseconds, so a tick that overruns it is counted
      *  as it happens. Set once at construction; survives resetProfile(). */

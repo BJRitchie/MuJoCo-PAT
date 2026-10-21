@@ -193,6 +193,26 @@ void TaskSpaceController::setReferenceWindow(const ReferenceWindow& window) {
     have_window_ = window_.n > 0;
 }
 
+void TaskSpaceController::planarRows(const Eigen::MatrixXd& J6, Eigen::MatrixXd& J3)
+{
+    J3.resize(3, J6.cols());
+    J3.row(0) = J6.row(0);   // x
+    J3.row(1) = J6.row(1);   // y
+    J3.row(2) = J6.row(5);   // angular-Z
+}
+
+double TaskSpaceController::orientationErrorZ(const double ref_quat[4],
+                                              const Eigen::Vector4d& ee_quat)
+{
+    mjtNum quat_d[4] = {ref_quat[0], ref_quat[1], ref_quat[2], ref_quat[3]};
+    mjtNum quat_ee_arr[4] = {ee_quat[0], ee_quat[1], ee_quat[2], ee_quat[3]};
+    mjtNum e_orient_local[3];
+    mju_subQuat(e_orient_local, quat_d, quat_ee_arr);
+    mjtNum e_orient_world[3];
+    mju_rotVecQuat(e_orient_world, e_orient_local, quat_ee_arr);
+    return e_orient_world[2];
+}
+
 TaskSpaceController::NodeRef TaskSpaceController::staticReference() const {
     // desiredPos[2] (Z) and the X/Y angular components are unused: the task
     // space is planar (x, y, theta_z).
@@ -397,6 +417,7 @@ std::string TaskSpaceController::formatProfile(const ProfileSnapshot& s)
         {"dynamics",   &s.dynamics},   {"jdotqdot",     &s.jdotqdot},
         {"roll_dyn",   &s.rollout_dynamics}, {"roll_intg", &s.rollout_integrate},
         {"pinv",       &s.pinv},       {"lambda",       &s.lambda},
+        {"law",        &s.law},
         {"buildmodel", &s.build_model},{"defect",       &s.defect},
         {"qpsolve",    &s.qpsolve},    {"trust",        &s.trust_region},
         {"finalize",   &s.finalize},
@@ -461,8 +482,12 @@ std::string TaskSpaceController::formatProfile(const ProfileSnapshot& s)
         os << "\n  MuJoCo errors: " << mjErrorCount()
            << " (last: " << lastMjError() << ")";
     }
-    os << "  | peak slack: box=" << s.max_box_slack
-       << " torque=" << s.max_tau_slack;
+    // Soft-constraint slack belongs to a law with a QP; qp_max_iter is how a
+    // snapshot says it has one.
+    if (s.qp_max_iter > 0) {
+        os << "  | peak slack: box=" << s.max_box_slack
+           << " torque=" << s.max_tau_slack;
+    }
     return os.str();
 }
 

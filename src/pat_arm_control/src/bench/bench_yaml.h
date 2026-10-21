@@ -20,6 +20,8 @@
 #include "pat_arm_control/common/param_source.h"
 #include "pat_arm_control/control/controller_config.h"
 #include "pat_arm_control/control/nmpc/arm_nmpc.h"
+#include "pat_arm_control/control/ompc/arm_ompc.h"
+#include "pat_arm_control/control/smc/arm_smc.h"
 
 namespace pat_arm_control {
 namespace bench {
@@ -55,7 +57,21 @@ private:
 };
 
 struct Loaded {
+    //! Which law's block was loaded: "nmpc", "ompc" or "smc". Exactly one of
+    //! `params`, `ompc` and `smc` is filled in, the one for this law; the others
+    //! stay at their defaults. common() is the shared part of whichever it is.
+    std::string    law = "nmpc";
     NMPCParams     params;
+    OMPCParams     ompc;
+    SMCParams      smc;
+    ControllerParams& common() {
+        return law == "ompc" ? static_cast<ControllerParams&>(ompc)
+             : law == "smc"  ? static_cast<ControllerParams&>(smc)
+                             : static_cast<ControllerParams&>(params);
+    }
+    const ControllerParams& common() const {
+        return const_cast<Loaded*>(this)->common();
+    }
     std::string    mjcf;
     //! Both benches need the model joints: one to size the torque-limit array,
     //! the other to map named joints onto the scene's index-named DOF rows.
@@ -83,12 +99,15 @@ struct Loaded {
  *  @param default_model   used when neither `mjcf_override` nor the file's
  *                         mjcf_path gives one
  *  @param tool            named in the error message
+ *  @param law             "nmpc", "ompc" or "smc": which node block and which
+ *                         loader. Anything else is an error.
  */
 Loaded loadConfig(const std::vector<std::string>& yaml_paths, const std::string& arm,
                   const std::string& mjcf_override,
                   const std::string& default_model,
                   const std::set<std::string>& not_ours,
-                  const std::string& tool);
+                  const std::string& tool,
+                  const std::string& law = "nmpc");
 
 }  // namespace bench
 }  // namespace pat_arm_control

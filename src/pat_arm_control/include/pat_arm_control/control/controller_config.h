@@ -4,6 +4,7 @@
  *  correction on the base state. Read from a ParamSource, so the node and the
  *  benches load it through the same code. Zero ROS.
  */
+#include <array>
 #include <string>
 #include <vector>
 
@@ -38,6 +39,11 @@ ArmJoints loadArmJoints(ParamSource& src);
  *  Throws std::runtime_error on a limit array whose length does not match its
  *  joint list, or q_min > q_max. */
 void loadControllerParams(ParamSource& src, const ArmJoints& joints, ControllerParams& p);
+
+/*! A [x, y, thetaz] triple (a weight or a gain per planar task channel);
+ *  exactly three entries, or std::runtime_error naming the key. */
+std::array<double, 3> loadTriple(ParamSource& src, const std::string& key,
+                                 std::array<double, 3> def);
 
 /*! The disturbance observer that runs beside the controller (`observer.*`).
  *  Its feedforward gains are controller parameters, not part of this. */

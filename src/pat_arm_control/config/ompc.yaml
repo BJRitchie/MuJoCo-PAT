@@ -1,0 +1,67 @@
+# One-step MPC task-space arm controller (ompc_node) — tuning parameters.
+#
+# Loaded AFTER arm_common.yaml, which holds what every control law shares (the
+# model's joints and torque limits, safe-mode Tiers 2/3, the observer, realtime
+# scheduling). This file holds the OMPC's own tuning in its /** block, and the
+# per-arm blocks for its two node instances (pat_arm_ompc_left / _right):
+# ee_site_name, joint_names, owned_joints, per-joint limits and CPU pinning.
+# Swap this whole file per scenario with the `params_file` launch arg.
+#
+# The law (Shi et al. 2017, Eq. 38) predicts the task-space error one step Ts
+# ahead from the current linearisation and minimises
+#     1/2 e(t+Ts)' Q e(t+Ts) + 1/2 tau_task' R tau_task
+# in closed form. It has no horizon and no constraints: the per-joint torque
+# limit is a clamp, so a command that wants more than the limit saturates.
+#
+# ompc.Q and ompc.R are 3-vectors [x, y, θz], as the NMPC's weights are.
+# limits.* are parallel arrays: entry i belongs to that node's joint_names[i]
+#   (this arm's 3 joints — NOT the model's 6).
+
+/**: # <--- wildcard: all nodes (that load this file) share these parameters
+  ros__parameters:
+    ompc:
+      # [s] How far ahead the error is predicted. Not the control period: it sets
+      # how hard the law pushes. A longer Ts asks for a gentler, slower approach;
+      # with the 0.25 N.m torque limit a short one saturates immediately.
+      Ts: 1.0
+      # Weight on the predicted error and on the task-space force. Only their
+      # ratio per axis matters; an axis with both 0 is refused (singular gain).
+      Q: [1.0e5, 1.0e5, 1.0e5]
+      R: [1.0,   1.0,   1.0  ]
+      # Added to the diagonal of J H_g^-1 J^T, keeping it invertible near a
+      # kinematic singularity.
+      damping: 1.0e-4
+      # DLS damping for H_g^-1, used only when H_g is not positive definite (a
+      # degenerate model); the normal path is a Cholesky solve.
+      Hg_damping: 0.0001
+
+pat_arm_ompc_left:
+  ros__parameters:
+    arm_side: "left"
+    # Fast cores for this arm only, so the two arms never share one. See
+    # nmpc.yaml's note on why this is commented out rather than set to [].
+    # rt_cpus: [4, 5]      # one physical P-core's SMT pair
+    # rt_cpus_observer: [8, 9]   # a DIFFERENT pair from rt_cpus above
+    ee_site_name: "ee_site_L"
+    joint_names:  [joint2_L, joint3_L, joint5_L]
+    owned_joints: [joint2_L, joint3_L, joint5_L]
+    limits:
+      # A software margin 0.05 rad inside the MJCF ranges; may only TIGHTEN them.
+      # The OMPC has no position constraint, so these only bound what safe mode
+      # and the report see.
+      q_min:   [ 0.05,  -2.917, -1.17 ]   # [rad]
+      q_max:   [ 3.09,  -0.05,   1.17 ]   # [rad]
+      qd_max:  [ 2.0,    2.0,    1.50 ]   # [rad/s], symmetric
+
+pat_arm_ompc_right:
+  ros__parameters:
+    arm_side: "right"
+    # rt_cpus: [6, 7]      # see the left arm's note
+    # rt_cpus_observer: [10, 11]  # see the left arm's note
+    ee_site_name: "ee_site_R"
+    joint_names:  [joint2_R, joint3_R, joint5_R]
+    owned_joints: [joint2_R, joint3_R, joint5_R]
+    limits:
+      q_min:   [ 0.05,  -2.917, -1.17 ]   # see the left arm's note above
+      q_max:   [ 3.09,  -0.05,   1.17 ]
+      qd_max:  [ 2.0,    2.0,    1.50 ]

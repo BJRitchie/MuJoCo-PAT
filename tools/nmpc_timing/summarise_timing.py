@@ -65,10 +65,19 @@ def prefix_of(line):
 def parse(path):
     """-> {side: [window dicts]}, or None if the file cannot be read.
 
-    Windows missing a TICK line are dropped.
+    Windows missing a TICK line are dropped. A law with a QP ends its block with
+    the qp_iter line, which completes the window; a law without one has no such
+    line, so its window is complete when the next one for the same node opens
+    (or the log ends).
     """
     by_side = defaultdict(list)
     open_window = {}          # launch prefix -> the window still being filled
+
+    def flush(w):
+        # A window that got its TICK line but never a qp_iter line.
+        if w is not None and 'max' in w:
+            by_side[w['side']].append(w)
+
     try:
         fh = open(path, errors='replace')
     except OSError as exc:
@@ -83,6 +92,7 @@ def parse(path):
                          period=float(m['period']), jit_mean=float(m['jit_mean']),
                          jit_max=float(m['jit_max']), misses=int(m['misses']),
                          miss_run=int(m['miss_run']), skipped=int(m['skipped']))
+                flush(open_window.get(pfx))
                 open_window[pfx] = w
                 continue
             w = open_window.get(prefix_of(line))
@@ -109,6 +119,8 @@ def parse(path):
                 if 'max' in w:
                     by_side[w['side']].append(w)
                 open_window[prefix_of(line)] = None
+    for w in open_window.values():
+        flush(w)
     return by_side
 
 

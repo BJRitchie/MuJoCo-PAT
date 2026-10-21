@@ -84,6 +84,12 @@ cp src/pat_arm_control/config/arm_common.yaml /tmp/common.yaml
 
 ./tools/nmpc_timing/summarise_timing.py /tmp/base.log /tmp/try.log
 
+# another control law: -l picks the node, and its own YAML is the default
+# params file. A law with no QP reports no qp_iter column, and its rows in
+# summarise_timing.py read 0 there. A "law" phase appears in the profile line.
+./tools/nmpc_timing/run_trial.sh -l ompc -d 300 -o /tmp/ompc.log
+./tools/nmpc_timing/summarise_timing.py /tmp/base.log /tmp/ompc.log
+
 # launch arguments pass through with -a, repeatable, and are recorded in the
 # log header. visualise:=false runs headless, so nothing typed into a viewer
 # window can pause the simulation mid-trial.

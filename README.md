@@ -352,6 +352,82 @@ If nothing moves: check `ros2 node list` shows `/pat_arm_nmpc_left` and
 non-zero. An empty `ros2 node list` or a `ros2 topic hz` segfault means the DDS
 transport is broken — the container needs `--ipc=host --pid=host` (above).
 
+### Control laws (NMPC, OMPC, SMC)
+
+Three task-space laws drive the arms, each its own node type, so the choice is
+which executable runs and never a rebuild:
+
+| Law | Node | What it is |
+|---|---|---|
+| NMPC | `nmpc_node` | the constrained receding-horizon controller above |
+| OMPC | `ompc_node` | one-step-ahead MPC (Shi et al. 2017, Eq. 38): predicts the task-space error one step `Ts` ahead and minimises it in closed form |
+| SMC | `smc_node` | sliding mode (Shi et al. 2017, Eq. 26/27): drives `σ = ė + Λe` to zero through a boundary layer, then slides to the target |
+
+```bash
+ros2 launch launch/full_stack_nmpc.launch.py law:=ompc    # or smc, or nmpc (default)
+ros2 launch pat_arm_control arm_smc.launch.py              # just the arm nodes
+```
+
+Each law has its own YAML (`config/ompc.yaml`, `config/smc.yaml`) beside the
+shared `arm_common.yaml`, and logs as `pat_arm_<law>[side]`. The nodes only touch
+their own joints, so different laws on different arms run together (a launch file
+with one `arm_<law>.launch.py` include per side); two laws on the same arm fight
+over `/chaser/arm/torque_command`.
+
+OMPC and SMC are ports of VORTEX's `armOMPController` and
+`armSlidingModeController`, planar: the task is `[x, y, θz]` rather than
+VORTEX's `(x, y, z)` position, and the weights and gains are `[x, y, θz]`
+triples. Both are closed-form (no solver, no horizon, nothing carried between
+ticks), cost about 10 µs a tick against the NMPC's ~800 µs, and treat the torque
+limit as a clamp, not a constraint.
+
+**Where they differ from VORTEX.**
+- *SMC signs.* VORTEX's SMC returns `-tau_joints` including the `+Cv` term and
+  writes `tau_star = -Λ·z2 + a_d - h' - ρ·sat(σ/ε)`: with `z = p_d - p` no overall
+  sign makes that a stable sliding surface. The port derives the law instead
+  (`xdd* = a_d + Λ·ė + ρ·sat(σ/ε)`, `τ = Jᵀ·L·(xdd* − J̇q̇) + Cv`, derivation in
+  `arm_smc.h`), and the closed-loop tests are the check: it converges, and the
+  same law negated diverges.
+- *SMC `ρ`.* The robustness gain uses `|v_ee|` where VORTEX's `(z2 + v_d)` is
+  `2·v_d − v_ee`; `H_g⁻¹` is exact rather than damped by `Hg_damping`; the force
+  bound `tau_bound` defaults to the largest model torque limit, not 100.
+- *OMPC defaults.* VORTEX's `Q = R = 0` make the gain matrix singular (garbage
+  torque), so the shipped defaults are the ones its scenario used (`Q = 1e5`,
+  `R = 1`, `Ts = 1`), and a weight pair that is zero on an axis is refused.
+  `H_g⁻¹Jᵀ` comes from a Cholesky solve, not a plain inverse.
+
+**Scored offline against the NMPC** with `contact_bench --law nmpc|ompc|smc
+--trajectory circle|rectangle`: one deterministic scenario, a 6 cm circle (8 s
+period) or a 12 × 10 cm rectangle, exact measurements, no observer. Mean
+tracking error in mm:
+
+| | NMPC | OMPC | SMC |
+|---|---|---|---|
+| circle, 1× | 2.02 | 1.01 | 0.84 |
+| circle, 3× | 22.5 | 14.3 | 49.3 |
+| rectangle | 3.73 | 19.8 | 3.84 |
+
+- OMPC beats the NMPC on the smooth circle (1×: 1.01 vs 2.02 mm; 3×: 14.3 vs
+  22.5 mm), but has no look-ahead, so the rectangle's corners cost it: 19.8 vs
+  3.73 mm, trailing the reference by 14.8 mm along-track.
+- SMC tracks the 1× circle best (0.84 mm) and the rectangle as well as the NMPC,
+  but it rails the 0.25 N·m limit on about 6000 joint-ticks even at 1×, and at 3×
+  it falls apart (49.3 mm, peak 150 mm). The switching gain pushes the command to
+  the limit, so the behaviour is close to bang-bang; its `ρ` and `ε` have not
+  been tuned for this arm.
+- The NMPC alone is constrained: its torque peak is 0.064 N·m on the circle and
+  it never rails.
+- These are single runs with perfect state. No noise, observer or live stack
+  was involved, so they are a first comparison, not a ranking.
+
+Live, each law ran against the simulation with the circle publisher for 20 to 40
+seconds with no safe-mode entries, and `run_trial.sh -l ompc|smc|nmpc` times any of
+them. Timed for 300 s each on mains with the `performance` governor (circle,
+headless, 100 Hz, ~29,600 ticks per arm), no law overran the 10 ms period or
+skipped one: the NMPC's tick averaged 825 to 835 µs (worst 5.4 ms, about 7 QP
+iterations), OMPC's 9 to 11 µs (worst 0.14 ms) and SMC's 10 to 12 µs (worst
+0.8 ms).
+
 ### The viewer
 
 | Input | Action |
@@ -625,6 +701,29 @@ otherwise have to rediscover. None are regressions.
   not. The velocity rows also carry a milder version of the clamp problem fixed
   for positions: the clamp sits at 2× the limit, so the velocity box can only be
   masked once the rollout exceeds twice its bound.
+
+### OMPC and SMC (`pat_arm_control`)
+
+- **The SMC's switching gain is untuned.** It rails the 0.25 N·m limit on about
+  6000 joint-ticks at 1× on the circle and tracks 49 mm at 3×, where the NMPC and
+  OMPC do not rail on the 1× circle. `ρ` (Shi Eq. 27, a function of `|H_g⁻¹|`,
+  `|Cv|`, `|v_ee|` and `tau_bound`) and the boundary layer `ε` are where to look;
+  the VORTEX values were tuned for a different arm.
+- **Neither law constrains anything.** The torque limit is a clamp and the joint
+  limits are not seen at all, so a command that wants more than the arm can give
+  saturates rather than being re-solved. Only the NMPC has joint and torque
+  constraints.
+- **The model includes the other arm's joints, which the node does not command.**
+  `L⁻¹ = J H_g⁻¹ Jᵀ` is built over all six joints (as the NMPC's prediction model
+  is) but only this arm's three torques are published, so the other arm's reaction
+  through the base is modelled as if this node drove it. The offline comparison
+  holds the other arm at its start pose, which hides it.
+- **OMPC has no preview.** Its error prediction looks one step `Ts` ahead using the
+  current reference velocity and acceleration, so a reference that turns sharply
+  (the rectangle's corners) is followed late: 19.8 mm mean error against the
+  NMPC's 3.73 mm.
+- **The comparison is offline, exact-state and single-run.** Noise, the observer,
+  flight sensing and the live stack are not part of the numbers above.
 
 ### Disturbance observer (`pat_arm_control`)
 

@@ -12,7 +12,11 @@
 # Then: tools/nmpc_timing/summarise_timing.py /tmp/warm.log /tmp/cold.log
 usage() {
     cat <<USAGE
-usage: $(basename "$0") [-d SECONDS] [-o LOGFILE] [-T FILE] [-a ARG]... [-e] [-g] [PARAMS_FILE]
+usage: $(basename "$0") [-d SECONDS] [-o LOGFILE] [-l LAW] [-T FILE] [-a ARG]... [-e] [-g] [PARAMS_FILE]
+
+  -l LAW       the arm control law to time: nmpc (default), ompc or smc. Launches
+               that law's node for both arms with its own YAML as the default
+               PARAMS_FILE. A law with no QP reports no qp_iter column.
 
   -d SECONDS   how long to run after startup (default 300). The report window is
                1 s, so this is roughly how many windows you get per arm.
@@ -34,9 +38,10 @@ usage: $(basename "$0") [-d SECONDS] [-o LOGFILE] [-T FILE] [-a ARG]... [-e] [-g
                  -a with_nav:=true              arms on nav_node's estimate
                  -a sensor_profile:=<yaml>      flight sensing
   -e           also bring up pat_telemetry, for EE-tracking plots
-  PARAMS_FILE  an nmpc.yaml to use instead of the installed default. Copy
-               src/pat_arm_control/config/nmpc.yaml, change one knob, pass it here --
-               no rebuild needed, since the launch forwards it as params_file.
+  PARAMS_FILE  the law's YAML (nmpc.yaml, ompc.yaml or smc.yaml) to use instead of
+               the installed default. Copy src/pat_arm_control/config/<law>.yaml,
+               change one knob, pass it here -- no rebuild needed, since the
+               launch forwards it as params_file.
 USAGE
 }
 
@@ -45,11 +50,13 @@ LOGFILE="nmpc_trial.log"
 TELEMETRY=false
 TRACE=""
 REQUIRE_PERF=false
+LAW=nmpc
 EXTRA=()
-while getopts ":d:o:T:a:egh" opt; do
+while getopts ":d:o:l:T:a:egh" opt; do
     case $opt in
         d) DURATION=$OPTARG ;;
         o) LOGFILE=$OPTARG ;;
+        l) LAW=$OPTARG ;;
         T) TRACE=$OPTARG ;;
         a) EXTRA+=("$OPTARG") ;;
         e) TELEMETRY=true ;;
@@ -60,6 +67,10 @@ while getopts ":d:o:T:a:egh" opt; do
 done
 shift $((OPTIND - 1))
 PARAMS=${1:-}
+case $LAW in
+    nmpc|ompc|smc) ;;
+    *) echo "unknown law '$LAW' (wanted nmpc, ompc or smc)" >&2; exit 2 ;;
+esac
 
 # The dev image sources ROS from ~/.bashrc, which a non-interactive shell never
 # reads, so do it here instead of requiring the caller to. Harmless when the
@@ -88,12 +99,12 @@ fi
 # Matched on the command line, not with `pgrep -x`: the kernel truncates comm to
 # 15 characters, so a longer executable name never matches exactly -- and a guard
 # that never fires looks exactly like a box that is always clean. ARM_NODES names
-# every arm controller executable, one per control law (nmpc_node; smc_node and
-# the like when they exist). The brackets keep pgrep from matching its own
-# command line.
-ARM_NODES='[n]mpc_node'
+# every arm controller executable, one per control law (nmpc_node, ompc_node,
+# smc_node), so a trial of one law is refused while another is running. The
+# brackets keep pgrep from matching its own command line.
+ARM_NODES='[n]mpc_node|[o]mpc_node|[s]mc_node'
 if pgrep -f "$ARM_NODES" >/dev/null 2>&1 || pgrep -x simulation_node >/dev/null 2>&1; then
-    echo "a sim or NMPC node is already running -- stop it first, or this trial" >&2
+    echo "a sim or arm controller node is already running -- stop it first, or this trial" >&2
     echo "will share the CPU (and the topics) with it" >&2
     exit 1
 fi
@@ -102,15 +113,15 @@ fi
 # FindPackageShare, i.e. the INSTALLED copy -- which is a build-time copy of the
 # source one, so editing src/ without rebuilding silently measures the old
 # config. Resolve it here, report it, and refuse if the two have diverged.
-SRC_PARAMS="$ROOT/src/pat_arm_control/config/nmpc.yaml"
+SRC_PARAMS="$ROOT/src/pat_arm_control/config/$LAW.yaml"
 if [ -n "$PARAMS" ]; then
     EFFECTIVE=$(readlink -f "$PARAMS")
 else
     PREFIX=$(ros2 pkg prefix pat_arm_control 2>/dev/null)
-    EFFECTIVE="$PREFIX/share/pat_arm_control/config/nmpc.yaml"
+    EFFECTIVE="$PREFIX/share/pat_arm_control/config/$LAW.yaml"
     if [ -f "$SRC_PARAMS" ] && [ -f "$EFFECTIVE" ] \
        && ! diff -q "$SRC_PARAMS" "$EFFECTIVE" >/dev/null 2>&1; then
-        echo "REFUSING: the installed nmpc.yaml differs from src/." >&2
+        echo "REFUSING: the installed $LAW.yaml differs from src/." >&2
         echo "  installed (what this run would use): $EFFECTIVE" >&2
         echo "  source   (what you have been editing): $SRC_PARAMS" >&2
         diff "$SRC_PARAMS" "$EFFECTIVE" | sed 's/^/    /' >&2
@@ -235,7 +246,7 @@ if [ "$REQUIRE_PERF" = true ]; then
     fi
 fi
 
-ARGS=(launch/full_stack_nmpc.launch.py with_targets:=true)
+ARGS=(launch/full_stack_nmpc.launch.py with_targets:=true "law:=$LAW")
 [ -n "$PARAMS" ]        && ARGS+=("params_file:=$PARAMS")
 [ -n "$TRACE" ]         && ARGS+=("trace_file:=$TRACE")
 [ "$TELEMETRY" = true ] && ARGS+=(telemetry:=true)
@@ -262,6 +273,7 @@ fi
 # from is worth very little a day later.
 {
     echo "# pat_arm_control trial: $(date -Is), ${DURATION}s"
+    echo "# law: $LAW"
     echo "# common_params_file: $COMMON"
     echo "# params_file: $EFFECTIVE"
     [ "${#EXTRA[@]}" -gt 0 ] && echo "# launch_args: ${EXTRA[*]}"

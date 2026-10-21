@@ -18,7 +18,7 @@ Physics: MuJoCo 3. Control: PID (MVP) → LQR → MPC. Navigation: direct (MVP) 
 | `pat_simulation` | ✅ | MuJoCo simulation node (the hardware stand-in). `/chaser/imu` publishes from the physics loop at `imu_rate_hz` (default = `pub_rate_hz`); every sensor channel is built with the period it is actually advanced at, since `delay_s` / `rate_hz` / `bias_walk_std` are counted in calls. `config/sensors_flight.yaml` is a flight-sensing overlay (`sensor_profile:=`); `nav_bench` scores `pat_gnc`'s estimator against MuJoCo truth offline and deterministically (`--seeds N` for NEES consistency, `--no-position`, `--latency-scale`). |
 | `pat_gnc` | ✅ | IController + INavigator; PID, DirectNav, EKF, and `ImuEkf` (`navigation/imu_ekf.hpp`): the IMU-driven error-state EKF for flight sensing — gyro/accel bias states, late measurements placed by exact state-history replay, χ² gating, allocation-free. Two executables share one navigator factory (`src/navigator_factory.hpp`): `gnc_node` (navigator + PID station-keeping, thrusts) and `nav_node` (navigator only, on its own `SCHED_FIFO` thread via `pat_rt`, publishes `/chaser/nav/odom`, safe alongside `pat_arm_control`). `nav_node` times a worst-case replay at startup and refuses a `imu_ekf.history_len` / `nav_hz` it cannot meet. **PID gains / `planar_dynamics.hpp` still tuned for a 15 kg chaser — the bus is now 49 kg; retune pending.** |
 | `pat_robotics` | ✅ | IJointController + JointPID + ArmController, arm_control_node. IManipulator (FK/IK/Jacobian) still a stub |
-| `pat_arm_control` | 🟡 | Dual-arm task-space NMPC (port of VORTEX `fswAlgorithms/jointControl`). Both planar (x,y,θz) paths are functional against the acados/HPIPM QP — iterative linearization (`nmpc.yaml`'s `full_nonlinear: false`) and multiple-shooting SQP (`full_nonlinear: true`); tuning is in progress, so the active `nmpc.yaml` block moves. Weights `Q_pos`/`Q_vel`/`R` are `[x, y, θz]` and **all three components apply**. A failed or non-finite solve enters a sticky joint-damping safe mode (`safe_mode.*`) rather than substituting an approximate command; the joint and torque constraint groups are independently soft or hard (`qp.soft_joint_limits`/`soft_torque_limits`). The default is a **soft box with hard torque rows**: the box's slack is the only thing that recovers a joint parked outside its limit, while soft torque rows are HPIPM's fragile group near infeasibility and collapse on aarch64 (21.7% availability against 96.7%) — see the README's "Constraint configuration", and do not change either without re-running `DISABLED_ConstraintStudy.Ladder` on both architectures. `relax_box_to_contain_x0` applies to a hard BOX only — never make the box hard without it, and leave it off with a soft box, where it weakens the slack that does the restoring. The rollout's position clamp goes to the MJCF range, NOT the configured margin: clamping to the margin makes the joint box vacuous (see the README's "Settled by measurement"). The control path is allocation-free apart from `computeControl`'s returned vector (one per tick), which matters for the realtime Jetson deployment; keep it that way — `RealtimeProfile.ControlTickAllocationCountIsBounded` and `SteadyStateTicksDoNotKeepAllocating` fail if a per-node allocation comes back, and `DISABLED_AllocStudy.Attribution` locates it. Still open: solve time can exceed the control period at high `control_hz`. `ee_target_publisher` is a stand-in mission node (`pattern: waypoints` loop, or a `circle` / sharp-cornered `rectangle` trajectory for both arms); a real planner is still future work. **Trajectory following:** a sampled window on `ee_trajectory` (`reference/reference_window.h`; shapes in `reference/reference_trajectory.h`, its own dependency-free library) is scored per horizon node at `t_now + k·Ts`, with `t_now` the joint_states stamp, never the ROS clock on the control thread; `reference_preview: false` is the reactive baseline. With no window every node gets the static setpoint, so the setpoint path is bit-identical to before (`Reference.AConstantWindowIsExactlyTheStaticSetpoint`) — keep it that way. The preview wins 3–14× up to ~3× the default speed; past ~4× the hard torque rows go infeasible and solves fail (README "Trajectory following"). `contact_bench --trajectory circle|rectangle --ab-preview|--sweep-speed` measures it deterministically. **Teleop:** `ee_teleop_node` (built only where X11 exists; not in any launch file — needs a display and its own terminal) reads held keys and publishes `ee_teleop` intent; `ee_target_publisher` `pattern: teleop` turns the latest command into windows via `reference/teleop_reference.h` (limits, box, homing; key logic in `reference/teleop_keys.h`, both dependency-free and unit-tested). Each window predicts the latest command held, never a queue of past ones — keep it that way. Never convert message stamps with `rclcpp::Time`/`Duration` in the arm node — they throw on negative values and kill the controller; use `toSeconds`. A momentum disturbance observer (`observers/momentum_observer.h`) runs on its own RT thread (`rt_cpus_observer`) and publishes `/chaser/arm/<side>/disturbance`; it is selected by `observer: "momentum"` and defaults to `"none"`. Its estimate can be fed into the command (`observer.ff_gain`, capped by `ff_max_frac`, rate-limited by `ff_slew`, zeroed in safe mode), but **`ff_gain` ships at 0 and must stay there until velocity sensing is characterised**: at σ = 0.01 rad/s the estimate noise is ~0.52 N·m against a feedforward cap of 0.075 N·m (0.3 × the 0.25 N·m torque limit), so the command would saturate on noise. The 92% model-error tracking recovery in the README was measured on exact measurements and is an upper bound. `observer.gain: 20` is settled by measurement (see the README's "What the gain costs"). Observer scoring is offline in `contact_bench` (deterministic; modes: contact, `--drag`, `--mass-scale`/`--osc`, `--ab-ff`), not against the live stack, whose run-to-run variance swamps the comparison. |
+| `pat_arm_control` | 🟡 | Dual-arm task-space control (port of VORTEX `fswAlgorithms/jointControl`), one node type per law: `nmpc_node` (below), `ompc_node` (one-step MPC, `ArmOMPC`) and `smc_node` (sliding mode, `ArmSMC`, **re-derived rather than copied: VORTEX's signs cannot give a stable surface**, see the header and the README's "Control laws"). OMPC and SMC are closed-form `OneStepController`s (`control/one_step_controller.h`): no solver, no state between ticks, 1 allocation per tick; the torque limit is a clamp, not a constraint. SMC rails the 0.25 N·m limit even at 1× speed, so its switching gain `ρ` wants a real look before it is used. The NMPC: both planar (x,y,θz) paths are functional against the acados/HPIPM QP — iterative linearization (`nmpc.yaml`'s `full_nonlinear: false`) and multiple-shooting SQP (`full_nonlinear: true`); tuning is in progress, so the active `nmpc.yaml` block moves. Weights `Q_pos`/`Q_vel`/`R` are `[x, y, θz]` and **all three components apply**. A failed or non-finite solve enters a sticky joint-damping safe mode (`safe_mode.*`) rather than substituting an approximate command; the joint and torque constraint groups are independently soft or hard (`qp.soft_joint_limits`/`soft_torque_limits`). The default is a **soft box with hard torque rows**: the box's slack is the only thing that recovers a joint parked outside its limit, while soft torque rows are HPIPM's fragile group near infeasibility and collapse on aarch64 (21.7% availability against 96.7%) — see the README's "Constraint configuration", and do not change either without re-running `DISABLED_ConstraintStudy.Ladder` on both architectures. `relax_box_to_contain_x0` applies to a hard BOX only — never make the box hard without it, and leave it off with a soft box, where it weakens the slack that does the restoring. The rollout's position clamp goes to the MJCF range, NOT the configured margin: clamping to the margin makes the joint box vacuous (see the README's "Settled by measurement"). The control path is allocation-free apart from `computeControl`'s returned vector (one per tick), which matters for the realtime Jetson deployment; keep it that way — `RealtimeProfile.ControlTickAllocationCountIsBounded` and `SteadyStateTicksDoNotKeepAllocating` fail if a per-node allocation comes back, and `DISABLED_AllocStudy.Attribution` locates it. Still open: solve time can exceed the control period at high `control_hz`. `ee_target_publisher` is a stand-in mission node (`pattern: waypoints` loop, or a `circle` / sharp-cornered `rectangle` trajectory for both arms); a real planner is still future work. **Trajectory following:** a sampled window on `ee_trajectory` (`reference/reference_window.h`; shapes in `reference/reference_trajectory.h`, its own dependency-free library) is scored per horizon node at `t_now + k·Ts`, with `t_now` the joint_states stamp, never the ROS clock on the control thread; `reference_preview: false` is the reactive baseline. With no window every node gets the static setpoint, so the setpoint path is bit-identical to before (`Reference.AConstantWindowIsExactlyTheStaticSetpoint`) — keep it that way. The preview wins 3–14× up to ~3× the default speed; past ~4× the hard torque rows go infeasible and solves fail (README "Trajectory following"). `contact_bench --trajectory circle|rectangle --ab-preview|--sweep-speed` measures it deterministically. **Teleop:** `ee_teleop_node` (built only where X11 exists; not in any launch file — needs a display and its own terminal) reads held keys and publishes `ee_teleop` intent; `ee_target_publisher` `pattern: teleop` turns the latest command into windows via `reference/teleop_reference.h` (limits, box, homing; key logic in `reference/teleop_keys.h`, both dependency-free and unit-tested). Each window predicts the latest command held, never a queue of past ones — keep it that way. Never convert message stamps with `rclcpp::Time`/`Duration` in the arm node — they throw on negative values and kill the controller; use `toSeconds`. A momentum disturbance observer (`observers/momentum_observer.h`) runs on its own RT thread (`rt_cpus_observer`) and publishes `/chaser/arm/<side>/disturbance`; it is selected by `observer: "momentum"` and defaults to `"none"`. Its estimate can be fed into the command (`observer.ff_gain`, capped by `ff_max_frac`, rate-limited by `ff_slew`, zeroed in safe mode), but **`ff_gain` ships at 0 and must stay there until velocity sensing is characterised**: at σ = 0.01 rad/s the estimate noise is ~0.52 N·m against a feedforward cap of 0.075 N·m (0.3 × the 0.25 N·m torque limit), so the command would saturate on noise. The 92% model-error tracking recovery in the README was measured on exact measurements and is an upper bound. `observer.gain: 20` is settled by measurement (see the README's "What the gain costs"). Observer scoring is offline in `contact_bench` (deterministic; modes: contact, `--drag`, `--mass-scale`/`--osc`, `--ab-ff`), not against the live stack, whose run-to-run variance swamps the comparison. |
 | `pat_vision` | ❌ Phase 3 | Not created |
 | `pat_telemetry` | ✅ | Merges `joint_states`/`torque_command` by name and publishes each arm's EE distance from setpoint (`/chaser/telemetry/*`) for live plotting (PlotJuggler, dev image only — see `docker/Dockerfile`'s `dev` stage). Builds for `runtime` too; touches only existing sim/hardware-boundary topics, so it works unchanged against real hardware. |
 
@@ -201,31 +201,48 @@ mix. The law is chosen by which executable is launched; there is no
 `controller:` key, and switching law or retuning needs a restart, never a
 rebuild.
 
-1. **Law class**: `include/pat_arm_control/control/smc/arm_smc.h` +
-   `src/control/smc/arm_smc.cpp`, inheriting `TaskSpaceController`. Implement
-   `controlLawImpl(q, v)` (the guard, safe mode, owned-joint mapping and torque
-   clamp are already in the base: call `finalizeJointTorques`, read the
-   reference with `nodeRef(0)`, call `failToDamping()` on a failure) plus the
-   profile/trace methods (`setTickBudgetUs`, `snapshotProfile`,
-   `resetProfile`, `enableTrace`, `drainTrace`; the trace may be a no-op).
-   Params: `struct SMCParams : ControllerParams`.
-2. **Loader**: `control/smc/smc_config.{h,cpp}`,
-   `loadSmcParams(ParamSource&, const ArmJoints&)`. It calls
+The two closed-form laws, `ArmOMPC` and `ArmSMC`, are the worked examples:
+read them first, then copy the shape. (A law that needs a solver or a horizon
+inherits `TaskSpaceController` directly, as `ArmNMPC` does.)
+
+1. **Law class**: `include/pat_arm_control/control/<law>/arm_<law>.h` +
+   `src/control/<law>/arm_<law>.cpp`.
+   - A closed-form law inherits `OneStepController` and implements only
+     `Eigen::Vector3d taskForce(const TaskState&)`: the planar task-space force
+     for `e = p_d - p`, `edot`, `a_d`, `v_ee`, `Jdot*qdot` and `L^-1 =
+     J H_g^-1 J^T`, such that the joints are commanded `J^T tau_task + Cv`. The
+     base does the reduced model, safe mode, the torque mapping and clamp, the
+     profile and the trace. Use fixed-size Eigen types in `taskForce` (and
+     `noalias()` where a dynamic matrix multiplies into one) to keep the tick at
+     one allocation; `DISABLED_SmcAllocStudy.Attribution` shows how to find a
+     stray one.
+   - A law with a solver inherits `TaskSpaceController` and implements
+     `controlLawImpl(q, v)` plus the five `IArmController` profile/trace methods
+     the base leaves open.
+   Params: `struct <Law>Params : ControllerParams`. Derive the law on paper
+   first and put the derivation in the header: the SMC's signs are the example
+   of what a port can get wrong.
+2. **Loader**: `control/<law>/<law>_config.{h,cpp}`,
+   `load<Law>Params(ParamSource&, const ArmJoints&)`. It calls
    `loadControllerParams` first, for the shared keys (owned joints and limits,
-   torque limits, safe mode, feedforward), then reads the law's own keys. That
-   loader is the only place the law's key names exist. Add both `.cpp` files to
-   `pat_arm_control_lib`, and extend `test_param_loading.cpp`.
-3. **Node**: `src/nodes/smc_node.cpp`, a copy of `nmpc_node.cpp` with its
-   factory and `ControlLaw{"smc", makeSmc}`. In CMake, add an executable
+   torque limits, safe mode, feedforward), then reads the law's own keys
+   (`loadTriple` for an `[x, y, θz]` vector). That loader is the only place the
+   law's key names exist. Add the `.cpp` files to `pat_arm_control_lib`, and a
+   test file to `test_pat_arm_control` (parameters, a pose held at rest, a step
+   response on the real model, an allocation bound).
+3. **Node**: `src/nodes/<law>_node.cpp`, a copy of `ompc_node.cpp` with its
+   factory and `ControlLaw{"<law>", make<Law>}`. In CMake, add an executable
    linked to `pat_arm_control_node`, and install it. The node is then
-   `pat_arm_smc`, and it logs as `pat_arm_smc[side]`.
-4. **Config**: `config/smc.yaml` with the law's `/**` tuning and
-   `pat_arm_smc_left` / `_right` blocks (`arm_side`, `ee_site_name`,
+   `pat_arm_<law>`, and it logs as `pat_arm_<law>[side]`.
+4. **Config**: `config/<law>.yaml` with the law's `/**` tuning and
+   `pat_arm_<law>_left` / `_right` blocks (`arm_side`, `ee_site_name`,
    `joint_names`, `owned_joints`, `limits.*`, `rt_cpus*`). Shared settings stay
    in `arm_common.yaml` — do not copy them.
-5. **Launch**: a `Node(package="pat_arm_control", executable="smc_node",
-   name="pat_arm_smc_left", parameters=[arm_common.yaml, smc.yaml, {...}])`
-   entry, the same shape as `arm_nmpc.launch.py`'s.
+5. **Launch and tools**: `launch/arm_<law>.launch.py`, a copy of
+   `arm_ompc.launch.py`; add the law to `full_stack_nmpc.launch.py`'s `law:=`
+   include list and to `run_trial.sh`'s `-l` check and `ARM_NODES` guard; and to
+   `bench_yaml`'s loader dispatch and `contact_bench`'s `ArmProbe` so it can be
+   scored offline.
 
 **Running laws side by side:** they all publish on `/chaser/arm/torque_command`,
 name-matched, so different laws on DIFFERENT arms just work (NMPC left, SMC
@@ -233,11 +250,12 @@ right). Two laws on the SAME joints fight. For a shadow comparison, remap
 the second one's `/chaser/arm/torque_command` (and `/chaser/arm/<side>/ee_pose`)
 to a topic the sim does not read — a launch-file remap, no code.
 
-The benches (`nmpc_bench`, `contact_bench`) and `bench_yaml`'s loader are
-NMPC-only (`pat_arm_nmpc_<arm>` blocks, `loadNmpcParams`). A new law needs its
-own loader branch there before it can be scored offline. `summarise_timing.py`
-opens a window only on a report line carrying `qp_iter`, so a law without a QP
-needs that parser taught its own line first.
+`contact_bench --law nmpc|ompc|smc` scores any law offline on identical
+deterministic scenarios (the default, `nmpc`, prints exactly what it always
+did); `--no-preview`, `--ab-preview` and `--sweep-speed` are NMPC-only because
+they compare a horizon's preview. `nmpc_bench` measures the QP and is
+NMPC-only. `summarise_timing.py` completes a window on the next one opening, so
+a law without a `qp_iter` line parses.
 
 ## Package architecture pattern
 
@@ -267,11 +285,16 @@ control/       IArmController (what the node and benches call),
                joints and torque limits, safe-mode Tiers 2/3 and the exception
                guard, disturbance feedforward), ControllerParams,
                controller_config (shared key loaders: joints, observer, anchor)
+control/one_step_controller.h   OneStepController: the base for a closed-form law
+               (reduced model, L^-1, safe mode, torque mapping, profile, trace)
 control/nmpc/  ArmNMPC, NMPCParams + loadNmpcParams, the acados/HPIPM QP
+control/ompc/  ArmOMPC (one-step MPC), OMPCParams + loadOmpcParams
+control/smc/   ArmSMC (sliding mode), SMCParams + loadSmcParams
 observers/     IDisturbanceObserver, MomentumObserver
 reference/     reference window, trajectory shapes, teleop (own dependency-free lib)
 src/nodes/     ROS nodes, headers private: ArmControlNode (law-agnostic, split
-               into node/loop/observer/report), nmpc_node.cpp, ros_param_source.h,
+               into node/loop/observer/report), nmpc_node.cpp, ompc_node.cpp,
+               smc_node.cpp, ros_param_source.h,
                ee_target_publisher, ee_teleop
 src/bench/     nmpc_bench, contact_bench, contact_scenario, bench_yaml
 test/support/  alloc counter, NMPC fixtures; one test file per suite
@@ -292,8 +315,9 @@ Config is two files per law, loaded in order:
 - `config/arm_common.yaml`: the settings every law shares, under `/**` (model
   joints and torque limits, safe-mode Tiers 2/3, base anchor, realtime
   scheduling, observer);
-- the law's own file: `config/nmpc.yaml`, holding the NMPC tuning under `/**`
-  and the per-arm `pat_arm_nmpc_left` / `_right` blocks.
+- the law's own file: `config/nmpc.yaml`, `ompc.yaml` or `smc.yaml`, holding
+  that law's tuning under `/**` and its per-arm `pat_arm_<law>_left` / `_right`
+  blocks.
 
 The launch files take both files, as `common_params_file` and `params_file`.
 
@@ -302,7 +326,8 @@ shared with any other node that runs a periodic loop on its own thread.
 
 **Node and log names come from the law's tag:** `nmpc_node` runs
 `ControlLaw{"nmpc", ...}`, so its node is `pat_arm_nmpc` (launched as
-`pat_arm_nmpc_left` / `_right`) and it logs as `pat_arm_nmpc[side]`. These
+`pat_arm_nmpc_left` / `_right`) and it logs as `pat_arm_nmpc[side]`; `ompc_node`
+and `smc_node` likewise. These
 names key the per-node YAML blocks. `run_trial.sh` and `summarise_timing.py`
 parse the executable name and log tag, and accept any `<tag>_node` /
 `pat_arm_<tag>`. `pat_robotics`'s executable is still called

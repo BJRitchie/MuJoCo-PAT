@@ -250,14 +250,14 @@ protected:
     Eigen::MatrixXd gjm6(const BaseElim& be) const;
     void getDynamics(Eigen::MatrixXd& H_g, Eigen::VectorXd& Cv_joints,
                      mjData* data, const BaseElim& be) const;
-    Eigen::Matrix<double, 6, 1> jdotQdot6(int site_id, mjData* data,
-                                          const BaseElim& be) const;
 
     /*! GJM-corrected bias acceleration  h′ = J̇q̇  in world frame [m/s²]. */
     Eigen::Vector3d  jdotQdot(int site_id, mjData* data = nullptr) const;
 
     /*! GJM-corrected bias acceleration, position AND orientation stacked
      *  (6-vector): [0:3) linear [m/s^2], [3:6) angular [rad/s^2]. */
+    Eigen::Matrix<double, 6, 1> jdotQdot6(int site_id, mjData* data,
+                                          const BaseElim& be) const;
     Eigen::Matrix<double, 6, 1> jdotQdot6(int site_id, mjData* data = nullptr) const;
 
     /*! Full nonlinear effects vector (gravity + Coriolis).

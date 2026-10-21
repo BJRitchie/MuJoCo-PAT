@@ -19,8 +19,15 @@ hands each arm's target to the keyboard: run
 joint_states/torque_command by name, publishes each side's EE distance from
 its setpoint - see /chaser/telemetry/*).
 
-`params_file:=/path/to/nmpc.yaml` swaps the NMPC tuning set, forwarded to
-arm_nmpc.launch.py. Defaults to pat_arm_control's installed config/nmpc.yaml.
+`law:=nmpc|ompc|smc` picks the arm control law: it launches that law's node
+for both arms (arm_nmpc.launch.py, arm_ompc.launch.py or arm_smc.launch.py) and
+defaults `params_file` to that law's own YAML. The laws are separate node
+types, so running different ones on different arms is a launch file of your own
+with one of those include per side (see arm_ompc.launch.py's note); two laws on
+the SAME arm fight over /chaser/arm/torque_command.
+
+`params_file:=/path/to/nmpc.yaml` swaps the law's tuning set, forwarded to its
+launch file. Defaults to pat_arm_control's installed config/<law>.yaml.
 `common_params_file:=` likewise swaps the settings every arm control law shares
 (config/arm_common.yaml), which load first.
 
@@ -50,7 +57,7 @@ from launch.actions import DeclareLaunchArgument, ExecuteProcess, IncludeLaunchD
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import (LaunchConfiguration, PathJoinSubstitution,
-                                  PythonExpression, ThisLaunchFileDir)
+                                  PythonExpression, TextSubstitution, ThisLaunchFileDir)
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
@@ -70,15 +77,18 @@ def generate_launch_description() -> LaunchDescription:
     nav_args = {"use_sim_time": LaunchConfiguration("use_sim_time"),
                 "nav_params": LaunchConfiguration("nav_params")}.items()
     nav_params = PathJoinSubstitution([FindPackageShare("pat_gnc"), "config", "nav.yaml"])
-    # Repeats arm_nmpc.launch.py's own default rather than forwarding an empty
+    # Repeats the law launch files' own default rather than forwarding an empty
     # string: launch_arguments is fixed when the description is built, so there is
-    # no way to omit the argument conditionally on its value.
+    # no way to omit the argument conditionally on its value. The file follows the
+    # law: config/<law>.yaml.
     nmpc_params = PathJoinSubstitution(
-        [FindPackageShare("pat_arm_control"), "config", "nmpc.yaml"])
+        [FindPackageShare("pat_arm_control"), "config",
+         [LaunchConfiguration("law"), TextSubstitution(text=".yaml")]])
     common_params = PathJoinSubstitution(
         [FindPackageShare("pat_arm_control"), "config", "arm_common.yaml"])
     return LaunchDescription([
         DeclareLaunchArgument("use_sim_time", default_value="true"),
+        DeclareLaunchArgument("law", default_value="nmpc"),
         DeclareLaunchArgument("common_params_file", default_value=common_params),
         DeclareLaunchArgument("params_file", default_value=nmpc_params),
         DeclareLaunchArgument("trace_file", default_value=""),
@@ -107,10 +117,13 @@ def generate_launch_description() -> LaunchDescription:
                 PathJoinSubstitution([ThisLaunchFileDir(), "nav.launch.py"])),
             launch_arguments=nav_args,
             condition=IfCondition(LaunchConfiguration("with_nav"))),
-        IncludeLaunchDescription(
+        *[IncludeLaunchDescription(
             PythonLaunchDescriptionSource(PathJoinSubstitution(
-                [FindPackageShare("pat_arm_control"), "launch", "arm_nmpc.launch.py"])),
-            launch_arguments=nmpc_args),
+                [FindPackageShare("pat_arm_control"), "launch", f"arm_{law}.launch.py"])),
+            launch_arguments=nmpc_args,
+            condition=IfCondition(PythonExpression(
+                ["'", LaunchConfiguration("law"), f"' == '{law}'"])))
+          for law in ("nmpc", "ompc", "smc")],
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(PathJoinSubstitution(
                 [FindPackageShare("pat_arm_control"), "launch", "ee_targets.launch.py"])),

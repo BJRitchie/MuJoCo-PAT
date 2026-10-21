@@ -202,6 +202,18 @@ protected:
     //! Fill node_ref_ for this tick. Allocation-free.
     void sampleNodeReferences();
 
+    // --- Planar task space ----------------------------------------------------
+    /*! The three task rows [x, y, thetaz] out of the 6-row generalised
+     *  Jacobian (or any 6-row EE quantity stacked [lin; ang]): rows 0, 1 and
+     *  the angular-Z row 5. `J3` is resized to 3 x J6.cols(), which is free
+     *  when it already has that shape. */
+    static void planarRows(const Eigen::MatrixXd& J6, Eigen::MatrixXd& J3);
+
+    /*! World-frame angle-axis (log-map) orientation error of the EE about Z, the
+     *  one component the planar task has: the reference orientation relative to
+     *  `ee_quat` ([w, x, y, z]), rotated into the world frame. */
+    static double orientationErrorZ(const double ref_quat[4], const Eigen::Vector4d& ee_quat);
+
     // --- Torque mapping -------------------------------------------------------
     /*! tau_joints = J^T*tau_task + Cv_joints - d_ff, clamped to
      *  torqueLimsByIndex. The out-parameter form is the one the control path

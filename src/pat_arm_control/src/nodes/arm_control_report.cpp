@@ -192,16 +192,30 @@ void ArmControlNode::reportDiagnostics() {
                 tag, side, ev.qp_status);
             break;
         case Mode::Damping:
-            RCLCPP_ERROR(get_logger(),
-                "%s[%s]: TIER 2 — joint damping, task abandoned "
-                "(QP status %d, %ld replay ticks used so far)",
-                tag, side, ev.qp_status, ev.tier1_ticks);
+            if (controller_->hasSolver()) {
+                RCLCPP_ERROR(get_logger(),
+                    "%s[%s]: TIER 2 — joint damping, task abandoned "
+                    "(QP status %d, %ld replay ticks used so far)",
+                    tag, side, ev.qp_status, ev.tier1_ticks);
+            } else {
+                RCLCPP_ERROR(get_logger(),
+                    "%s[%s]: TIER 2 — joint damping, task abandoned "
+                    "(the control tick failed)",
+                    tag, side);
+            }
             break;
         case Mode::Latched:
-            RCLCPP_ERROR(get_logger(),
-                "%s[%s]: TIER 3 — LATCHED in damping; the solver did not "
-                "recover and this will NOT clear on its own",
-                tag, side);
+            if (controller_->hasSolver()) {
+                RCLCPP_ERROR(get_logger(),
+                    "%s[%s]: TIER 3 — LATCHED in damping; the solver did not "
+                    "recover and this will NOT clear on its own",
+                    tag, side);
+            } else {
+                RCLCPP_ERROR(get_logger(),
+                    "%s[%s]: TIER 3 — LATCHED in damping; the control law did "
+                    "not recover and this will NOT clear on its own",
+                    tag, side);
+            }
             break;
         case Mode::Nominal:
             RCLCPP_INFO(get_logger(),

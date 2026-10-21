@@ -137,22 +137,86 @@ using pat_arm_control::bench::ContactRow;
 using pat_arm_control::bench::ContactScenario;
 using pat_arm_control::bench::JointScore;
 
-/*! Exposes which joints a controller owns.
- *
- *  ownedJointInds is protected because nothing outside the control law needs
- *  it; this bench does, to work out which arm commands which joint. Same
- *  pattern and the same reason as nmpc_bench's BenchProbe.
- */
-class ArmProbe : public ArmNMPC {
+using pat_arm_control::IArmController;
+using pat_arm_control::TaskSpaceController;
+
+//! Reads the protected members the bench needs off a control law of any type.
+template <class Law>
+class Exposed : public Law {
 public:
-    ArmProbe(const std::string& mjcf, const NMPCParams& p) : ArmNMPC(mjcf, p) {}
-    using ArmNMPC::n_joints_;
-    using ArmNMPC::ownedJointInds;
-    //! The per-joint feedforward cap, ff_max_frac * the joint's torque limit.
-    //! Reported alongside the disturbance because a disturbance larger than the
-    //! cap cannot be fed forward however well it is estimated, and that is a
-    //! fact about the actuators rather than about the observer.
-    using ArmNMPC::ff_max_vec_;
+    using Law::Law;
+    using Law::ff_max_vec_;
+    using Law::n_joints_;
+    using Law::ownedJointInds;
+};
+
+/*! One arm's controller, whichever law runs it.
+ *
+ *  Holds the law behind its common base and forwards what the bench calls, so
+ *  the trial reads the same for every law. Three members the public interface
+ *  does not offer are copied out at construction:
+ *
+ *    n_joints_, ownedJointInds   the bench works out which arm commands which
+ *                                joint (protected in the control law because
+ *                                nothing else needs it)
+ *    ff_max_vec_                 the per-joint feedforward cap, ff_max_frac *
+ *                                the joint's torque limit. Reported alongside
+ *                                the disturbance because one larger than the
+ *                                cap cannot be fed forward however well it is
+ *                                estimated: a fact about the actuators, not the
+ *                                observer.
+ */
+class ArmProbe {
+public:
+    using EePose = IArmController::EePose;
+    using ProfileSnapshot = IArmController::ProfileSnapshot;
+
+    explicit ArmProbe(const pat_arm_control::bench::Loaded& cfg) {
+        const auto adopt = [this](auto probe) {
+            n_joints_       = probe->n_joints_;
+            ownedJointInds  = probe->ownedJointInds;
+            ff_max_vec_     = probe->ff_max_vec_;
+            law_            = std::move(probe);
+        };
+        if (cfg.law == "ompc") {
+            adopt(std::make_unique<Exposed<pat_arm_control::ArmOMPC>>(cfg.mjcf, cfg.ompc));
+        } else if (cfg.law == "smc") {
+            adopt(std::make_unique<Exposed<pat_arm_control::ArmSMC>>(cfg.mjcf, cfg.smc));
+        } else {
+            adopt(std::make_unique<Exposed<ArmNMPC>>(cfg.mjcf, cfg.params));
+        }
+    }
+
+    int n_joints_ = 0;
+    std::vector<int> ownedJointInds;
+    Eigen::VectorXd ff_max_vec_;
+
+    EePose currentEePose(const Eigen::VectorXd& q, const Eigen::VectorXd& v) {
+        return law_->currentEePose(q, v); }
+    void setDesiredPos(double x, double y, double z) { law_->setDesiredPos(x, y, z); }
+    void setDesiredOrient(double w, double x, double y, double z) {
+        law_->setDesiredOrient(w, x, y, z); }
+    void setReferenceWindow(const pat_arm_control::ReferenceWindow& w) {
+        law_->setReferenceWindow(w); }
+    void setReferenceTime(double t) { law_->setReferenceTime(t); }
+    Eigen::VectorXd computeControl(const Eigen::VectorXd& q, const Eigen::VectorXd& v) {
+        return law_->computeControl(q, v); }
+    void fullDynamics(const Eigen::VectorXd& q, const Eigen::VectorXd& v,
+                      pat_arm_control::FloatingBaseDynamics::Workspace& ws,
+                      Eigen::MatrixXd& M, Eigen::VectorXd& bias, Eigen::MatrixXd& R) const {
+        law_->fullDynamics(q, v, ws, M, bias, R); }
+    void setDisturbanceFeedforward(const Eigen::VectorXd& d, double dt) {
+        law_->setDisturbanceFeedforward(d, dt); }
+    long ffSaturated() const { return law_->ffSaturated(); }
+    long ffSlewLimited() const { return law_->ffSlewLimited(); }
+    long tier1Entries() const { return law_->tier1Entries(); }
+    long safeModeTicks() const { return law_->safeModeTicks(); }
+    long referenceSamplesOutside() const { return law_->referenceSamplesOutside(); }
+    void snapshotProfile(ProfileSnapshot& out) const { law_->snapshotProfile(out); }
+    bool hasSolver() const { return law_->hasSolver(); }
+
+private:
+    std::unique_ptr<TaskSpaceController> law_;
 };
 
 // ======================== Options and parsing ============================= //
@@ -184,7 +248,10 @@ std::string findScene() {
 
 struct Options {
     std::string scene  = findScene();              //!< the plant's MJCF
-    std::string params = PAT_NMPC_BENCH_PARAMS;    //!< nmpc.yaml
+    std::string law = "nmpc";                      //!< nmpc, ompc or smc
+    //! The law's own YAML. Empty until parsing picks the installed file for
+    //! `law`, so an explicit --params wins whichever law is chosen.
+    std::string params;
     std::string common = PAT_NMPC_BENCH_COMMON;    //!< arm_common.yaml, loaded first
     std::string model;                             //!< controller MJCF override
     std::string out_csv;                           //!< per-tick series, optional
@@ -342,7 +409,12 @@ R"(contact_bench - deterministic scoring of the disturbance observer against
                 MuJoCo's own contact force. No ROS, no DDS, no wall clock.
 
   --scene PATH       scene MJCF (default: the installed air_bearing_table.xml)
-  --params PATH      nmpc.yaml (default: the installed one)
+  --law nmpc|ompc|smc  which control law drives both arms (default nmpc). The
+                     observer scoring and the trajectory run work for any law;
+                     --no-preview, --ab-preview and --sweep-speed compare a
+                     horizon's preview and so need nmpc
+  --params PATH      the law's YAML: nmpc.yaml, ompc.yaml or smc.yaml (default:
+                     the installed one for --law)
   --common PATH      arm_common.yaml, loaded before it (default: the installed one)
   --model PATH       the controller's internal MJCF (default: installed)
   --arm left|right   which arm to score (default left)
@@ -419,6 +491,7 @@ bool parseArgs(int argc, char** argv, Options& o, int& code) {
                 return argv[++i];
             };
             if      (a == "--scene")   o.scene   = next();
+            else if (a == "--law")     o.law     = next();
             else if (a == "--params")  o.params  = next();
             else if (a == "--common")  o.common  = next();
             else if (a == "--model")   o.model   = next();
@@ -473,6 +546,26 @@ bool parseArgs(int argc, char** argv, Options& o, int& code) {
     }
     if (o.arm != "left" && o.arm != "right") {
         std::cerr << "contact_bench: --arm must be left or right\n";
+        code = 2;
+        return false;
+    }
+    if (o.law != "nmpc" && o.law != "ompc" && o.law != "smc") {
+        std::cerr << "contact_bench: --law must be nmpc, ompc or smc\n";
+        code = 2;
+        return false;
+    }
+    if (o.params.empty()) {
+        o.params = o.law == "ompc" ? PAT_OMPC_BENCH_PARAMS
+                 : o.law == "smc"  ? PAT_SMC_BENCH_PARAMS
+                                   : PAT_NMPC_BENCH_PARAMS;
+    }
+    // Preview is a property of a horizon: a one-step law reads the reference at
+    // the current time only, so preview on and off are the same run, and a
+    // table claiming to compare them would compare a run with itself.
+    if (o.law != "nmpc" && (o.no_preview || o.ab_preview || !o.sweep_speed.empty())) {
+        std::cerr << "contact_bench: --no-preview, --ab-preview and --sweep-speed "
+                     "compare reference preview, which only the nmpc law has; "
+                     "use --law nmpc\n";
         code = 2;
         return false;
     }
@@ -684,6 +777,8 @@ struct Trial {
     //! "preview", "no preview" or "setpoint" (streamed): how the run was fed.
     std::string ref_mode = "preview";
     long   tier1_entries = 0;
+    std::string law = "nmpc";   //!< which control law ran
+    bool   has_solver = true;   //!< false for a closed-form law: no QP to report
     long   safe_ticks = 0;
     long   ref_outside = 0;
     double qp_iter_mean = 0.0, qp_iter_max = 0.0;
@@ -707,25 +802,27 @@ Trial runTrial(const Options& o, double gain_override) {
     // Both arms' parameter blocks: the scored arm, and the other one, which has
     // to be controlled too (see the hold-pose comment below).
     auto cfg = pat_arm_control::bench::loadConfig(
-        {o.common, o.params}, o.arm, o.model, PAT_NMPC_BENCH_MODEL, kNotOurs, "contact_bench");
+        {o.common, o.params}, o.arm, o.model, PAT_NMPC_BENCH_MODEL, kNotOurs,
+        "contact_bench", o.law);
     const std::string other = (o.arm == "left") ? "right" : "left";
     auto cfg_other = pat_arm_control::bench::loadConfig(
-        {o.common, o.params}, other, o.model, PAT_NMPC_BENCH_MODEL, kNotOurs, "contact_bench");
-    if (o.ff_gain >= 0.0) cfg.params.ff_gain = o.ff_gain;
-    if (trajMode(o) && o.no_preview) cfg.params.reference_preview = false;
+        {o.common, o.params}, other, o.model, PAT_NMPC_BENCH_MODEL, kNotOurs,
+        "contact_bench", o.law);
+    if (o.ff_gain >= 0.0) cfg.common().ff_gain = o.ff_gain;
+    if (trajMode(o) && o.no_preview) cfg.common().reference_preview = false;
 
     const double dt = 1.0 / o.hz;
     // control_period drives the warm-start shift and the deadline accounting;
     // the node sets it from control_hz, so --hz has to do the same here.
-    cfg.params.control_period       = dt;
-    cfg_other.params.control_period = dt;
+    cfg.common().control_period       = dt;
+    cfg_other.common().control_period = dt;
 
     // --- 2. The plant and the controllers --------------------------------- //
     ContactScenario scene(sceneConfig(o, cfg.joints.model));
     const int n_joints = scene.numJoints();
 
-    ArmProbe scored(cfg.mjcf, cfg.params);
-    ArmProbe held(cfg_other.mjcf, cfg_other.params);
+    ArmProbe scored(cfg);
+    ArmProbe held(cfg_other);
     // The two models must agree on how many arm joints exist, or every index
     // below means something different in each.
     if (scored.n_joints_ != n_joints) {
@@ -757,14 +854,14 @@ Trial runTrial(const Options& o, double gain_override) {
     // limp, that arm drifts into a joint range limit, and MuJoCo puts
     // joint-limit forces in the SAME qfrc_constraint vector as contact forces.
     // The result is a convincing false contact in the truth signal.
-    const ArmNMPC::EePose hold = held.currentEePose(q, v);
+    const ArmProbe::EePose hold = held.currentEePose(q, v);
     held.setDesiredPos(hold.pos.x(), hold.pos.y(), hold.pos.z());
     held.setDesiredOrient(hold.quat(0), hold.quat(1), hold.quat(2), hold.quat(3));
 
     // The scored arm is driven to a fixed point past the target's face. Its
     // orientation setpoint is simply where it started, so the run is a straight
     // push rather than a push plus a twist.
-    const ArmNMPC::EePose start = scored.currentEePose(q, v);
+    const ArmProbe::EePose start = scored.currentEePose(q, v);
     scored.setDesiredOrient(start.quat(0), start.quat(1), start.quat(2), start.quat(3));
 
     // The start pose expressed in the base's frame, so an oscillating setpoint
@@ -815,14 +912,19 @@ Trial runTrial(const Options& o, double gain_override) {
             trajSpec(o), pat_arm_control::Anchor{start.pos.x(), start.pos.y(), 0.0});
         for (int i = 0; i < 4; ++i) window.quat0[i] = start.quat(i);
         window.yaw0 = 0.0;
+        // A one-step law reads the window at the current time only, so it is
+        // neither previewing nor not: "window".
         t.ref_mode = o.stream_setpoint ? "setpoint"
-                   : cfg.params.reference_preview ? "preview" : "no preview";
+                   : o.law != "nmpc" ? "window"
+                   : cfg.common().reference_preview ? "preview" : "no preview";
     }
     // The live planner's window: 2 s ahead at 10 ms, the horizon being ~1 s.
     constexpr double kWindowS = 2.0, kSampleDt = 0.01;
 
     t.applied_gain   = op.gain(6);     // a joint row, past any base override
-    t.applied_ff     = cfg.params.ff_gain;
+    t.applied_ff     = cfg.common().ff_gain;
+    t.law            = o.law;
+    t.has_solver     = scored.hasSolver();
     t.joint_names    = cfg.joints.model;
     t.scored_joints  = scored.ownedJointInds;
     t.scene_arm_mass = scene.armMass();
@@ -836,8 +938,8 @@ Trial runTrial(const Options& o, double gain_override) {
         t.ff_cap[u]  = scored.ff_max_vec_(i);
         // ff_max_vec_ is ff_max_frac * the limit, so the limit is recovered
         // from it rather than read from a second place that could disagree.
-        t.tau_max[u] = cfg.params.ff_max_frac > 0.0
-                           ? scored.ff_max_vec_(i) / cfg.params.ff_max_frac : 0.0;
+        t.tau_max[u] = cfg.common().ff_max_frac > 0.0
+                           ? scored.ff_max_vec_(i) / cfg.common().ff_max_frac : 0.0;
     }
 
     // Physics runs faster than control (500 Hz against 100 Hz as shipped), so
@@ -884,7 +986,7 @@ Trial runTrial(const Options& o, double gain_override) {
             setpointAt(t_now, sx, sy);
             scored.setDesiredPos(sx, sy, start.pos.z());
         }
-        const ArmNMPC::EePose now_ee = scored.currentEePose(q, v);
+        const ArmProbe::EePose now_ee = scored.currentEePose(q, v);
         const double ee_err = std::hypot(now_ee.pos.x() - sx, now_ee.pos.y() - sy);
         if (trajMode(o)) {
             t.traj.back().ex = now_ee.pos.x();
@@ -1021,7 +1123,7 @@ Trial runTrial(const Options& o, double gain_override) {
     t.tier1_entries   = scored.tier1Entries();
     t.safe_ticks      = scored.safeModeTicks();
     t.ref_outside     = scored.referenceSamplesOutside();
-    ArmNMPC::ProfileSnapshot prof;
+    ArmProbe::ProfileSnapshot prof;
     scored.snapshotProfile(prof);
     t.qp_iter_mean = prof.qp_iters.mean();
     t.qp_iter_max  = prof.qp_iters.max;
@@ -1504,11 +1606,17 @@ void reportTrajectory(const Options& o, const Trial& t) {
     double peak = 0.0;
     long railed = 0;
     torqueUse(t, peak, railed);
-    std::printf("    torque peak %.3f N*m, %ld joint-ticks at the rail | QP iters mean "
-                "%.1f max %.0f | Tier 1 entries %ld, safe-mode ticks %ld | refs held "
-                "past the window %ld\n",
-                peak, railed, t.qp_iter_mean, t.qp_iter_max, t.tier1_entries,
-                t.safe_ticks, t.ref_outside);
+    if (t.has_solver) {
+        std::printf("    torque peak %.3f N*m, %ld joint-ticks at the rail | QP iters mean "
+                    "%.1f max %.0f | Tier 1 entries %ld, safe-mode ticks %ld | refs held "
+                    "past the window %ld\n",
+                    peak, railed, t.qp_iter_mean, t.qp_iter_max, t.tier1_entries,
+                    t.safe_ticks, t.ref_outside);
+    } else {
+        std::printf("    [%s] torque peak %.3f N*m, %ld joint-ticks at the rail | "
+                    "safe-mode ticks %ld | refs held past the window %ld\n",
+                    t.law.c_str(), peak, railed, t.safe_ticks, t.ref_outside);
+    }
 }
 
 /*! The three ways of feeding the same trajectory, one row each: preview, the
@@ -1630,9 +1738,13 @@ int main(int argc, char** argv) {
 
     try {
         if (trajMode(o)) {
-            std::printf("contact_bench: mode=trajectory (%s), %.0f Hz, arm=%s; target "
+            // The law is named only when it is not the default, so the NMPC's
+            // output is exactly what it was before there was a choice.
+            std::printf("contact_bench: mode=trajectory (%s)%s, %.0f Hz, arm=%s; target "
                         "parked out of reach\n  scene %s\n",
-                        o.trajectory.c_str(), o.hz, o.arm.c_str(), o.scene.c_str());
+                        o.trajectory.c_str(),
+                        o.law == "nmpc" ? "" : (", law=" + o.law).c_str(),
+                        o.hz, o.arm.c_str(), o.scene.c_str());
             // Each set below differs ONLY in how the reference reaches the
             // controller: the scenario is deterministic, so the differences are
             // that and nothing else.

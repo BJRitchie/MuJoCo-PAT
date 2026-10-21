@@ -153,10 +153,8 @@ Eigen::VectorXd ArmNMPC::controlLawImpl(
             ScopedTimer t(lambda);
             J_g6 = gjm6(ee_site_id_);   // 6 x n_joints_: rows [0:3) lin, [3:6) ang
         }
-        Eigen::MatrixXd J_g(3, n_j);
-        J_g.row(0) = J_g6.row(0);   // x
-        J_g.row(1) = J_g6.row(1);   // y
-        J_g.row(2) = J_g6.row(5);   // angular-Z
+        Eigen::MatrixXd J_g;
+        planarRows(J_g6, J_g);
         Eigen::Vector3d v_ee = J_g * v.tail(n_joints_);
 
         // This path solves a single stage, so it has no horizon to preview
@@ -166,18 +164,10 @@ Eigen::VectorXd ArmNMPC::controlLawImpl(
         Eigen::Vector2d p_d(r0.p[0], r0.p[1]);
         Eigen::Vector2d v_d(r0.v[0], r0.v[1]);
         Eigen::Vector2d a_d(r0.a[0], r0.a[1]);
-        mjtNum quat_d[4] = {r0.quat[0], r0.quat[1], r0.quat[2], r0.quat[3]};
         double w_d  = r0.w;
         double aw_d = r0.aw;
 
-        // World-frame angle-axis (log-map) orientation error, Z-component
-        // only -- see evalTaskSpacePositionOnly2D's identical derivation.
-        mjtNum quat_ee_arr[4] = {quat_ee[0], quat_ee[1], quat_ee[2], quat_ee[3]};
-        mjtNum e_orient_local[3];
-        mju_subQuat(e_orient_local, quat_d, quat_ee_arr);
-        mjtNum e_orient_world[3];
-        mju_rotVecQuat(e_orient_world, e_orient_local, quat_ee_arr);
-        double e_theta = e_orient_world[2];
+        const double e_theta = orientationErrorZ(r0.quat, quat_ee);
 
         Eigen::Vector3d e, edot;
         e    << p_d - p_ee.head<2>(), e_theta;
@@ -768,24 +758,13 @@ void ArmNMPC::evalTaskSpace(
     Eigen::Vector2d p_d(ref.p[0], ref.p[1]);
     Eigen::Vector2d v_d(ref.v[0], ref.v[1]);
     Eigen::Vector2d a_d(ref.a[0], ref.a[1]);
-    mjtNum quat_d[4] = {ref.quat[0], ref.quat[1], ref.quat[2], ref.quat[3]};
     double w_d  = ref.w;
     double aw_d = ref.aw;
 
-    ts.J_task.resize(3, n_joints_);
-    ts.J_task.row(0) = J_g6.row(0);   // x
-    ts.J_task.row(1) = J_g6.row(1);   // y
-    ts.J_task.row(2) = J_g6.row(5);   // angular-Z
+    planarRows(J_g6, ts.J_task);
     Eigen::Vector3d v_ee = ts.J_task * v_node.tail(n_joints_);
 
-    // World-frame angle-axis (log-map) orientation error, Z-component only —
-    // see controlLaw's identical derivation.
-    mjtNum quat_ee_arr[4] = {ee_quat[0], ee_quat[1], ee_quat[2], ee_quat[3]};
-    mjtNum e_orient_local[3];
-    mju_subQuat(e_orient_local, quat_d, quat_ee_arr);
-    mjtNum e_orient_world[3];
-    mju_rotVecQuat(e_orient_world, e_orient_local, quat_ee_arr);
-    double e_theta = e_orient_world[2];
+    const double e_theta = orientationErrorZ(ref.quat, ee_quat);
 
     ts.e.resize(3);
     ts.e << p_d - ee_pos.head<2>(), e_theta;
