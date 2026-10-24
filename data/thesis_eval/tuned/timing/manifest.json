@@ -3,7 +3,7 @@
  "variant": "tuned",
  "quick": false,
  "git": {
-  "revision": "2237d47bbc8857220d656d9fce3ce68f264b3de9",
+  "revision": "bf6e9f4f553218b12c99245ef42ffd68e9057acd",
   "branch": "baseline_controllers",
   "dirty": true
  },
@@ -13,7 +13,7 @@
   "on_mains": true,
   "usb_pd_watts": 120,
   "python": "3.10.12",
-  "date": "2026-10-23T13:15:55+00:00"
+  "date": "2026-10-24T05:10:45+00:00"
  },
  "timing_study": true,
  "noisy_timing_allowed": false,
@@ -21,13 +21,13 @@
  "bench": {
   "path": "/ws/install/pat_arm_control/lib/pat_arm_control/contact_bench",
   "sha256": "67eaec5ed7d9a2a996bd80d11c979ba07b203ee54adff3dedc7b16964dad71b9",
-  "config_sha256": "02d967418fc52bc101f2d8d020ada0c5b5eed62fa7cdd43d030199699fecb4a2"
+  "config_sha256": "af00c9718d81bb5ef8696d4148990ed547f85a01ed93d8e0ee8910883e84d964"
  },
  "cells": [
   {
    "name": "circle_sqp_r1",
    "study": "timing",
-   "hash": "9eada8d8b24cefee",
+   "hash": "78ff5bb49fac7c1e",
    "tag": "sqp",
    "seed": 1,
    "law": "nmpc",
@@ -77,7 +77,7 @@
     "--seed",
     "1",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/timing/cells/9eada8d8b24cefee.csv.part",
+    "/ws/data/thesis_eval/tuned/timing/cells/78ff5bb49fac7c1e.csv.part",
     "--series",
     "/ws/data/thesis_eval/tuned/timing/series/circle_sqp_r1.csv"
    ],
@@ -87,7 +87,7 @@
   {
    "name": "circle_iter_r1",
    "study": "timing",
-   "hash": "43a8d21da5449981",
+   "hash": "ca9221fd5e9882a2",
    "tag": "iter",
    "seed": 1,
    "law": "nmpc",
@@ -141,17 +141,17 @@
     "--seed",
     "1",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/timing/cells/43a8d21da5449981.csv.part",
+    "/ws/data/thesis_eval/tuned/timing/cells/ca9221fd5e9882a2.csv.part",
     "--series",
     "/ws/data/thesis_eval/tuned/timing/series/circle_iter_r1.csv"
    ],
-   "seconds": 5.55,
+   "seconds": 5.47,
    "status": "ran"
   },
   {
    "name": "circle_ompc_r1",
    "study": "timing",
-   "hash": "bf36ef6e262efd03",
+   "hash": "50db9125daf90e1d",
    "tag": "ompc",
    "seed": 1,
    "law": "ompc",
@@ -185,17 +185,17 @@
     "--seed",
     "1",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/timing/cells/bf36ef6e262efd03.csv.part",
+    "/ws/data/thesis_eval/tuned/timing/cells/50db9125daf90e1d.csv.part",
     "--series",
     "/ws/data/thesis_eval/tuned/timing/series/circle_ompc_r1.csv"
    ],
-   "seconds": 1.31,
+   "seconds": 1.26,
    "status": "ran"
   },
   {
    "name": "circle_smc_r1",
    "study": "timing",
-   "hash": "b568a1a56bfc2db4",
+   "hash": "64504977684504c3",
    "tag": "smc",
    "seed": 1,
    "law": "smc",
@@ -241,17 +241,17 @@
     "--seed",
     "1",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/timing/cells/b568a1a56bfc2db4.csv.part",
+    "/ws/data/thesis_eval/tuned/timing/cells/64504977684504c3.csv.part",
     "--series",
     "/ws/data/thesis_eval/tuned/timing/series/circle_smc_r1.csv"
    ],
-   "seconds": 1.26,
+   "seconds": 1.28,
    "status": "ran"
   },
   {
    "name": "circle_sqp_r2",
    "study": "timing",
-   "hash": "07a87bfc1f540507",
+   "hash": "71049792c7cafa23",
    "tag": "sqp",
    "seed": 2,
    "law": "nmpc",
@@ -301,17 +301,17 @@
     "--seed",
     "2",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/timing/cells/07a87bfc1f540507.csv.part",
+    "/ws/data/thesis_eval/tuned/timing/cells/71049792c7cafa23.csv.part",
     "--series",
     "/ws/data/thesis_eval/tuned/timing/series/circle_sqp_r2.csv"
    ],
-   "seconds": 4.17,
+   "seconds": 4.29,
    "status": "ran"
   },
   {
    "name": "circle_iter_r2",
    "study": "timing",
-   "hash": "a202d69e230c39b2",
+   "hash": "a2163b0bfa5ddb93",
    "tag": "iter",
    "seed": 2,
    "law": "nmpc",
@@ -365,17 +365,17 @@
     "--seed",
     "2",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/timing/cells/a202d69e230c39b2.csv.part",
+    "/ws/data/thesis_eval/tuned/timing/cells/a2163b0bfa5ddb93.csv.part",
     "--series",
     "/ws/data/thesis_eval/tuned/timing/series/circle_iter_r2.csv"
    ],
-   "seconds": 5.33,
+   "seconds": 5.38,
    "status": "ran"
   },
   {
    "name": "circle_ompc_r2",
    "study": "timing",
-   "hash": "d7289b35a3559c01",
+   "hash": "5dc0b9a2902d07bf",
    "tag": "ompc",
    "seed": 2,
    "law": "ompc",
@@ -409,17 +409,17 @@
     "--seed",
     "2",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/timing/cells/d7289b35a3559c01.csv.part",
+    "/ws/data/thesis_eval/tuned/timing/cells/5dc0b9a2902d07bf.csv.part",
     "--series",
     "/ws/data/thesis_eval/tuned/timing/series/circle_ompc_r2.csv"
    ],
-   "seconds": 1.26,
+   "seconds": 1.36,
    "status": "ran"
   },
   {
    "name": "circle_smc_r2",
    "study": "timing",
-   "hash": "fa3e9483238ec7f0",
+   "hash": "65025345136bc437",
    "tag": "smc",
    "seed": 2,
    "law": "smc",
@@ -465,17 +465,17 @@
     "--seed",
     "2",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/timing/cells/fa3e9483238ec7f0.csv.part",
+    "/ws/data/thesis_eval/tuned/timing/cells/65025345136bc437.csv.part",
     "--series",
     "/ws/data/thesis_eval/tuned/timing/series/circle_smc_r2.csv"
    ],
-   "seconds": 1.27,
+   "seconds": 1.34,
    "status": "ran"
   },
   {
    "name": "circle_sqp_r3",
    "study": "timing",
-   "hash": "e3ea662fdeb85f4e",
+   "hash": "543632d861861020",
    "tag": "sqp",
    "seed": 3,
    "law": "nmpc",
@@ -525,241 +525,241 @@
     "--seed",
     "3",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/timing/cells/e3ea662fdeb85f4e.csv.part",
+    "/ws/data/thesis_eval/tuned/timing/cells/543632d861861020.csv.part",
     "--series",
     "/ws/data/thesis_eval/tuned/timing/series/circle_sqp_r3.csv"
-   ],
-   "seconds": 4.12,
-   "status": "ran"
-  },
-  {
-   "name": "circle_iter_r3",
-   "study": "timing",
-   "hash": "12164c6675aae1a1",
-   "tag": "iter",
-   "seed": 3,
-   "law": "nmpc",
-   "args": [
-    "--trajectory",
-    "circle",
-    "--set",
-    "nmpc.full_nonlinear=false",
-    "--set",
-    "weights.Q_pos=[1,1,1000]",
-    "--set",
-    "weights.Q_vel=[1.4,1.4,0.1875]",
-    "--set",
-    "weights.R=[0.07,0.07,0.07]",
-    "--set",
-    "nmpc.N=45",
-    "--set",
-    "nmpc.Ts=0.033",
-    "--set",
-    "nmpc.terminal_cost_multiplier=200",
-    "--base-damping",
-    "0"
-   ],
-   "command": [
-    "taskset",
-    "-c",
-    "4,5",
-    "/ws/install/pat_arm_control/lib/pat_arm_control/contact_bench",
-    "--law",
-    "nmpc",
-    "--trajectory",
-    "circle",
-    "--set",
-    "nmpc.full_nonlinear=false",
-    "--set",
-    "weights.Q_pos=[1,1,1000]",
-    "--set",
-    "weights.Q_vel=[1.4,1.4,0.1875]",
-    "--set",
-    "weights.R=[0.07,0.07,0.07]",
-    "--set",
-    "nmpc.N=45",
-    "--set",
-    "nmpc.Ts=0.033",
-    "--set",
-    "nmpc.terminal_cost_multiplier=200",
-    "--base-damping",
-    "0",
-    "--tag",
-    "iter",
-    "--seed",
-    "3",
-    "--summary-csv",
-    "/ws/data/thesis_eval/tuned/timing/cells/12164c6675aae1a1.csv.part",
-    "--series",
-    "/ws/data/thesis_eval/tuned/timing/series/circle_iter_r3.csv"
-   ],
-   "seconds": 5.26,
-   "status": "ran"
-  },
-  {
-   "name": "circle_ompc_r3",
-   "study": "timing",
-   "hash": "7804113934981787",
-   "tag": "ompc",
-   "seed": 3,
-   "law": "ompc",
-   "args": [
-    "--trajectory",
-    "circle",
-    "--set",
-    "ompc.Ts=1.4",
-    "--set",
-    "ompc.Q=[1.6e+06,1.6e+06,100000]",
-    "--base-damping",
-    "0"
-   ],
-   "command": [
-    "taskset",
-    "-c",
-    "4,5",
-    "/ws/install/pat_arm_control/lib/pat_arm_control/contact_bench",
-    "--law",
-    "ompc",
-    "--trajectory",
-    "circle",
-    "--set",
-    "ompc.Ts=1.4",
-    "--set",
-    "ompc.Q=[1.6e+06,1.6e+06,100000]",
-    "--base-damping",
-    "0",
-    "--tag",
-    "ompc",
-    "--seed",
-    "3",
-    "--summary-csv",
-    "/ws/data/thesis_eval/tuned/timing/cells/7804113934981787.csv.part",
-    "--series",
-    "/ws/data/thesis_eval/tuned/timing/series/circle_ompc_r3.csv"
-   ],
-   "seconds": 1.29,
-   "status": "ran"
-  },
-  {
-   "name": "circle_smc_r3",
-   "study": "timing",
-   "hash": "0327f9d1034dde43",
-   "tag": "smc",
-   "seed": 3,
-   "law": "smc",
-   "args": [
-    "--trajectory",
-    "circle",
-    "--set",
-    "smc.lam=[0.75,0.75,0.75]",
-    "--set",
-    "smc.alpha=[5.6,5.6,5.6]",
-    "--set",
-    "smc.epsilon=5",
-    "--set",
-    "smc.tau_bound=0.0035",
-    "--set",
-    "smc.k2=0.01",
-    "--base-damping",
-    "0"
-   ],
-   "command": [
-    "taskset",
-    "-c",
-    "4,5",
-    "/ws/install/pat_arm_control/lib/pat_arm_control/contact_bench",
-    "--law",
-    "smc",
-    "--trajectory",
-    "circle",
-    "--set",
-    "smc.lam=[0.75,0.75,0.75]",
-    "--set",
-    "smc.alpha=[5.6,5.6,5.6]",
-    "--set",
-    "smc.epsilon=5",
-    "--set",
-    "smc.tau_bound=0.0035",
-    "--set",
-    "smc.k2=0.01",
-    "--base-damping",
-    "0",
-    "--tag",
-    "smc",
-    "--seed",
-    "3",
-    "--summary-csv",
-    "/ws/data/thesis_eval/tuned/timing/cells/0327f9d1034dde43.csv.part",
-    "--series",
-    "/ws/data/thesis_eval/tuned/timing/series/circle_smc_r3.csv"
-   ],
-   "seconds": 1.2,
-   "status": "ran"
-  },
-  {
-   "name": "circle_sqp_r4",
-   "study": "timing",
-   "hash": "77e3bcaa36f02419",
-   "tag": "sqp",
-   "seed": 4,
-   "law": "nmpc",
-   "args": [
-    "--trajectory",
-    "circle",
-    "--set",
-    "weights.Q_pos=[4,4,0.0875]",
-    "--set",
-    "weights.Q_vel=[160,160,0.0229687]",
-    "--set",
-    "weights.R=[0.035,0.035,0.035]",
-    "--set",
-    "nmpc.N=24",
-    "--set",
-    "nmpc.Ts=0.033",
-    "--set",
-    "nmpc.terminal_cost_multiplier=560",
-    "--base-damping",
-    "0"
-   ],
-   "command": [
-    "taskset",
-    "-c",
-    "4,5",
-    "/ws/install/pat_arm_control/lib/pat_arm_control/contact_bench",
-    "--law",
-    "nmpc",
-    "--trajectory",
-    "circle",
-    "--set",
-    "weights.Q_pos=[4,4,0.0875]",
-    "--set",
-    "weights.Q_vel=[160,160,0.0229687]",
-    "--set",
-    "weights.R=[0.035,0.035,0.035]",
-    "--set",
-    "nmpc.N=24",
-    "--set",
-    "nmpc.Ts=0.033",
-    "--set",
-    "nmpc.terminal_cost_multiplier=560",
-    "--base-damping",
-    "0",
-    "--tag",
-    "sqp",
-    "--seed",
-    "4",
-    "--summary-csv",
-    "/ws/data/thesis_eval/tuned/timing/cells/77e3bcaa36f02419.csv.part",
-    "--series",
-    "/ws/data/thesis_eval/tuned/timing/series/circle_sqp_r4.csv"
    ],
    "seconds": 4.18,
    "status": "ran"
   },
   {
+   "name": "circle_iter_r3",
+   "study": "timing",
+   "hash": "f75f3ba8b0cbf6c1",
+   "tag": "iter",
+   "seed": 3,
+   "law": "nmpc",
+   "args": [
+    "--trajectory",
+    "circle",
+    "--set",
+    "nmpc.full_nonlinear=false",
+    "--set",
+    "weights.Q_pos=[1,1,1000]",
+    "--set",
+    "weights.Q_vel=[1.4,1.4,0.1875]",
+    "--set",
+    "weights.R=[0.07,0.07,0.07]",
+    "--set",
+    "nmpc.N=45",
+    "--set",
+    "nmpc.Ts=0.033",
+    "--set",
+    "nmpc.terminal_cost_multiplier=200",
+    "--base-damping",
+    "0"
+   ],
+   "command": [
+    "taskset",
+    "-c",
+    "4,5",
+    "/ws/install/pat_arm_control/lib/pat_arm_control/contact_bench",
+    "--law",
+    "nmpc",
+    "--trajectory",
+    "circle",
+    "--set",
+    "nmpc.full_nonlinear=false",
+    "--set",
+    "weights.Q_pos=[1,1,1000]",
+    "--set",
+    "weights.Q_vel=[1.4,1.4,0.1875]",
+    "--set",
+    "weights.R=[0.07,0.07,0.07]",
+    "--set",
+    "nmpc.N=45",
+    "--set",
+    "nmpc.Ts=0.033",
+    "--set",
+    "nmpc.terminal_cost_multiplier=200",
+    "--base-damping",
+    "0",
+    "--tag",
+    "iter",
+    "--seed",
+    "3",
+    "--summary-csv",
+    "/ws/data/thesis_eval/tuned/timing/cells/f75f3ba8b0cbf6c1.csv.part",
+    "--series",
+    "/ws/data/thesis_eval/tuned/timing/series/circle_iter_r3.csv"
+   ],
+   "seconds": 5.32,
+   "status": "ran"
+  },
+  {
+   "name": "circle_ompc_r3",
+   "study": "timing",
+   "hash": "75ba59e2f6176367",
+   "tag": "ompc",
+   "seed": 3,
+   "law": "ompc",
+   "args": [
+    "--trajectory",
+    "circle",
+    "--set",
+    "ompc.Ts=1.4",
+    "--set",
+    "ompc.Q=[1.6e+06,1.6e+06,100000]",
+    "--base-damping",
+    "0"
+   ],
+   "command": [
+    "taskset",
+    "-c",
+    "4,5",
+    "/ws/install/pat_arm_control/lib/pat_arm_control/contact_bench",
+    "--law",
+    "ompc",
+    "--trajectory",
+    "circle",
+    "--set",
+    "ompc.Ts=1.4",
+    "--set",
+    "ompc.Q=[1.6e+06,1.6e+06,100000]",
+    "--base-damping",
+    "0",
+    "--tag",
+    "ompc",
+    "--seed",
+    "3",
+    "--summary-csv",
+    "/ws/data/thesis_eval/tuned/timing/cells/75ba59e2f6176367.csv.part",
+    "--series",
+    "/ws/data/thesis_eval/tuned/timing/series/circle_ompc_r3.csv"
+   ],
+   "seconds": 1.44,
+   "status": "ran"
+  },
+  {
+   "name": "circle_smc_r3",
+   "study": "timing",
+   "hash": "b7e767826a724516",
+   "tag": "smc",
+   "seed": 3,
+   "law": "smc",
+   "args": [
+    "--trajectory",
+    "circle",
+    "--set",
+    "smc.lam=[0.75,0.75,0.75]",
+    "--set",
+    "smc.alpha=[5.6,5.6,5.6]",
+    "--set",
+    "smc.epsilon=5",
+    "--set",
+    "smc.tau_bound=0.0035",
+    "--set",
+    "smc.k2=0.01",
+    "--base-damping",
+    "0"
+   ],
+   "command": [
+    "taskset",
+    "-c",
+    "4,5",
+    "/ws/install/pat_arm_control/lib/pat_arm_control/contact_bench",
+    "--law",
+    "smc",
+    "--trajectory",
+    "circle",
+    "--set",
+    "smc.lam=[0.75,0.75,0.75]",
+    "--set",
+    "smc.alpha=[5.6,5.6,5.6]",
+    "--set",
+    "smc.epsilon=5",
+    "--set",
+    "smc.tau_bound=0.0035",
+    "--set",
+    "smc.k2=0.01",
+    "--base-damping",
+    "0",
+    "--tag",
+    "smc",
+    "--seed",
+    "3",
+    "--summary-csv",
+    "/ws/data/thesis_eval/tuned/timing/cells/b7e767826a724516.csv.part",
+    "--series",
+    "/ws/data/thesis_eval/tuned/timing/series/circle_smc_r3.csv"
+   ],
+   "seconds": 1.29,
+   "status": "ran"
+  },
+  {
+   "name": "circle_sqp_r4",
+   "study": "timing",
+   "hash": "0233d28ab3b54654",
+   "tag": "sqp",
+   "seed": 4,
+   "law": "nmpc",
+   "args": [
+    "--trajectory",
+    "circle",
+    "--set",
+    "weights.Q_pos=[4,4,0.0875]",
+    "--set",
+    "weights.Q_vel=[160,160,0.0229687]",
+    "--set",
+    "weights.R=[0.035,0.035,0.035]",
+    "--set",
+    "nmpc.N=24",
+    "--set",
+    "nmpc.Ts=0.033",
+    "--set",
+    "nmpc.terminal_cost_multiplier=560",
+    "--base-damping",
+    "0"
+   ],
+   "command": [
+    "taskset",
+    "-c",
+    "4,5",
+    "/ws/install/pat_arm_control/lib/pat_arm_control/contact_bench",
+    "--law",
+    "nmpc",
+    "--trajectory",
+    "circle",
+    "--set",
+    "weights.Q_pos=[4,4,0.0875]",
+    "--set",
+    "weights.Q_vel=[160,160,0.0229687]",
+    "--set",
+    "weights.R=[0.035,0.035,0.035]",
+    "--set",
+    "nmpc.N=24",
+    "--set",
+    "nmpc.Ts=0.033",
+    "--set",
+    "nmpc.terminal_cost_multiplier=560",
+    "--base-damping",
+    "0",
+    "--tag",
+    "sqp",
+    "--seed",
+    "4",
+    "--summary-csv",
+    "/ws/data/thesis_eval/tuned/timing/cells/0233d28ab3b54654.csv.part",
+    "--series",
+    "/ws/data/thesis_eval/tuned/timing/series/circle_sqp_r4.csv"
+   ],
+   "seconds": 4.37,
+   "status": "ran"
+  },
+  {
    "name": "circle_iter_r4",
    "study": "timing",
-   "hash": "7cf86abd268d639f",
+   "hash": "3a38f10b4dd2356a",
    "tag": "iter",
    "seed": 4,
    "law": "nmpc",
@@ -813,17 +813,17 @@
     "--seed",
     "4",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/timing/cells/7cf86abd268d639f.csv.part",
+    "/ws/data/thesis_eval/tuned/timing/cells/3a38f10b4dd2356a.csv.part",
     "--series",
     "/ws/data/thesis_eval/tuned/timing/series/circle_iter_r4.csv"
    ],
-   "seconds": 5.21,
+   "seconds": 5.39,
    "status": "ran"
   },
   {
    "name": "circle_ompc_r4",
    "study": "timing",
-   "hash": "3f5e3c018315e67a",
+   "hash": "e259491f7b242a50",
    "tag": "ompc",
    "seed": 4,
    "law": "ompc",
@@ -857,17 +857,17 @@
     "--seed",
     "4",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/timing/cells/3f5e3c018315e67a.csv.part",
+    "/ws/data/thesis_eval/tuned/timing/cells/e259491f7b242a50.csv.part",
     "--series",
     "/ws/data/thesis_eval/tuned/timing/series/circle_ompc_r4.csv"
    ],
-   "seconds": 1.19,
+   "seconds": 1.25,
    "status": "ran"
   },
   {
    "name": "circle_smc_r4",
    "study": "timing",
-   "hash": "f9901c4c8cfe803c",
+   "hash": "34d4feb7f3789932",
    "tag": "smc",
    "seed": 4,
    "law": "smc",
@@ -913,17 +913,17 @@
     "--seed",
     "4",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/timing/cells/f9901c4c8cfe803c.csv.part",
+    "/ws/data/thesis_eval/tuned/timing/cells/34d4feb7f3789932.csv.part",
     "--series",
     "/ws/data/thesis_eval/tuned/timing/series/circle_smc_r4.csv"
    ],
-   "seconds": 1.2,
+   "seconds": 1.29,
    "status": "ran"
   },
   {
    "name": "circle_sqp_r5",
    "study": "timing",
-   "hash": "c980d6c03d0b47ef",
+   "hash": "750396437f43a0a9",
    "tag": "sqp",
    "seed": 5,
    "law": "nmpc",
@@ -973,17 +973,17 @@
     "--seed",
     "5",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/timing/cells/c980d6c03d0b47ef.csv.part",
+    "/ws/data/thesis_eval/tuned/timing/cells/750396437f43a0a9.csv.part",
     "--series",
     "/ws/data/thesis_eval/tuned/timing/series/circle_sqp_r5.csv"
    ],
-   "seconds": 4.22,
+   "seconds": 4.14,
    "status": "ran"
   },
   {
    "name": "circle_iter_r5",
    "study": "timing",
-   "hash": "818b2a451101f2e7",
+   "hash": "ccbae41ac8ea7451",
    "tag": "iter",
    "seed": 5,
    "law": "nmpc",
@@ -1037,17 +1037,17 @@
     "--seed",
     "5",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/timing/cells/818b2a451101f2e7.csv.part",
+    "/ws/data/thesis_eval/tuned/timing/cells/ccbae41ac8ea7451.csv.part",
     "--series",
     "/ws/data/thesis_eval/tuned/timing/series/circle_iter_r5.csv"
    ],
-   "seconds": 5.21,
+   "seconds": 5.54,
    "status": "ran"
   },
   {
    "name": "circle_ompc_r5",
    "study": "timing",
-   "hash": "138b398f9abdf41c",
+   "hash": "ecdc1af8b6faeb66",
    "tag": "ompc",
    "seed": 5,
    "law": "ompc",
@@ -1081,17 +1081,17 @@
     "--seed",
     "5",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/timing/cells/138b398f9abdf41c.csv.part",
+    "/ws/data/thesis_eval/tuned/timing/cells/ecdc1af8b6faeb66.csv.part",
     "--series",
     "/ws/data/thesis_eval/tuned/timing/series/circle_ompc_r5.csv"
    ],
-   "seconds": 1.32,
+   "seconds": 1.24,
    "status": "ran"
   },
   {
    "name": "circle_smc_r5",
    "study": "timing",
-   "hash": "f6baf27b857f3588",
+   "hash": "9f5c59b521926534",
    "tag": "smc",
    "seed": 5,
    "law": "smc",
@@ -1137,17 +1137,17 @@
     "--seed",
     "5",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/timing/cells/f6baf27b857f3588.csv.part",
+    "/ws/data/thesis_eval/tuned/timing/cells/9f5c59b521926534.csv.part",
     "--series",
     "/ws/data/thesis_eval/tuned/timing/series/circle_smc_r5.csv"
    ],
-   "seconds": 1.22,
+   "seconds": 1.32,
    "status": "ran"
   },
   {
    "name": "circle_sqp_N10_r1",
    "study": "timing",
-   "hash": "e7d2a1a2ad861aab",
+   "hash": "d014f8ed924ec5d4",
    "tag": "sqp",
    "seed": 1,
    "law": "nmpc",
@@ -1201,15 +1201,15 @@
     "--seed",
     "1",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/timing/cells/e7d2a1a2ad861aab.csv.part"
+    "/ws/data/thesis_eval/tuned/timing/cells/d014f8ed924ec5d4.csv.part"
    ],
-   "seconds": 2.4,
+   "seconds": 2.39,
    "status": "ran"
   },
   {
    "name": "circle_sqp_N10_r2",
    "study": "timing",
-   "hash": "eed139da6f7c3d6d",
+   "hash": "28981c9d032b634c",
    "tag": "sqp",
    "seed": 2,
    "law": "nmpc",
@@ -1263,15 +1263,15 @@
     "--seed",
     "2",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/timing/cells/eed139da6f7c3d6d.csv.part"
+    "/ws/data/thesis_eval/tuned/timing/cells/28981c9d032b634c.csv.part"
    ],
-   "seconds": 2.39,
+   "seconds": 2.45,
    "status": "ran"
   },
   {
    "name": "circle_sqp_N10_r3",
    "study": "timing",
-   "hash": "d8e122e7225ba306",
+   "hash": "69b1365610b1d359",
    "tag": "sqp",
    "seed": 3,
    "law": "nmpc",
@@ -1325,15 +1325,15 @@
     "--seed",
     "3",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/timing/cells/d8e122e7225ba306.csv.part"
+    "/ws/data/thesis_eval/tuned/timing/cells/69b1365610b1d359.csv.part"
    ],
-   "seconds": 2.41,
+   "seconds": 2.46,
    "status": "ran"
   },
   {
    "name": "circle_iter_N10_r1",
    "study": "timing",
-   "hash": "daca4eebd221eb02",
+   "hash": "a74bbd6c0eee497e",
    "tag": "iter",
    "seed": 1,
    "law": "nmpc",
@@ -1391,7 +1391,7 @@
     "--seed",
     "1",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/timing/cells/daca4eebd221eb02.csv.part"
+    "/ws/data/thesis_eval/tuned/timing/cells/a74bbd6c0eee497e.csv.part"
    ],
    "seconds": 2.11,
    "status": "ran"
@@ -1399,7 +1399,7 @@
   {
    "name": "circle_iter_N10_r2",
    "study": "timing",
-   "hash": "c25806cc15adff4d",
+   "hash": "d42a8c953c7ef8a7",
    "tag": "iter",
    "seed": 2,
    "law": "nmpc",
@@ -1457,15 +1457,15 @@
     "--seed",
     "2",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/timing/cells/c25806cc15adff4d.csv.part"
+    "/ws/data/thesis_eval/tuned/timing/cells/d42a8c953c7ef8a7.csv.part"
    ],
-   "seconds": 2.15,
+   "seconds": 2.13,
    "status": "ran"
   },
   {
    "name": "circle_iter_N10_r3",
    "study": "timing",
-   "hash": "1bcb5e0fd029fd03",
+   "hash": "cae1f16cd01a34a1",
    "tag": "iter",
    "seed": 3,
    "law": "nmpc",
@@ -1523,15 +1523,15 @@
     "--seed",
     "3",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/timing/cells/1bcb5e0fd029fd03.csv.part"
+    "/ws/data/thesis_eval/tuned/timing/cells/cae1f16cd01a34a1.csv.part"
    ],
-   "seconds": 2.14,
+   "seconds": 2.18,
    "status": "ran"
   },
   {
    "name": "circle_sqp_N20_r1",
    "study": "timing",
-   "hash": "1b58d45cf2838885",
+   "hash": "79e8b7280e17f859",
    "tag": "sqp",
    "seed": 1,
    "law": "nmpc",
@@ -1585,15 +1585,15 @@
     "--seed",
     "1",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/timing/cells/1b58d45cf2838885.csv.part"
+    "/ws/data/thesis_eval/tuned/timing/cells/79e8b7280e17f859.csv.part"
    ],
-   "seconds": 3.57,
+   "seconds": 3.73,
    "status": "ran"
   },
   {
    "name": "circle_sqp_N20_r2",
    "study": "timing",
-   "hash": "71ae981b87f32ff8",
+   "hash": "0b56094367a6863f",
    "tag": "sqp",
    "seed": 2,
    "law": "nmpc",
@@ -1647,15 +1647,15 @@
     "--seed",
     "2",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/timing/cells/71ae981b87f32ff8.csv.part"
+    "/ws/data/thesis_eval/tuned/timing/cells/0b56094367a6863f.csv.part"
    ],
-   "seconds": 3.55,
+   "seconds": 3.63,
    "status": "ran"
   },
   {
    "name": "circle_sqp_N20_r3",
    "study": "timing",
-   "hash": "4b16ea893710fdae",
+   "hash": "c61b4dd62521e1a8",
    "tag": "sqp",
    "seed": 3,
    "law": "nmpc",
@@ -1709,15 +1709,15 @@
     "--seed",
     "3",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/timing/cells/4b16ea893710fdae.csv.part"
+    "/ws/data/thesis_eval/tuned/timing/cells/c61b4dd62521e1a8.csv.part"
    ],
-   "seconds": 3.55,
+   "seconds": 3.62,
    "status": "ran"
   },
   {
    "name": "circle_iter_N20_r1",
    "study": "timing",
-   "hash": "53de8ac840f8622f",
+   "hash": "a0cc373d7b9adf1e",
    "tag": "iter",
    "seed": 1,
    "law": "nmpc",
@@ -1775,15 +1775,15 @@
     "--seed",
     "1",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/timing/cells/53de8ac840f8622f.csv.part"
+    "/ws/data/thesis_eval/tuned/timing/cells/a0cc373d7b9adf1e.csv.part"
    ],
-   "seconds": 2.95,
+   "seconds": 2.97,
    "status": "ran"
   },
   {
    "name": "circle_iter_N20_r2",
    "study": "timing",
-   "hash": "e7886a6fb3277aa2",
+   "hash": "7ef4342ec8864234",
    "tag": "iter",
    "seed": 2,
    "law": "nmpc",
@@ -1841,15 +1841,15 @@
     "--seed",
     "2",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/timing/cells/e7886a6fb3277aa2.csv.part"
+    "/ws/data/thesis_eval/tuned/timing/cells/7ef4342ec8864234.csv.part"
    ],
-   "seconds": 2.91,
+   "seconds": 3.01,
    "status": "ran"
   },
   {
    "name": "circle_iter_N20_r3",
    "study": "timing",
-   "hash": "9cc34d27510ece04",
+   "hash": "ad2836c3f3e6fe9f",
    "tag": "iter",
    "seed": 3,
    "law": "nmpc",
@@ -1907,15 +1907,15 @@
     "--seed",
     "3",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/timing/cells/9cc34d27510ece04.csv.part"
+    "/ws/data/thesis_eval/tuned/timing/cells/ad2836c3f3e6fe9f.csv.part"
    ],
-   "seconds": 3.1,
+   "seconds": 3.02,
    "status": "ran"
   },
   {
    "name": "circle_sqp_N30_r1",
    "study": "timing",
-   "hash": "31fe18e642055c9b",
+   "hash": "1a8c91697f68f9e2",
    "tag": "sqp",
    "seed": 1,
    "law": "nmpc",
@@ -1969,15 +1969,15 @@
     "--seed",
     "1",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/timing/cells/31fe18e642055c9b.csv.part"
+    "/ws/data/thesis_eval/tuned/timing/cells/1a8c91697f68f9e2.csv.part"
    ],
-   "seconds": 4.79,
+   "seconds": 4.9,
    "status": "ran"
   },
   {
    "name": "circle_sqp_N30_r2",
    "study": "timing",
-   "hash": "93ace75ad31c9d24",
+   "hash": "5ea62b93b310dea0",
    "tag": "sqp",
    "seed": 2,
    "law": "nmpc",
@@ -2031,15 +2031,15 @@
     "--seed",
     "2",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/timing/cells/93ace75ad31c9d24.csv.part"
+    "/ws/data/thesis_eval/tuned/timing/cells/5ea62b93b310dea0.csv.part"
    ],
-   "seconds": 4.77,
+   "seconds": 4.89,
    "status": "ran"
   },
   {
    "name": "circle_sqp_N30_r3",
    "study": "timing",
-   "hash": "0a7700ab403d7b39",
+   "hash": "e18b84fe24589f46",
    "tag": "sqp",
    "seed": 3,
    "law": "nmpc",
@@ -2093,15 +2093,15 @@
     "--seed",
     "3",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/timing/cells/0a7700ab403d7b39.csv.part"
+    "/ws/data/thesis_eval/tuned/timing/cells/e18b84fe24589f46.csv.part"
    ],
-   "seconds": 4.82,
+   "seconds": 4.92,
    "status": "ran"
   },
   {
    "name": "circle_iter_N30_r1",
    "study": "timing",
-   "hash": "4d165b733d4346a1",
+   "hash": "57915755b51576c6",
    "tag": "iter",
    "seed": 1,
    "law": "nmpc",
@@ -2159,15 +2159,15 @@
     "--seed",
     "1",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/timing/cells/4d165b733d4346a1.csv.part"
+    "/ws/data/thesis_eval/tuned/timing/cells/57915755b51576c6.csv.part"
    ],
-   "seconds": 3.76,
+   "seconds": 3.8,
    "status": "ran"
   },
   {
    "name": "circle_iter_N30_r2",
    "study": "timing",
-   "hash": "8a27708b38797498",
+   "hash": "e54efcc20a5f6e97",
    "tag": "iter",
    "seed": 2,
    "law": "nmpc",
@@ -2225,15 +2225,15 @@
     "--seed",
     "2",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/timing/cells/8a27708b38797498.csv.part"
+    "/ws/data/thesis_eval/tuned/timing/cells/e54efcc20a5f6e97.csv.part"
    ],
-   "seconds": 3.76,
+   "seconds": 3.88,
    "status": "ran"
   },
   {
    "name": "circle_iter_N30_r3",
    "study": "timing",
-   "hash": "e37c20d2e4329bae",
+   "hash": "e7db5d4467c4820d",
    "tag": "iter",
    "seed": 3,
    "law": "nmpc",
@@ -2291,15 +2291,15 @@
     "--seed",
     "3",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/timing/cells/e37c20d2e4329bae.csv.part"
+    "/ws/data/thesis_eval/tuned/timing/cells/e7db5d4467c4820d.csv.part"
    ],
-   "seconds": 3.72,
+   "seconds": 3.84,
    "status": "ran"
   },
   {
    "name": "circle_sqp_N40_r1",
    "study": "timing",
-   "hash": "4cf36d938f679932",
+   "hash": "4401ea4c1cb5f920",
    "tag": "sqp",
    "seed": 1,
    "law": "nmpc",
@@ -2353,15 +2353,15 @@
     "--seed",
     "1",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/timing/cells/4cf36d938f679932.csv.part"
+    "/ws/data/thesis_eval/tuned/timing/cells/4401ea4c1cb5f920.csv.part"
    ],
-   "seconds": 6.06,
+   "seconds": 6.18,
    "status": "ran"
   },
   {
    "name": "circle_sqp_N40_r2",
    "study": "timing",
-   "hash": "dcb36805824c96e9",
+   "hash": "e609899bdd4af21c",
    "tag": "sqp",
    "seed": 2,
    "law": "nmpc",
@@ -2415,15 +2415,15 @@
     "--seed",
     "2",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/timing/cells/dcb36805824c96e9.csv.part"
+    "/ws/data/thesis_eval/tuned/timing/cells/e609899bdd4af21c.csv.part"
    ],
-   "seconds": 6.08,
+   "seconds": 6.16,
    "status": "ran"
   },
   {
    "name": "circle_sqp_N40_r3",
    "study": "timing",
-   "hash": "ad63a88d171a92cb",
+   "hash": "fa285a4fa243921d",
    "tag": "sqp",
    "seed": 3,
    "law": "nmpc",
@@ -2477,15 +2477,15 @@
     "--seed",
     "3",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/timing/cells/ad63a88d171a92cb.csv.part"
+    "/ws/data/thesis_eval/tuned/timing/cells/fa285a4fa243921d.csv.part"
    ],
-   "seconds": 6.04,
+   "seconds": 6.19,
    "status": "ran"
   },
   {
    "name": "circle_iter_N40_r1",
    "study": "timing",
-   "hash": "13e9b1b637eb1a53",
+   "hash": "60e33aaa97d38c54",
    "tag": "iter",
    "seed": 1,
    "law": "nmpc",
@@ -2543,15 +2543,15 @@
     "--seed",
     "1",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/timing/cells/13e9b1b637eb1a53.csv.part"
+    "/ws/data/thesis_eval/tuned/timing/cells/60e33aaa97d38c54.csv.part"
    ],
-   "seconds": 4.57,
+   "seconds": 4.68,
    "status": "ran"
   },
   {
    "name": "circle_iter_N40_r2",
    "study": "timing",
-   "hash": "31dd358ee704f786",
+   "hash": "a1e0a219a708c2bc",
    "tag": "iter",
    "seed": 2,
    "law": "nmpc",
@@ -2609,15 +2609,15 @@
     "--seed",
     "2",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/timing/cells/31dd358ee704f786.csv.part"
+    "/ws/data/thesis_eval/tuned/timing/cells/a1e0a219a708c2bc.csv.part"
    ],
-   "seconds": 4.63,
+   "seconds": 4.7,
    "status": "ran"
   },
   {
    "name": "circle_iter_N40_r3",
    "study": "timing",
-   "hash": "d51ae309def41cf8",
+   "hash": "05739e7b7e41e15c",
    "tag": "iter",
    "seed": 3,
    "law": "nmpc",
@@ -2675,15 +2675,15 @@
     "--seed",
     "3",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/timing/cells/d51ae309def41cf8.csv.part"
+    "/ws/data/thesis_eval/tuned/timing/cells/05739e7b7e41e15c.csv.part"
    ],
-   "seconds": 4.65,
+   "seconds": 4.66,
    "status": "ran"
   },
   {
    "name": "circle_sqp_N60_r1",
    "study": "timing",
-   "hash": "b377819ec534d366",
+   "hash": "ea95e9777a07231f",
    "tag": "sqp",
    "seed": 1,
    "law": "nmpc",
@@ -2737,15 +2737,15 @@
     "--seed",
     "1",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/timing/cells/b377819ec534d366.csv.part"
+    "/ws/data/thesis_eval/tuned/timing/cells/ea95e9777a07231f.csv.part"
    ],
-   "seconds": 9.11,
+   "seconds": 9.2,
    "status": "ran"
   },
   {
    "name": "circle_sqp_N60_r2",
    "study": "timing",
-   "hash": "9394f7ec7e14f086",
+   "hash": "430e0a6bafb789b1",
    "tag": "sqp",
    "seed": 2,
    "law": "nmpc",
@@ -2799,15 +2799,15 @@
     "--seed",
     "2",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/timing/cells/9394f7ec7e14f086.csv.part"
+    "/ws/data/thesis_eval/tuned/timing/cells/430e0a6bafb789b1.csv.part"
    ],
-   "seconds": 9.09,
+   "seconds": 9.17,
    "status": "ran"
   },
   {
    "name": "circle_sqp_N60_r3",
    "study": "timing",
-   "hash": "6f5ea5e39f0cae98",
+   "hash": "165af3ed6c038834",
    "tag": "sqp",
    "seed": 3,
    "law": "nmpc",
@@ -2861,15 +2861,15 @@
     "--seed",
     "3",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/timing/cells/6f5ea5e39f0cae98.csv.part"
+    "/ws/data/thesis_eval/tuned/timing/cells/165af3ed6c038834.csv.part"
    ],
-   "seconds": 9.33,
+   "seconds": 9.24,
    "status": "ran"
   },
   {
    "name": "circle_iter_N60_r1",
    "study": "timing",
-   "hash": "8d2f013efafc8f9a",
+   "hash": "1c0508b864699289",
    "tag": "iter",
    "seed": 1,
    "law": "nmpc",
@@ -2927,15 +2927,15 @@
     "--seed",
     "1",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/timing/cells/8d2f013efafc8f9a.csv.part"
+    "/ws/data/thesis_eval/tuned/timing/cells/1c0508b864699289.csv.part"
    ],
-   "seconds": 6.84,
+   "seconds": 6.73,
    "status": "ran"
   },
   {
    "name": "circle_iter_N60_r2",
    "study": "timing",
-   "hash": "6c9f5bd639667268",
+   "hash": "eaf4178570b67b7e",
    "tag": "iter",
    "seed": 2,
    "law": "nmpc",
@@ -2993,15 +2993,15 @@
     "--seed",
     "2",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/timing/cells/6c9f5bd639667268.csv.part"
+    "/ws/data/thesis_eval/tuned/timing/cells/eaf4178570b67b7e.csv.part"
    ],
-   "seconds": 6.67,
+   "seconds": 6.72,
    "status": "ran"
   },
   {
    "name": "circle_iter_N60_r3",
    "study": "timing",
-   "hash": "968ce3537a7e9ede",
+   "hash": "95b2e42cfe041079",
    "tag": "iter",
    "seed": 3,
    "law": "nmpc",
@@ -3059,9 +3059,9 @@
     "--seed",
     "3",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/timing/cells/968ce3537a7e9ede.csv.part"
+    "/ws/data/thesis_eval/tuned/timing/cells/95b2e42cfe041079.csv.part"
    ],
-   "seconds": 6.66,
+   "seconds": 6.79,
    "status": "ran"
   }
  ]

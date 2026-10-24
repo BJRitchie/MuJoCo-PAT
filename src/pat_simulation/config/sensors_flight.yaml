@@ -12,7 +12,8 @@
 #
 # The figures are from flight / tactical-grade datasheets, the same ones
 # nav_flight.yaml cites: a Safran STIM300-class MEMS IMU, a smallsat star tracker
-# (BCT NST class) and a close-range lidar/vision relative-navigation fix.
+# (BCT NST class) and an AVGS-type cooperative video guidance sensor for the
+# relative-navigation fix.
 pat_simulation:
   ros__parameters:
     # The IMU at the physics rate. Odometry and joint states stay at
@@ -31,12 +32,37 @@ pat_simulation:
       imu_accel_x:  {scale_error: 0.0, bias:  0.015, bias_walk_std: 1.2e-4, noise_std: 0.025,  quantisation: 0.0, rate_hz: 0.0, dropout_prob: 0.0,  delay_s: 0.0}
       imu_accel_y:  {scale_error: 0.0, bias: -0.01,  bias_walk_std: 1.2e-4, noise_std: 0.025,  quantisation: 0.0, rate_hz: 0.0, dropout_prob: 0.0,  delay_s: 0.0}
       imu_gyro_z:   {scale_error: 0.0, bias:  5.0e-5, bias_walk_std: 6.0e-6, noise_std: 0.001, quantisation: 0.0, rate_hz: 0.0, dropout_prob: 0.0,  delay_s: 0.0}
-      # Relative-navigation position (lidar / vision pose): 2 Hz, 15 mm, 0.5 s late.
+      # Relative-navigation position: an AVGS-type cooperative video guidance
+      # sensor (NASA MSFC, flown on Orbital Express; NTRS 20080015656), a camera
+      # on the bus tracking retroreflectors on the client. Only its OUTPUT is
+      # modelled, as the world-frame base fix it yields: 5 Hz, 0.15 s late (an
+      # engineering estimate; no latency is published), the spec's 3-sigma
+      # bounds read as 1-sigma = bound / 3.
+      #
+      # In the scene the bus looks at the client along world +x at about 0.9 m
+      # (body centres at x = -0.5 and +0.4), inside the sensor's first band
+      # (r <= 3 m: range 4 mm, bearing 1.92e-4 rad). So
+      #   nav_x, along the line of sight:  the range error, 4 mm, plus a 1 mm
+      #          range bias (a 1-sigma value of the per-unit bias);
+      #   nav_y, across it:                the bearing error, r * 1.92e-4
+      #          = 0.9 m x 1.92e-4 rad = 0.17 mm, rounded to 0.2 mm.
+      # The base moves by millimetres to centimetres during arm work, and its
+      # yaw does not turn the line of sight (set by the two positions), so the
+      # mapping holds for every scenario here.
+      #
+      # Not modelled: the noise's growth with range (one band applies at
+      # ~0.9 m); the 1-10 m range window and the +-8 deg field of view (no
+      # dropouts); a bias drawn per run (a fixed 1 mm). Note that 0.9 m is inside
+      # the real sensor's 1 m minimum range: a sensor-placement question this
+      # profile does not answer.
+      #
+      # Previously a generic lidar/vision fix: 15 mm on both axes, 2 Hz, 0.5 s.
+      #
       # No dropout: the sensor model drops each channel independently, so a
       # dropout here would produce fixes with one fresh coordinate and one
       # held from the previous sample -- something a real sensor, which loses
       # the whole fix, never emits, and which the estimator would fuse as new.
-      nav_x:        {scale_error: 0.0, bias:  0.0,   bias_walk_std: 0.0,    noise_std: 0.015,  quantisation: 0.0, rate_hz: 2.0, dropout_prob: 0.0,  delay_s: 0.5}
-      nav_y:        {scale_error: 0.0, bias:  0.0,   bias_walk_std: 0.0,    noise_std: 0.015,  quantisation: 0.0, rate_hz: 2.0, dropout_prob: 0.0,  delay_s: 0.5}
+      nav_x:        {scale_error: 0.0, bias:  0.001, bias_walk_std: 0.0,    noise_std: 0.004,  quantisation: 0.0, rate_hz: 5.0, dropout_prob: 0.0,  delay_s: 0.15}
+      nav_y:        {scale_error: 0.0, bias:  0.0,   bias_walk_std: 0.0,    noise_std: 0.0002, quantisation: 0.0, rate_hz: 5.0, dropout_prob: 0.0,  delay_s: 0.15}
       # Star tracker: 5 Hz, 0.1 mrad (~20 arcsec), 100 ms late.
       star_yaw:     {scale_error: 0.0, bias:  0.0,   bias_walk_std: 0.0,    noise_std: 1.0e-4, quantisation: 0.0, rate_hz: 5.0, dropout_prob: 0.0,  delay_s: 0.1}

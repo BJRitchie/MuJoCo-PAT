@@ -3,7 +3,7 @@
  "variant": "tuned",
  "quick": false,
  "git": {
-  "revision": "2237d47bbc8857220d656d9fce3ce68f264b3de9",
+  "revision": "bf6e9f4f553218b12c99245ef42ffd68e9057acd",
   "branch": "baseline_controllers",
   "dirty": true
  },
@@ -13,7 +13,7 @@
   "on_mains": true,
   "usb_pd_watts": 120,
   "python": "3.10.12",
-  "date": "2026-10-23T10:14:05+00:00"
+  "date": "2026-10-24T04:59:01+00:00"
  },
  "timing_study": false,
  "noisy_timing_allowed": false,
@@ -21,13 +21,13 @@
  "bench": {
   "path": "/ws/install/pat_arm_control/lib/pat_arm_control/contact_bench",
   "sha256": "67eaec5ed7d9a2a996bd80d11c979ba07b203ee54adff3dedc7b16964dad71b9",
-  "config_sha256": "02d967418fc52bc101f2d8d020ada0c5b5eed62fa7cdd43d030199699fecb4a2"
+  "config_sha256": "af00c9718d81bb5ef8696d4148990ed547f85a01ed93d8e0ee8910883e84d964"
  },
  "cells": [
   {
    "name": "circle_sqp_weights.Q_pos_-4-4-0.0875-",
    "study": "sensitivity",
-   "hash": "db698dcadda8cbd0",
+   "hash": "4090cd8778b2c928",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
@@ -78,15 +78,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/db698dcadda8cbd0.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/4090cd8778b2c928.csv.part"
    ],
-   "seconds": 4.68,
+   "seconds": 5.17,
    "status": "ran"
   },
   {
    "name": "circle_sqp_weights.Q_pos_-0.4-0.4-0.00875-",
    "study": "sensitivity",
-   "hash": "a52efb4aac4206b8",
+   "hash": "104d6c75021ace38",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
@@ -137,15 +137,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/a52efb4aac4206b8.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/104d6c75021ace38.csv.part"
    ],
-   "seconds": 4.75,
+   "seconds": 5.04,
    "status": "ran"
   },
   {
    "name": "circle_sqp_weights.Q_pos_-1.2-1.2-0.02625-",
    "study": "sensitivity",
-   "hash": "d83d499b27159ac3",
+   "hash": "a84ded1241123ac2",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
@@ -196,15 +196,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/d83d499b27159ac3.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/a84ded1241123ac2.csv.part"
    ],
-   "seconds": 4.59,
+   "seconds": 5.03,
    "status": "ran"
   },
   {
    "name": "circle_sqp_weights.Q_pos_-12-12-0.2625-",
    "study": "sensitivity",
-   "hash": "32fc3c424f5566b8",
+   "hash": "61c82eded1ae73fc",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
@@ -255,15 +255,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/32fc3c424f5566b8.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/61c82eded1ae73fc.csv.part"
    ],
-   "seconds": 4.74,
+   "seconds": 5.07,
    "status": "ran"
   },
   {
    "name": "circle_sqp_weights.Q_pos_-40-40-0.875-",
    "study": "sensitivity",
-   "hash": "9243da47e43e4347",
+   "hash": "c0b836348152808e",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
@@ -314,15 +314,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/9243da47e43e4347.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/c0b836348152808e.csv.part"
    ],
-   "seconds": 4.75,
+   "seconds": 5.3,
    "status": "ran"
   },
   {
    "name": "circle_sqp_weights.R_-0.035-0.035-0.035-",
    "study": "sensitivity",
-   "hash": "b0172d7a42e1d674",
+   "hash": "90eaff581364796b",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
@@ -373,15 +373,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/b0172d7a42e1d674.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/90eaff581364796b.csv.part"
    ],
-   "seconds": 4.66,
+   "seconds": 5.17,
    "status": "ran"
   },
   {
    "name": "circle_sqp_weights.R_-0.0035-0.0035-0.0035-",
    "study": "sensitivity",
-   "hash": "a6f141455ca78974",
+   "hash": "3573c5d992c85c0f",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
@@ -432,15 +432,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/a6f141455ca78974.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/3573c5d992c85c0f.csv.part"
    ],
-   "seconds": 4.75,
+   "seconds": 5.34,
    "status": "ran"
   },
   {
    "name": "circle_sqp_weights.R_-0.0105-0.0105-0.0105-",
    "study": "sensitivity",
-   "hash": "0a3be281a5a81ec8",
+   "hash": "f85ba0f7ad327ddc",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
@@ -491,15 +491,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/0a3be281a5a81ec8.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/f85ba0f7ad327ddc.csv.part"
    ],
-   "seconds": 4.7,
+   "seconds": 5.39,
    "status": "ran"
   },
   {
    "name": "circle_sqp_weights.R_-0.105-0.105-0.105-",
    "study": "sensitivity",
-   "hash": "60c6c241b91d0189",
+   "hash": "ffc917e580906eed",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
@@ -550,15 +550,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/60c6c241b91d0189.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/ffc917e580906eed.csv.part"
    ],
-   "seconds": 4.65,
+   "seconds": 5.06,
    "status": "ran"
   },
   {
    "name": "circle_sqp_weights.R_-0.35-0.35-0.35-",
    "study": "sensitivity",
-   "hash": "412e7983a58195b2",
+   "hash": "1e2d7475ec5e6906",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
@@ -609,15 +609,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/412e7983a58195b2.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/1e2d7475ec5e6906.csv.part"
    ],
-   "seconds": 4.64,
+   "seconds": 5.05,
    "status": "ran"
   },
   {
    "name": "circle_sqp_nmpc.N_24",
    "study": "sensitivity",
-   "hash": "b5667143de9259b1",
+   "hash": "f1bb6029410115af",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
@@ -668,15 +668,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/b5667143de9259b1.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/f1bb6029410115af.csv.part"
    ],
-   "seconds": 4.65,
+   "seconds": 5.07,
    "status": "ran"
   },
   {
    "name": "circle_sqp_nmpc.N_12",
    "study": "sensitivity",
-   "hash": "d20301b859d41691",
+   "hash": "98cbd785bc5ca7ec",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
@@ -727,15 +727,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/d20301b859d41691.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/98cbd785bc5ca7ec.csv.part"
    ],
-   "seconds": 2.99,
+   "seconds": 3.21,
    "status": "ran"
   },
   {
    "name": "circle_sqp_nmpc.N_18",
    "study": "sensitivity",
-   "hash": "d505ea357e65d966",
+   "hash": "bc432a515a323745",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
@@ -786,15 +786,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/d505ea357e65d966.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/bc432a515a323745.csv.part"
    ],
-   "seconds": 3.84,
+   "seconds": 4.27,
    "status": "ran"
   },
   {
    "name": "circle_sqp_nmpc.N_36",
    "study": "sensitivity",
-   "hash": "eb0c07343e89074e",
+   "hash": "97ff8eb974460ad1",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
@@ -845,15 +845,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/eb0c07343e89074e.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/97ff8eb974460ad1.csv.part"
    ],
-   "seconds": 6.71,
+   "seconds": 7.03,
    "status": "ran"
   },
   {
    "name": "circle_sqp_nmpc.N_48",
    "study": "sensitivity",
-   "hash": "d5d1bb8f88ef0b1d",
+   "hash": "d79c4f8809647677",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
@@ -904,15 +904,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/d5d1bb8f88ef0b1d.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/d79c4f8809647677.csv.part"
    ],
-   "seconds": 8.8,
+   "seconds": 9.38,
    "status": "ran"
   },
   {
    "name": "circle_sqp_nmpc.Ts_0.033",
    "study": "sensitivity",
-   "hash": "79c8ca2f318a838d",
+   "hash": "956e0b6f4abf77f4",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
@@ -963,15 +963,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/79c8ca2f318a838d.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/956e0b6f4abf77f4.csv.part"
    ],
-   "seconds": 4.87,
+   "seconds": 5.11,
    "status": "ran"
   },
   {
    "name": "circle_sqp_nmpc.Ts_0.0198",
    "study": "sensitivity",
-   "hash": "49f218ff8610b3d4",
+   "hash": "b18f637b4c236b14",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
@@ -1022,15 +1022,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/49f218ff8610b3d4.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/b18f637b4c236b14.csv.part"
    ],
-   "seconds": 4.86,
+   "seconds": 4.91,
    "status": "ran"
   },
   {
    "name": "circle_sqp_nmpc.Ts_0.0495",
    "study": "sensitivity",
-   "hash": "99aec7fe63b9abe4",
+   "hash": "149642a541a98913",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
@@ -1081,15 +1081,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/99aec7fe63b9abe4.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/149642a541a98913.csv.part"
    ],
-   "seconds": 4.78,
+   "seconds": 5.07,
    "status": "ran"
   },
   {
    "name": "circle_sqp_nmpc.Ts_0.099",
    "study": "sensitivity",
-   "hash": "e154249cc4cec53a",
+   "hash": "e3e777bd2fb78e5a",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
@@ -1140,15 +1140,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/e154249cc4cec53a.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/e3e777bd2fb78e5a.csv.part"
    ],
-   "seconds": 5.2,
+   "seconds": 5.38,
    "status": "ran"
   },
   {
    "name": "circle_sqp_qp.max_iter_60",
    "study": "sensitivity",
-   "hash": "27f9da000156e7d2",
+   "hash": "8e8ba822be57baf6",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
@@ -1199,15 +1199,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/27f9da000156e7d2.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/8e8ba822be57baf6.csv.part"
    ],
-   "seconds": 4.82,
+   "seconds": 4.97,
    "status": "ran"
   },
   {
    "name": "circle_sqp_qp.max_iter_10",
    "study": "sensitivity",
-   "hash": "22be34c60d31031c",
+   "hash": "95fdbaef7e30fe6d",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
@@ -1258,15 +1258,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/22be34c60d31031c.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/95fdbaef7e30fe6d.csv.part"
    ],
-   "seconds": 4.76,
+   "seconds": 5.02,
    "status": "ran"
   },
   {
    "name": "circle_sqp_qp.max_iter_20",
    "study": "sensitivity",
-   "hash": "058d05ec798d585c",
+   "hash": "ca55ab5e0d726e02",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
@@ -1317,15 +1317,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/058d05ec798d585c.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/ca55ab5e0d726e02.csv.part"
    ],
-   "seconds": 4.77,
+   "seconds": 4.9,
    "status": "ran"
   },
   {
    "name": "circle_sqp_qp.max_iter_100",
    "study": "sensitivity",
-   "hash": "20d3caacb001f416",
+   "hash": "8c27fd23b679b7c2",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
@@ -1376,15 +1376,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/20d3caacb001f416.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/8c27fd23b679b7c2.csv.part"
    ],
-   "seconds": 4.71,
+   "seconds": 4.96,
    "status": "ran"
   },
   {
    "name": "circle_sqp_nmpc.sqp_iters_1",
    "study": "sensitivity",
-   "hash": "521fffb3d071a39c",
+   "hash": "9ee3cee3136dc9fb",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
@@ -1435,15 +1435,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/521fffb3d071a39c.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/9ee3cee3136dc9fb.csv.part"
    ],
-   "seconds": 4.67,
+   "seconds": 4.89,
    "status": "ran"
   },
   {
    "name": "circle_sqp_nmpc.sqp_iters_2",
    "study": "sensitivity",
-   "hash": "872203f46f98eeeb",
+   "hash": "c71a4ac94d97ff9d",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
@@ -1494,15 +1494,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/872203f46f98eeeb.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/c71a4ac94d97ff9d.csv.part"
    ],
-   "seconds": 7.98,
+   "seconds": 8.57,
    "status": "ran"
   },
   {
    "name": "circle_sqp_nmpc.sqp_iters_3",
    "study": "sensitivity",
-   "hash": "0a8ee61d1d7f9f29",
+   "hash": "23e85bd1948f822b",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
@@ -1553,15 +1553,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/0a8ee61d1d7f9f29.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/23e85bd1948f822b.csv.part"
    ],
-   "seconds": 11.32,
+   "seconds": 12.16,
    "status": "ran"
   },
   {
    "name": "circle_iter_weights.Q_pos_-1-1-1000-",
    "study": "sensitivity",
-   "hash": "6d9bd49b8524f035",
+   "hash": "f5f8389f7ca0ffa1",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
@@ -1616,15 +1616,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/6d9bd49b8524f035.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/f5f8389f7ca0ffa1.csv.part"
    ],
-   "seconds": 6.01,
+   "seconds": 6.49,
    "status": "ran"
   },
   {
    "name": "circle_iter_weights.Q_pos_-0.1-0.1-100-",
    "study": "sensitivity",
-   "hash": "5fb6f31ce1a0797e",
+   "hash": "5fb3c557c7f0b086",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
@@ -1679,15 +1679,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/5fb6f31ce1a0797e.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/5fb3c557c7f0b086.csv.part"
    ],
-   "seconds": 6.21,
+   "seconds": 6.64,
    "status": "ran"
   },
   {
    "name": "circle_iter_weights.Q_pos_-0.3-0.3-300-",
    "study": "sensitivity",
-   "hash": "a4377598c5cd9128",
+   "hash": "4b53b595542ea50b",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
@@ -1742,15 +1742,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/a4377598c5cd9128.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/4b53b595542ea50b.csv.part"
    ],
-   "seconds": 6.16,
+   "seconds": 6.46,
    "status": "ran"
   },
   {
    "name": "circle_iter_weights.Q_pos_-3-3-3000-",
    "study": "sensitivity",
-   "hash": "03f612acba945fd6",
+   "hash": "0e2af162814f0ed9",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
@@ -1805,15 +1805,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/03f612acba945fd6.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/0e2af162814f0ed9.csv.part"
    ],
-   "seconds": 6.19,
+   "seconds": 6.62,
    "status": "ran"
   },
   {
    "name": "circle_iter_weights.Q_pos_-10-10-10000-",
    "study": "sensitivity",
-   "hash": "5365f4be82ed0642",
+   "hash": "c53ef7bccb5d4aa7",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
@@ -1868,15 +1868,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/5365f4be82ed0642.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/c53ef7bccb5d4aa7.csv.part"
    ],
-   "seconds": 6.35,
+   "seconds": 6.63,
    "status": "ran"
   },
   {
    "name": "circle_iter_weights.R_-0.07-0.07-0.07-",
    "study": "sensitivity",
-   "hash": "ac8b8013df4b0c13",
+   "hash": "0926103485281c2d",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
@@ -1931,15 +1931,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/ac8b8013df4b0c13.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/0926103485281c2d.csv.part"
    ],
-   "seconds": 6.18,
+   "seconds": 6.46,
    "status": "ran"
   },
   {
    "name": "circle_iter_weights.R_-0.007-0.007-0.007-",
    "study": "sensitivity",
-   "hash": "4a69602d14630416",
+   "hash": "a7b37954eab52ef4",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
@@ -1994,15 +1994,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/4a69602d14630416.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/a7b37954eab52ef4.csv.part"
    ],
-   "seconds": 6.37,
+   "seconds": 6.59,
    "status": "ran"
   },
   {
    "name": "circle_iter_weights.R_-0.021-0.021-0.021-",
    "study": "sensitivity",
-   "hash": "f458c1d5d37db6cb",
+   "hash": "a570364bbdc8f36f",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
@@ -2057,15 +2057,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/f458c1d5d37db6cb.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/a570364bbdc8f36f.csv.part"
    ],
-   "seconds": 6.28,
+   "seconds": 6.51,
    "status": "ran"
   },
   {
    "name": "circle_iter_weights.R_-0.21-0.21-0.21-",
    "study": "sensitivity",
-   "hash": "3675e9c52f9db2ed",
+   "hash": "85718716da8b083e",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
@@ -2120,15 +2120,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/3675e9c52f9db2ed.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/85718716da8b083e.csv.part"
    ],
-   "seconds": 6.07,
+   "seconds": 6.56,
    "status": "ran"
   },
   {
    "name": "circle_iter_weights.R_-0.7-0.7-0.7-",
    "study": "sensitivity",
-   "hash": "8a04003571efb5f0",
+   "hash": "bd8b34ade9807dc5",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
@@ -2183,15 +2183,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/8a04003571efb5f0.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/bd8b34ade9807dc5.csv.part"
    ],
-   "seconds": 6.13,
+   "seconds": 6.51,
    "status": "ran"
   },
   {
    "name": "circle_iter_nmpc.N_45",
    "study": "sensitivity",
-   "hash": "2f680bd127cfde55",
+   "hash": "68a2d2be2d89c5c7",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
@@ -2246,15 +2246,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/2f680bd127cfde55.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/68a2d2be2d89c5c7.csv.part"
    ],
-   "seconds": 6.1,
+   "seconds": 6.57,
    "status": "ran"
   },
   {
    "name": "circle_iter_nmpc.N_22",
    "study": "sensitivity",
-   "hash": "e6bbc24941c52a89",
+   "hash": "8ad98ef220967a04",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
@@ -2309,15 +2309,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/e6bbc24941c52a89.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/8ad98ef220967a04.csv.part"
    ],
-   "seconds": 3.67,
+   "seconds": 3.87,
    "status": "ran"
   },
   {
    "name": "circle_iter_nmpc.N_34",
    "study": "sensitivity",
-   "hash": "b68a0d35df0f8363",
+   "hash": "327a082deac46d60",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
@@ -2372,15 +2372,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/b68a0d35df0f8363.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/327a082deac46d60.csv.part"
    ],
-   "seconds": 4.9,
+   "seconds": 5.14,
    "status": "ran"
   },
   {
    "name": "circle_iter_nmpc.N_68",
    "study": "sensitivity",
-   "hash": "7f79aa1ec77f9f93",
+   "hash": "1c916a5d202209dd",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
@@ -2435,15 +2435,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/7f79aa1ec77f9f93.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/1c916a5d202209dd.csv.part"
    ],
-   "seconds": 9.41,
+   "seconds": 10.1,
    "status": "ran"
   },
   {
    "name": "circle_iter_nmpc.N_90",
    "study": "sensitivity",
-   "hash": "fac041cc0e533640",
+   "hash": "e2851dc415910f00",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
@@ -2498,15 +2498,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/fac041cc0e533640.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/e2851dc415910f00.csv.part"
    ],
-   "seconds": 13.48,
+   "seconds": 14.34,
    "status": "ran"
   },
   {
    "name": "circle_iter_nmpc.Ts_0.033",
    "study": "sensitivity",
-   "hash": "c72c079982deffc7",
+   "hash": "95fa031f1b6e12a5",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
@@ -2561,15 +2561,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/c72c079982deffc7.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/95fa031f1b6e12a5.csv.part"
    ],
-   "seconds": 6.39,
+   "seconds": 6.69,
    "status": "ran"
   },
   {
    "name": "circle_iter_nmpc.Ts_0.0198",
    "study": "sensitivity",
-   "hash": "69791e48be24c090",
+   "hash": "b06f57b5fecef05b",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
@@ -2624,15 +2624,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/69791e48be24c090.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/b06f57b5fecef05b.csv.part"
    ],
-   "seconds": 6.47,
+   "seconds": 6.9,
    "status": "ran"
   },
   {
    "name": "circle_iter_nmpc.Ts_0.0495",
    "study": "sensitivity",
-   "hash": "48fdb7afea622948",
+   "hash": "16f04b80ba836f0d",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
@@ -2687,15 +2687,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/48fdb7afea622948.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/16f04b80ba836f0d.csv.part"
    ],
-   "seconds": 6.46,
+   "seconds": 7.07,
    "status": "ran"
   },
   {
    "name": "circle_iter_nmpc.Ts_0.099",
    "study": "sensitivity",
-   "hash": "67dc58ba674ab0b5",
+   "hash": "8f4c76c5cab194ae",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
@@ -2750,15 +2750,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/67dc58ba674ab0b5.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/8f4c76c5cab194ae.csv.part"
    ],
-   "seconds": 9.99,
+   "seconds": 10.59,
    "status": "ran"
   },
   {
    "name": "circle_iter_qp.max_iter_60",
    "study": "sensitivity",
-   "hash": "d03f439784012744",
+   "hash": "0a2d4635ff0b8f67",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
@@ -2813,15 +2813,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/d03f439784012744.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/0a2d4635ff0b8f67.csv.part"
    ],
-   "seconds": 6.23,
+   "seconds": 6.77,
    "status": "ran"
   },
   {
    "name": "circle_iter_qp.max_iter_10",
    "study": "sensitivity",
-   "hash": "144905179da7c295",
+   "hash": "03ca50f9c5b7f8bf",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
@@ -2876,15 +2876,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/144905179da7c295.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/03ca50f9c5b7f8bf.csv.part"
    ],
-   "seconds": 6.31,
+   "seconds": 6.43,
    "status": "ran"
   },
   {
    "name": "circle_iter_qp.max_iter_20",
    "study": "sensitivity",
-   "hash": "e28812d6cd9841b2",
+   "hash": "c29af3a63c1c600d",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
@@ -2939,15 +2939,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/e28812d6cd9841b2.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/c29af3a63c1c600d.csv.part"
    ],
-   "seconds": 6.08,
+   "seconds": 6.35,
    "status": "ran"
   },
   {
    "name": "circle_iter_qp.max_iter_100",
    "study": "sensitivity",
-   "hash": "5b14307c06b4feb5",
+   "hash": "889b57f21de671ac",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
@@ -3002,15 +3002,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/5b14307c06b4feb5.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/889b57f21de671ac.csv.part"
    ],
-   "seconds": 5.98,
+   "seconds": 6.32,
    "status": "ran"
   },
   {
    "name": "circle_ompc_ompc.Ts_1.4",
    "study": "sensitivity",
-   "hash": "0a4ec6f1fc70b545",
+   "hash": "3f488d8e014f4e59",
    "tag": "ompc",
    "seed": 0,
    "law": "ompc",
@@ -3045,15 +3045,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/0a4ec6f1fc70b545.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/3f488d8e014f4e59.csv.part"
    ],
-   "seconds": 1.26,
+   "seconds": 1.35,
    "status": "ran"
   },
   {
    "name": "circle_ompc_ompc.Ts_0.35",
    "study": "sensitivity",
-   "hash": "e536f7a40af1859a",
+   "hash": "fd314583ac754d04",
    "tag": "ompc",
    "seed": 0,
    "law": "ompc",
@@ -3088,15 +3088,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/e536f7a40af1859a.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/fd314583ac754d04.csv.part"
    ],
-   "seconds": 1.3,
+   "seconds": 1.42,
    "status": "ran"
   },
   {
    "name": "circle_ompc_ompc.Ts_0.7",
    "study": "sensitivity",
-   "hash": "a836829d688fc80a",
+   "hash": "1e85d799cec58222",
    "tag": "ompc",
    "seed": 0,
    "law": "ompc",
@@ -3131,15 +3131,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/a836829d688fc80a.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/1e85d799cec58222.csv.part"
    ],
-   "seconds": 1.27,
+   "seconds": 1.46,
    "status": "ran"
   },
   {
    "name": "circle_ompc_ompc.Ts_2.8",
    "study": "sensitivity",
-   "hash": "e68ce446cef493dd",
+   "hash": "cd1fc7b040bb7ec9",
    "tag": "ompc",
    "seed": 0,
    "law": "ompc",
@@ -3174,15 +3174,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/e68ce446cef493dd.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/cd1fc7b040bb7ec9.csv.part"
    ],
-   "seconds": 1.34,
+   "seconds": 1.33,
    "status": "ran"
   },
   {
    "name": "circle_ompc_ompc.Ts_5.6",
    "study": "sensitivity",
-   "hash": "b53b34ce88f3f9a9",
+   "hash": "02a432ee67b74c92",
    "tag": "ompc",
    "seed": 0,
    "law": "ompc",
@@ -3217,15 +3217,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/b53b34ce88f3f9a9.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/02a432ee67b74c92.csv.part"
    ],
-   "seconds": 1.24,
+   "seconds": 1.33,
    "status": "ran"
   },
   {
    "name": "circle_ompc_ompc.Q_-1.6e+06-1.6e+06-100000-",
    "study": "sensitivity",
-   "hash": "4b798323d0c04b05",
+   "hash": "25e8a494e7dc08f4",
    "tag": "ompc",
    "seed": 0,
    "law": "ompc",
@@ -3260,15 +3260,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/4b798323d0c04b05.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/25e8a494e7dc08f4.csv.part"
    ],
-   "seconds": 1.24,
+   "seconds": 1.41,
    "status": "ran"
   },
   {
    "name": "circle_ompc_ompc.Q_-160000-160000-10000-",
    "study": "sensitivity",
-   "hash": "10ce627b6e47954c",
+   "hash": "0bd441bbe146a846",
    "tag": "ompc",
    "seed": 0,
    "law": "ompc",
@@ -3303,15 +3303,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/10ce627b6e47954c.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/0bd441bbe146a846.csv.part"
    ],
-   "seconds": 1.21,
+   "seconds": 1.29,
    "status": "ran"
   },
   {
    "name": "circle_ompc_ompc.Q_-480000-480000-30000-",
    "study": "sensitivity",
-   "hash": "aef1494eea0ca1bb",
+   "hash": "91da8293c7d62b71",
    "tag": "ompc",
    "seed": 0,
    "law": "ompc",
@@ -3346,15 +3346,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/aef1494eea0ca1bb.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/91da8293c7d62b71.csv.part"
    ],
-   "seconds": 1.3,
+   "seconds": 1.28,
    "status": "ran"
   },
   {
    "name": "circle_ompc_ompc.Q_-4.8e+06-4.8e+06-300000-",
    "study": "sensitivity",
-   "hash": "b91855fb026c294b",
+   "hash": "148d95e4b5ddeeae",
    "tag": "ompc",
    "seed": 0,
    "law": "ompc",
@@ -3389,15 +3389,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/b91855fb026c294b.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/148d95e4b5ddeeae.csv.part"
    ],
-   "seconds": 1.23,
+   "seconds": 1.31,
    "status": "ran"
   },
   {
    "name": "circle_ompc_ompc.Q_-1.6e+07-1.6e+07-1e+06-",
    "study": "sensitivity",
-   "hash": "d8d222326fe59e2f",
+   "hash": "c8673d8a2c8d2958",
    "tag": "ompc",
    "seed": 0,
    "law": "ompc",
@@ -3432,15 +3432,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/d8d222326fe59e2f.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/c8673d8a2c8d2958.csv.part"
    ],
-   "seconds": 1.21,
+   "seconds": 1.31,
    "status": "ran"
   },
   {
    "name": "circle_smc_smc.epsilon_5",
    "study": "sensitivity",
-   "hash": "25cdb05f58e6c58b",
+   "hash": "ecf89c970ae608d7",
    "tag": "smc",
    "seed": 0,
    "law": "smc",
@@ -3487,15 +3487,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/25cdb05f58e6c58b.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/ecf89c970ae608d7.csv.part"
    ],
-   "seconds": 1.18,
+   "seconds": 1.28,
    "status": "ran"
   },
   {
    "name": "circle_smc_smc.epsilon_1",
    "study": "sensitivity",
-   "hash": "dfccb4383c5a3004",
+   "hash": "f378e13ac5777366",
    "tag": "smc",
    "seed": 0,
    "law": "smc",
@@ -3542,15 +3542,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/dfccb4383c5a3004.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/f378e13ac5777366.csv.part"
    ],
-   "seconds": 1.32,
+   "seconds": 1.38,
    "status": "ran"
   },
   {
    "name": "circle_smc_smc.epsilon_2",
    "study": "sensitivity",
-   "hash": "300dc1b5f1280682",
+   "hash": "cea2306b610dae82",
    "tag": "smc",
    "seed": 0,
    "law": "smc",
@@ -3597,15 +3597,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/300dc1b5f1280682.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/cea2306b610dae82.csv.part"
    ],
-   "seconds": 1.23,
+   "seconds": 1.34,
    "status": "ran"
   },
   {
    "name": "circle_smc_smc.epsilon_10",
    "study": "sensitivity",
-   "hash": "9f67f36cf8eed279",
+   "hash": "0b6f846e91d174c5",
    "tag": "smc",
    "seed": 0,
    "law": "smc",
@@ -3652,15 +3652,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/9f67f36cf8eed279.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/0b6f846e91d174c5.csv.part"
    ],
-   "seconds": 1.25,
+   "seconds": 1.28,
    "status": "ran"
   },
   {
    "name": "circle_smc_smc.epsilon_20",
    "study": "sensitivity",
-   "hash": "86eec4959e908a97",
+   "hash": "eca56a3d37092c9a",
    "tag": "smc",
    "seed": 0,
    "law": "smc",
@@ -3707,15 +3707,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/86eec4959e908a97.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/eca56a3d37092c9a.csv.part"
    ],
-   "seconds": 1.27,
+   "seconds": 1.28,
    "status": "ran"
   },
   {
    "name": "circle_smc_smc.epsilon_50",
    "study": "sensitivity",
-   "hash": "8559b102ccb617c5",
+   "hash": "1f4776949419ecaf",
    "tag": "smc",
    "seed": 0,
    "law": "smc",
@@ -3762,15 +3762,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/8559b102ccb617c5.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/1f4776949419ecaf.csv.part"
    ],
-   "seconds": 1.34,
+   "seconds": 1.33,
    "status": "ran"
   },
   {
    "name": "circle_smc_smc.lam_-0.75-0.75-0.75-",
    "study": "sensitivity",
-   "hash": "c64a514d9849d837",
+   "hash": "8d29998433491975",
    "tag": "smc",
    "seed": 0,
    "law": "smc",
@@ -3817,15 +3817,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/c64a514d9849d837.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/8d29998433491975.csv.part"
    ],
-   "seconds": 1.36,
+   "seconds": 1.3,
    "status": "ran"
   },
   {
    "name": "circle_smc_smc.lam_-0.2475-0.2475-0.2475-",
    "study": "sensitivity",
-   "hash": "df956a92bec826c4",
+   "hash": "be18b529b04b8df3",
    "tag": "smc",
    "seed": 0,
    "law": "smc",
@@ -3872,15 +3872,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/df956a92bec826c4.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/be18b529b04b8df3.csv.part"
    ],
-   "seconds": 1.28,
+   "seconds": 1.27,
    "status": "ran"
   },
   {
    "name": "circle_smc_smc.lam_-0.5025-0.5025-0.5025-",
    "study": "sensitivity",
-   "hash": "f791d2018e8b9951",
+   "hash": "3d4699ada2337232",
    "tag": "smc",
    "seed": 0,
    "law": "smc",
@@ -3927,15 +3927,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/f791d2018e8b9951.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/3d4699ada2337232.csv.part"
    ],
-   "seconds": 1.3,
+   "seconds": 1.34,
    "status": "ran"
   },
   {
    "name": "circle_smc_smc.lam_-1.2525-1.2525-1.2525-",
    "study": "sensitivity",
-   "hash": "f892d86a28cd96c3",
+   "hash": "54c37e8df65a499c",
    "tag": "smc",
    "seed": 0,
    "law": "smc",
@@ -3982,15 +3982,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/f892d86a28cd96c3.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/54c37e8df65a499c.csv.part"
    ],
-   "seconds": 1.24,
+   "seconds": 1.42,
    "status": "ran"
   },
   {
    "name": "circle_smc_smc.lam_-2.0025-2.0025-2.0025-",
    "study": "sensitivity",
-   "hash": "cad0287fbd6a0520",
+   "hash": "ff18e3ed851e3b0a",
    "tag": "smc",
    "seed": 0,
    "law": "smc",
@@ -4037,15 +4037,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/cad0287fbd6a0520.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/ff18e3ed851e3b0a.csv.part"
    ],
-   "seconds": 1.27,
+   "seconds": 1.43,
    "status": "ran"
   },
   {
    "name": "circle_smc_smc.alpha_-5.6-5.6-5.6-",
    "study": "sensitivity",
-   "hash": "3e23a8c86cb4f223",
+   "hash": "8e4968c730dd7567",
    "tag": "smc",
    "seed": 0,
    "law": "smc",
@@ -4092,15 +4092,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/3e23a8c86cb4f223.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/8e4968c730dd7567.csv.part"
    ],
-   "seconds": 1.23,
+   "seconds": 1.36,
    "status": "ran"
   },
   {
    "name": "circle_smc_smc.alpha_-1.12-1.12-1.12-",
    "study": "sensitivity",
-   "hash": "ea213e05f3b3f556",
+   "hash": "8709faa409bba093",
    "tag": "smc",
    "seed": 0,
    "law": "smc",
@@ -4147,15 +4147,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/ea213e05f3b3f556.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/8709faa409bba093.csv.part"
    ],
-   "seconds": 1.22,
+   "seconds": 1.37,
    "status": "ran"
   },
   {
    "name": "circle_smc_smc.alpha_-2.8-2.8-2.8-",
    "study": "sensitivity",
-   "hash": "205d7d2ae96f57d6",
+   "hash": "cceae81426683aa6",
    "tag": "smc",
    "seed": 0,
    "law": "smc",
@@ -4202,15 +4202,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/205d7d2ae96f57d6.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/cceae81426683aa6.csv.part"
    ],
-   "seconds": 1.27,
+   "seconds": 1.37,
    "status": "ran"
   },
   {
    "name": "circle_smc_smc.alpha_-11.2-11.2-11.2-",
    "study": "sensitivity",
-   "hash": "e222fc692d8cc326",
+   "hash": "8651df1d0bb59987",
    "tag": "smc",
    "seed": 0,
    "law": "smc",
@@ -4257,15 +4257,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/e222fc692d8cc326.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/8651df1d0bb59987.csv.part"
    ],
-   "seconds": 1.26,
+   "seconds": 1.36,
    "status": "ran"
   },
   {
    "name": "circle_smc_smc.alpha_-22.4-22.4-22.4-",
    "study": "sensitivity",
-   "hash": "710e973a3f33fd29",
+   "hash": "9624090c16f6cf1f",
    "tag": "smc",
    "seed": 0,
    "law": "smc",
@@ -4312,15 +4312,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/710e973a3f33fd29.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/9624090c16f6cf1f.csv.part"
    ],
-   "seconds": 1.2,
+   "seconds": 1.37,
    "status": "ran"
   },
   {
    "name": "circle_smc_smc.tau_bound_0.0035",
    "study": "sensitivity",
-   "hash": "c6fb8b825ae68676",
+   "hash": "501924eac892cb0a",
    "tag": "smc",
    "seed": 0,
    "law": "smc",
@@ -4367,15 +4367,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/c6fb8b825ae68676.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/501924eac892cb0a.csv.part"
    ],
-   "seconds": 1.24,
+   "seconds": 1.39,
    "status": "ran"
   },
   {
    "name": "circle_smc_smc.tau_bound_0.00035",
    "study": "sensitivity",
-   "hash": "d10dbeab5dbf0e23",
+   "hash": "3b8397c6dad9b861",
    "tag": "smc",
    "seed": 0,
    "law": "smc",
@@ -4422,15 +4422,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/d10dbeab5dbf0e23.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/3b8397c6dad9b861.csv.part"
    ],
-   "seconds": 1.25,
+   "seconds": 1.35,
    "status": "ran"
   },
   {
    "name": "circle_smc_smc.tau_bound_0.00105",
    "study": "sensitivity",
-   "hash": "5f0c993df76dea74",
+   "hash": "b44f6f99dddf20c3",
    "tag": "smc",
    "seed": 0,
    "law": "smc",
@@ -4477,15 +4477,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/5f0c993df76dea74.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/b44f6f99dddf20c3.csv.part"
    ],
-   "seconds": 1.29,
+   "seconds": 1.34,
    "status": "ran"
   },
   {
    "name": "circle_smc_smc.tau_bound_0.0105",
    "study": "sensitivity",
-   "hash": "35309c80cd065b4e",
+   "hash": "ba81739855103287",
    "tag": "smc",
    "seed": 0,
    "law": "smc",
@@ -4532,15 +4532,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/35309c80cd065b4e.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/ba81739855103287.csv.part"
    ],
-   "seconds": 1.21,
+   "seconds": 1.34,
    "status": "ran"
   },
   {
    "name": "circle_smc_smc.tau_bound_0.035",
    "study": "sensitivity",
-   "hash": "f466f565679ea4e4",
+   "hash": "a1eeab134ead1bb6",
    "tag": "smc",
    "seed": 0,
    "law": "smc",
@@ -4587,9 +4587,9 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/f466f565679ea4e4.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/a1eeab134ead1bb6.csv.part"
    ],
-   "seconds": 1.17,
+   "seconds": 1.26,
    "status": "ran"
   }
  ]

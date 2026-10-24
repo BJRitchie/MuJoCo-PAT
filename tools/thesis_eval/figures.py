@@ -950,7 +950,7 @@ def fig_estimator() -> None:
     ax_e, ax_r, ax_u = (fig.add_subplot(gs[1, i]) for i in range(3))
 
     safe = False
-    labels = {"raw": "raw: last 2 Hz fix (0.5 s old, held)",
+    labels = {"raw": "raw: last 5 Hz fix (0.15 s old, held)",
               "ekf": "EKF: 500 Hz IMU, corrected at each fix"}
     for src in ("raw", "ekf"):
         s = C.series("estimator", f"{SCORE_SHAPE}_{src}_sqp_s1")

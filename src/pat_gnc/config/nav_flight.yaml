@@ -10,9 +10,10 @@
 # pat_simulation/config/sensors_flight.yaml carries the same figures (and the
 # constant biases noted under the priors): change both together, or the filter
 # is no longer told the truth. Told the truth, it is consistent (nav_bench
-# --seeds 20: NEES 8.15 against 8) and no noise setting beats it: each one moved
+# --seeds 20: NEES 7.52 against 8) and no noise setting beats it: each one moved
 # x0.5 or x2 leaves the error the same or worse. Its accuracy is set by the
-# relative-nav fix (15 mm, 2 Hz, 0.5 s late), not by the tuning.
+# relative-nav fix (the AVGS-type sensor: 2.2 / 0.8 mm position rms), not by the
+# tuning.
 pat_nav:
   ros__parameters:
     navigator: "imu_ekf"
@@ -56,11 +57,12 @@ pat_nav:
     # 1e-4 (~20") sits between them; set it from the mounting.
     imu_ekf.yaw_meas_std: 1.0e-4     # was 5e-4 (~103")
 
-    # Relative-navigation fix (lidar or vision pose). Close-range servicing
-    # targets cm-level position; the common rule of thumb is ~1% of range,
-    # so ~1-2 cm at 1-2 m. 5 mm is achievable only with markers at very short
-    # range.
-    imu_ekf.pos_meas_std: 0.015      # was 0.005
+    # Relative-navigation fix: an AVGS-type cooperative video guidance sensor
+    # (Orbital Express), 4 mm 1-sigma in range inside 3 m and 0.2 mm across the
+    # line of sight at the scene's ~0.9 m (sensors_flight.yaml). One isotropic
+    # sigma: exact along the line of sight, conservative across it; the filter
+    # takes no per-axis or per-range sigma.
+    imu_ekf.pos_meas_std: 0.004      # was 0.015 (generic lidar/vision fix)
     imu_ekf.vel_meas_std: 0.01       # unused while use_twist is false
 
     # Priors. Matching sim constant biases (set in sensors_flight.yaml):
@@ -77,23 +79,21 @@ pat_nav:
     # --- imu_ekf: sensor latency ---------------------------------------------
     # Star trackers: tens to a few hundred ms exposure-to-output. 0.1 s is fine.
     imu_ekf.latency_yaw: 0.1
-    # Relative nav: lidar pose estimation is slow (Jena-Optronik quote 2 Hz
-    # pose updates with ~1 s latency for RVS3000-3D model matching); camera
-    # pipelines are typically a few hundred ms. 0.5 s is a middle value; use
-    # 1.0 for a lidar-only servicer.
-    imu_ekf.latency_pos: 0.5         # was 0.2
+    # Relative nav: the AVGS's 5 Hz output (10 Hz internal) with an estimated
+    # 0.15 s latency; no latency is published.
+    imu_ekf.latency_pos: 0.15        # was 0.5 (generic lidar/vision fix)
     imu_ekf.latency_vel: 0.0
     imu_ekf.use_twist: false
-    # Essential with this profile: the 2 Hz position fix and 5 Hz star tracker
+    # Essential with this profile: the 5 Hz position fix and 5 Hz star tracker
     # ride on 100 Hz odometry, so each reading is republished many times.
     imu_ekf.skip_repeated: true
     imu_ekf.use_position: true
 
     # --- imu_ekf: robustness and realtime bound ------------------------------
-    # 0.5 s at 500 Hz is 250 steps, so 256 no longer leaves room: 512 does.
-    # (latency_pos 1.0 needs 1024.) Re-check the startup replay timing
-    # against half of 1/nav_hz after changing this.
-    imu_ekf.history_len: 512
+    # The longest latency, 0.15 s at 500 Hz, is 75 steps; 256 leaves room.
+    # Re-check the startup replay timing against half of 1/nav_hz after
+    # changing this.
+    imu_ekf.history_len: 256
     imu_ekf.max_imu_gap: 0.1
     # chi-square 99.9% gates: 1 dof = 10.83, 2 dof = 13.82. Correct as-is.
     imu_ekf.gate_yaw: 10.83

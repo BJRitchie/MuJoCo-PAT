@@ -1195,40 +1195,44 @@ ros2 run pat_simulation nav_bench --seeds 20   # Monte-Carlo consistency
 
 The flight profile (`sensors_flight.yaml`, mirrored in `nav_flight.yaml`) is
 taken from datasheets: a STIM300-class MEMS IMU, a smallsat star tracker at
-0.1 mrad and 5 Hz, 0.1 s late, and a lidar/vision relative-nav fix at 15 mm and
-2 Hz, 0.5 s late. One seed:
+0.1 mrad and 5 Hz, 0.1 s late, and an AVGS-type cooperative video guidance
+sensor (NASA MSFC, flown on Orbital Express) for the relative-nav fix: 5 Hz,
+0.15 s late, 4 mm along the line of sight to the client (world x, with a 1 mm
+range bias) and 0.2 mm across it, its first range band at the scene's ~0.9 m.
+Only the sensor's output is modelled; its range window and field of view are
+not, and the scene's 0.9 m is inside the real sensor's 1 m minimum range (see
+the YAML comment). One seed:
 
 | state | error rms | filter's own σ |
 |---|---|---|
-| position | 11.0 / 6.6 mm | 9.3 mm |
+| position | 2.2 / 0.8 mm | 2.2 mm |
 | yaw | 0.055 mrad | 0.050 mrad |
-| velocity | 3.2 / 2.6 mm/s | 3.3 mm/s |
+| velocity | 1.6 / 1.1 mm/s | 1.7 mm/s |
 | gyro bias | 0.020 mrad/s | 0.018 mrad/s |
-| accelerometer bias | 0.48 / 0.51 mm/s² | 0.51 mm/s² |
+| accelerometer bias | 0.29 / 0.36 mm/s² | 0.41 mm/s² |
 
 **The covariance is honest.** Over 20 seeds the seed-averaged NEES sits inside
-its 95% χ² band on 95.6% of instants (about 95% is what a consistent filter
-gives), mean 8.15 against 8, and the innovations average 0.97 and 1.96 against
-the 1 and 2 they should. That matters because the covariance is published: it
-is what anything downstream uses to decide how far to trust the estimate.
+its 95% χ² band on 94.3% of instants (about 95% is what a consistent filter
+gives), mean 7.52 against 8. That matters because the covariance is published:
+it is what anything downstream uses to decide how far to trust the estimate.
+The yaw innovations average 0.97 against 1; the position innovations average
+1.03 against 2 because the filter takes one isotropic σ, 4 mm, which is right
+along the line of sight and about 20x too large across it, so the across axis
+adds almost nothing. That is the filter being cautious, not overconfident.
 
 **The sensors set the accuracy, not the tuning.** Told the truth, the filter is
 already the best these sensors allow. Over 10 seeds, moving any one of its noise
-settings ×0.5 or ×2 leaves the error the same or worse (up to +14%). Telling it
+settings ×0.5 or ×2 leaves the error the same or worse (up to +15%). Telling it
 the position fix is twice as good as it is makes it reject the real fixes and
-diverge. Changing one sensor at a time, in the plant and the filter together
-(2-D position rms, 10 seeds):
+diverge. 2-D position rms, 10 seeds:
 
-| sensor change | position | yaw |
+| relative-nav fix | position | yaw |
 |---|---|---|
-| as configured | 13.7 mm | 51 µrad |
-| fibre-optic-gyro IMU (LN-200S) | 12.0 mm | 39 µrad |
-| nav fix 5 mm | 6.1 mm | 51 µrad |
-| nav fix 10 Hz | 7.4 mm | 51 µrad |
-| nav fix 0.2 s late | 12.6 mm | 51 µrad |
-| nav fix 5 mm and 10 Hz | 3.5 mm | 51 µrad |
+| generic lidar/vision, 15 mm, 2 Hz, 0.5 s late (the previous profile) | 13.7 mm | 51 µrad |
+| AVGS-type, 4 / 0.2 mm, 5 Hz, 0.15 s late (as configured) | 2.5 mm | 51 µrad |
 
-The relative-nav fix limits position; a better IMU buys little.
+The relative-nav fix limits position. On the previous profile a fibre-optic
+gyro IMU (LN-200S) improved position only from 13.7 to 12.0 mm.
 
 **Without a position fix** (`--no-position`, `imu_ekf.use_position: false`)
 position drifts 24 m in a minute, but the filter's own σ grows to 26 m, so it
@@ -1239,14 +1243,15 @@ vision exists, arm work keeps a mocap-grade `/chaser/odom`.
 **Sensor latency has to be right to well under a millisecond.** While the base
 turns, a timing error is a yaw error, and the star tracker is accurate enough to
 notice. `--latency-scale` mis-states every latency by the same factor, so a
-star-tracker error of ±1 ms comes with ±5 ms on the position fix:
+star-tracker error of ±1 ms comes with ±1.5 ms on the position fix, which on
+its own barely matters (position 2.2-2.7 mm across the whole table):
 
 | star-tracker latency error | yaw error | NEES (8 is honest) | star-tracker fixes rejected |
 |---|---|---|---|
-| 0 | 0.055 mrad | 7.7 | 1 of 299 |
-| ±1 ms | 0.21–1.0 mrad | 24–87 | 17–143 |
-| ±5 ms | 0.9–1.5 mrad | 112–159 | 175–217 |
-| ±10 ms | 10.5–19.2 mrad | 187–236 | 273–288 |
+| 0 | 0.055 mrad | 6.5 | 1 of 299 |
+| ±1 ms | 0.21–1.0 mrad | 22–85 | 17–143 |
+| ±5 ms | 0.9–1.5 mrad | 111–159 | 175–216 |
+| ±10 ms | 10.4–18.9 mrad | 185–233 | 273–288 |
 
 So on hardware the drivers must stamp each reading with its acquisition time
 and the configured latency should be zero; a fixed latency guessed to the

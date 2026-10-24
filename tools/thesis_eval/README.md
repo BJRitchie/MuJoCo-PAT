@@ -227,45 +227,47 @@ whose corners the two arms do not take identically.
 **Disturbance and model error** (rectangle, test). A constant 0.05 N·m on joint2
 costs SQP 9.5 against 48-59 for the others; a 2x link mass, 7.8 against 32-48.
 
-**Flight sensing sets the accuracy.** On the flight sensors with the full
-estimation (EKF + joint Kalman filters), every controller lands within the base
-estimate's own error, about 12.5 mm of position, set by the 15 mm, 2 Hz
-relative-nav fix (the main README's `nav_bench` sensor sweep):
+**Flight sensing.** The relative-nav fix is an AVGS-type cooperative video
+guidance sensor (5 Hz, 0.15 s late, 4 mm along the line of sight and 0.2 mm
+across it at the scene's 0.9 m; see the main README's estimator section). With
+the full estimation (EKF + joint Kalman filters) the base position the arm is
+handed is 2.4 mm rms, and the controllers keep their order:
 
 | flight sensing (exact state) | SQP | LMPC | OMPC | SMC |
 |---|---|---|---|---|
-| circle | 10.6 (0.32) | 10.9 (0.49) | 11.1 (0.53) | 9.8 (0.68) |
-| rectangle | **10.6** (0.48) | 22.4 (19.6) | 34.4 (33.1) | 27.6 (26.2) |
+| circle | 2.4 (0.32) | 2.1 (0.49) | 2.2 (0.53) | 1.9 (0.68) |
+| rectangle | **2.4** (0.48) | 19.4 (19.6) | 32.6 (33.1) | 25.7 (26.2) |
 
-The controllers separate only where their own tracking error exceeds the
-estimate's, as on the rectangle, where SQP keeps a 2-3x lead. Scaling every
-sensor's error up (test) moves all four together (8x: 82-101 mm, SQP and LMPC
-entering safe mode). Delaying the whole state by up to 5 more control ticks costs
-SQP, OMPC and SMC nothing, and makes LMPC unstable (22.6 to 174 mm).
+On the circle every controller is within the estimate's own error, so all four
+land at 2 mm. On the rectangle the others' own tracking error dominates and SQP
+keeps an 8-13x lead. Scaling every sensor's error up (test) costs SQP in
+proportion (8x: 18.8 mm) and leaves OMPC and SMC almost unchanged; LMPC enters
+safe mode from 4x. Delaying the whole state by up to 5 more control ticks costs
+SQP 2.6 to 5.1 mm and OMPC and SMC nothing, and makes LMPC unstable from 2 ticks
+(19.2 to 170 mm).
 
 **What the estimation buys** (figure 14). Against the raw flight sensors (the
-last 2 Hz fix, 0.5 s old; velocity differenced between fixes, 57 mm/s rms error)
-the EKF and joint filters do not make the arm more accurate: on raw sensors every
-controller tracks as well or slightly better (SQP rectangle 8.8 against 10.6).
-Their position error is the same order (20.6 against 12.5 mm), and a raw error
-that jumps is averaged by the arm, where the EKF's slow drift passes through.
-What the estimation buys is the command. SQP's `∫‖τ‖²dt` on flight sensing falls
-from 0.285 to 0.109 on the rectangle and from 0.226 to 0.029 on the circle (8x),
-and its tick-to-tick torque change from 56 to 20 mN·m, with the base yaw and
-velocity the controller is handed 130x and 13x more accurate (0.05 against
-6.9 mrad, 4.4 against 57 mm/s). The joint Kalman filter does most of the
-smoothing: it alone takes SQP's torque change from 53.6 to 20.3 mN·m and LMPC's
-from 23.1 to 9.6, with no change in tracking.
+last 5 Hz fix, 0.15 s old; velocity differenced between fixes) the estimation
+improves the base state the controller is handed in every component: position
+2.4 against 3.9 mm, yaw 0.05 against 6.8 mrad, velocity 2.3 against 27 mm/s. For
+SQP, that is better tracking and a gentler command at once. On the rectangle its
+RMSE falls from 3.1 to 2.4 mm, its `∫‖τ‖²dt` from 0.172 to 0.108 and its
+tick-to-tick torque change from 55 to 20 mN·m; on the circle `∫‖τ‖²dt` falls from
+0.107 to 0.028 (4x). LMPC, OMPC and SMC track within 0.1-1 mm of raw either way
+(on the circle the estimation saves them about 1 mm). The joint Kalman filter
+does most of the smoothing: it alone takes SQP's torque change from 53 to 20
+mN·m and LMPC's from 23 to 9.5, with no loss of tracking.
 
-**Estimator start-up** (figure 16). Raw sensors have nothing to learn. The EKF
-starts with 20 mm of position error and SQP tracks to 16.9; after 10 s of running
-before the task it has converged (12.2 mm; SQP 10.2).
+**Estimator start-up** (figure 16). Raw sensors have nothing to learn. With the
+5 Hz, 4 mm fix the EKF is converged almost at once: SQP tracks to 2.7 mm with no
+warm-up and 2.5 mm after 60 s.
 
 **Disturbance-observer feedforward** (figures 12-13). With the constant 0.05 N·m
 torque on exact state, `ff_gain` 1.0 recovers the undisturbed accuracy (SQP 9.6
-to 0.32; the others 39-44 to 0.3-0.5). On flight sensing it still removes most of
-the disturbance (EKF + joint KF: the others 42-47 to 11-12, the estimate's floor;
-SQP 15.5 to 10.9). These runs are offline; the live, velocity-sensing caveat on
+to 0.32; the others 39-44 to 0.3-0.5). On flight sensing it removes nearly all
+of it (EKF + joint KF: the others 38-44 to 3.3-3.4, SQP 9.5 to 2.5), against
+9.4-11.4 for the others on raw sensors, where the feedforward is capped on twice
+as many ticks. These runs are offline; the live, velocity-sensing caveat on
 `ff_gain` (CLAUDE.md, main README) is unchanged by them.
 
 **Constraints.** Only the NMPC enforces the joint box. When joint3 starts 0.088
@@ -276,9 +278,12 @@ stops short (final error 30-40 mm), while OMPC and SMC reach further by leaving 
 box by 30-53 mrad and pressing joint5 into its hard stop.
 
 **Timing** (5 pinned processes, mains, `performance` governor). Mean / p99 / max
-per tick, in µs: tuned SQP (N 24) 710 / 923 / 1260, LMPC (N 45) 984 / 1245 /
-1756; OMPC and SMC about 5 / 10 / 27. Every law fits the 10 ms period with at
-least 5x headroom.
+per tick, in µs: tuned SQP (N 24) 717 / 835 / 1106, LMPC (N 45) 990 / 1232 /
+1456; OMPC and SMC about 5 / 10 / 37. Every law fits the 10 ms period with at
+least 6x headroom.
+
+The shipped-variant studies and `fig15_shipped_vs_tuned` were last run on the
+previous relative-nav profile (15 mm, 2 Hz, 0.5 s) and have not been rerun.
 
 ## Metrics
 
