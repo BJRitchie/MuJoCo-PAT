@@ -1,0 +1,119 @@
+{
+ "law": "nmpc",
+ "args": [
+  "--set",
+  "weights.Q_pos=[0.14,0.14,0.01]",
+  "--set",
+  "weights.Q_vel=[8,8,0.0112547]",
+  "--set",
+  "weights.R=[0.035,0.035,0.035]",
+  "--set",
+  "nmpc.N=20",
+  "--set",
+  "nmpc.Ts=0.033",
+  "--set",
+  "nmpc.terminal_cost_multiplier=2240"
+ ],
+ "state": {
+  "qpos_xy": 0.13999999999999999,
+  "qpos_th": 0.01,
+  "qvel_xy": 8.0,
+  "qvel_th": 0.011254687499999996,
+  "r": 0.034999999999999996,
+  "N": 20,
+  "Ts": 0.033,
+  "term": 2240.0
+ },
+ "feasible": true,
+ "gmean_rmse_mm": {
+  "shipped": 8.836583922417564,
+  "tuned": 6.291416683777904
+ },
+ "per_scenario": {
+  "shipped": {
+   "circle": {
+    "rmse_mm": 2.3105831,
+    "rail_frac": 0.0,
+    "safe_ticks": 0.0,
+    "tick_us_max": 2007.425,
+    "tau2_int_win": 0.0145579102,
+    "err_var_mm2": 1.82298362
+   },
+   "rectangle": {
+    "rmse_mm": 4.45757106,
+    "rail_frac": 0.0,
+    "safe_ticks": 0.0,
+    "tick_us_max": 3034.176,
+    "tau2_int_win": 0.0257596101,
+    "err_var_mm2": 6.13874799
+   },
+   "step6": {
+    "rmse_mm": 32.6498064,
+    "rail_frac": 0.0,
+    "safe_ticks": 0.0,
+    "tick_us_max": 1553.153,
+    "tau2_int_win": 0.010927021,
+    "err_var_mm2": 661.297517
+   },
+   "circle2x": {
+    "rmse_mm": 10.9697953,
+    "rail_frac": 0.0,
+    "safe_ticks": 0.0,
+    "tick_us_max": 2829.51,
+    "tau2_int_win": 0.0773435526,
+    "err_var_mm2": 23.9646621
+   },
+   "rectangle2x": {
+    "rmse_mm": 14.605722,
+    "rail_frac": 0.0,
+    "safe_ticks": 0.0,
+    "tick_us_max": 1932.636,
+    "tau2_int_win": 0.0957259928,
+    "err_var_mm2": 51.212008
+   }
+  },
+  "tuned": {
+   "circle": {
+    "rmse_mm": 1.47523943,
+    "rail_frac": 0.0,
+    "safe_ticks": 0.0,
+    "tick_us_max": 2930.004,
+    "tau2_int_win": 0.0141691249,
+    "err_var_mm2": 0.516313827
+   },
+   "rectangle": {
+    "rmse_mm": 2.69607542,
+    "rail_frac": 0.000889481877,
+    "safe_ticks": 0.0,
+    "tick_us_max": 1702.014,
+    "tau2_int_win": 0.048640546,
+    "err_var_mm2": 3.27663748
+   },
+   "step6": {
+    "rmse_mm": 45.6344647,
+    "rail_frac": 0.0,
+    "safe_ticks": 0.0,
+    "tick_us_max": 918.173,
+    "tau2_int_win": 0.00213125089,
+    "err_var_mm2": 396.329873
+   },
+   "circle2x": {
+    "rmse_mm": 6.34870745,
+    "rail_frac": 0.0,
+    "safe_ticks": 0.0,
+    "tick_us_max": 3533.492,
+    "tau2_int_win": 0.081574373,
+    "err_var_mm2": 6.87135206
+   },
+   "rectangle2x": {
+    "rmse_mm": 8.55400351,
+    "rail_frac": 0.037672866,
+    "safe_ticks": 0.0,
+    "tick_us_max": 2475.768,
+    "tau2_int_win": 0.156498239,
+    "err_var_mm2": 21.8867488
+   }
+  }
+ },
+ "evaluations": 123
+}

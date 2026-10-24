@@ -42,9 +42,10 @@ Planar Air-bearing Table simulator for ISAM GNC and manipulation research.
 | `pat_msgs` | `ThrusterCommand`, `ControlError` messages |
 | `pat_platform_description` | shared xacro: bus + planar arm, expanded to MJCF at build time |
 | `pat_simulation` | MuJoCo sim node + viewer — the hardware stand-in |
+| `pat_sensors` | the seeded sensor noise/bias/delay model, shared by the sim and the arm benches |
 | `pat_gnc` | PID controller, direct/EKF navigation |
 | `pat_robotics` | per-joint arm PID |
-| `pat_arm_control` | dual-arm task-space control: one node type per control law (`nmpc_node` today), sharing one law-agnostic node and the safe mode, reference and feedforward handling |
+| `pat_arm_control` | dual-arm task-space control: one node type per control law (`nmpc_node`, `ompc_node`, `smc_node`), sharing one law-agnostic node and the safe mode, reference and feedforward handling |
 | `pat_telemetry` | merges joint state/torque, publishes EE-to-setpoint distance |
 
 `tools/pinn_datagen/` (offline training-data generator, not a ROS package) and
@@ -418,7 +419,11 @@ tracking error in mm:
 - The NMPC alone is constrained: its torque peak is 0.064 N·m on the circle and
   it never rails.
 - These are single runs with perfect state. No noise, observer or live stack
-  was involved, so they are a first comparison, not a ranking.
+  was involved, so they are a first comparison, not a ranking. The full
+  comparison is in [`tools/thesis_eval/`](tools/thesis_eval/README.md). It
+  covers both NMPC formulations, steps, speed, disturbance, model error, noise,
+  the base-state EKF, the disturbance observer, joint constraints, sensitivity
+  and timing, with every law tuned by one rule.
 
 Live, each law ran against the simulation with the circle publisher for 20 to 40
 seconds with no safe-mode entries, and `run_trial.sh -l ompc|smc|nmpc` times any of
@@ -588,7 +593,7 @@ PlotJuggler is installed in the `dev` image only.
 ## Test
 
 ```bash
-colcon test --packages-select pat_rt pat_gnc pat_robotics pat_simulation pat_arm_control pat_telemetry
+colcon test --packages-select pat_rt pat_sensors pat_gnc pat_robotics pat_simulation pat_arm_control pat_telemetry
 colcon test-result --verbose
 ```
 
@@ -1188,19 +1193,42 @@ ros2 run pat_simulation nav_bench              # one 60 s run, flight profile
 ros2 run pat_simulation nav_bench --seeds 20   # Monte-Carlo consistency
 ```
 
+The flight profile (`sensors_flight.yaml`, mirrored in `nav_flight.yaml`) is
+taken from datasheets: a STIM300-class MEMS IMU, a smallsat star tracker at
+0.1 mrad and 5 Hz, 0.1 s late, and a lidar/vision relative-nav fix at 15 mm and
+2 Hz, 0.5 s late. One seed:
+
 | state | error rms | filter's own σ |
 |---|---|---|
-| position | 4.4 / 3.7 mm | 4.2 mm |
-| yaw | 0.25 mrad | 0.21 mrad |
-| velocity | 2.6 / 2.4 mm/s | 2.8 mm/s |
-| gyro bias | 0.12 mrad/s | 0.09 mrad/s |
-| accelerometer bias | 0.7 / 1.0 mm/s² | 1.1 mm/s² |
+| position | 11.0 / 6.6 mm | 9.3 mm |
+| yaw | 0.055 mrad | 0.050 mrad |
+| velocity | 3.2 / 2.6 mm/s | 3.3 mm/s |
+| gyro bias | 0.020 mrad/s | 0.018 mrad/s |
+| accelerometer bias | 0.48 / 0.51 mm/s² | 0.51 mm/s² |
 
 **The covariance is honest.** Over 20 seeds the seed-averaged NEES sits inside
-its 95% χ² band on 94.7% of instants (about 95% is what a consistent filter
-gives), mean 7.96 against 8, and the innovations average 0.96 and 1.95 against
+its 95% χ² band on 95.6% of instants (about 95% is what a consistent filter
+gives), mean 8.15 against 8, and the innovations average 0.97 and 1.96 against
 the 1 and 2 they should. That matters because the covariance is published: it
 is what anything downstream uses to decide how far to trust the estimate.
+
+**The sensors set the accuracy, not the tuning.** Told the truth, the filter is
+already the best these sensors allow. Over 10 seeds, moving any one of its noise
+settings ×0.5 or ×2 leaves the error the same or worse (up to +14%). Telling it
+the position fix is twice as good as it is makes it reject the real fixes and
+diverge. Changing one sensor at a time, in the plant and the filter together
+(2-D position rms, 10 seeds):
+
+| sensor change | position | yaw |
+|---|---|---|
+| as configured | 13.7 mm | 51 µrad |
+| fibre-optic-gyro IMU (LN-200S) | 12.0 mm | 39 µrad |
+| nav fix 5 mm | 6.1 mm | 51 µrad |
+| nav fix 10 Hz | 7.4 mm | 51 µrad |
+| nav fix 0.2 s late | 12.6 mm | 51 µrad |
+| nav fix 5 mm and 10 Hz | 3.5 mm | 51 µrad |
+
+The relative-nav fix limits position; a better IMU buys little.
 
 **Without a position fix** (`--no-position`, `imu_ekf.use_position: false`)
 position drifts 24 m in a minute, but the filter's own σ grows to 26 m, so it
@@ -1208,16 +1236,17 @@ says so, and the accelerometer bias stays at its prior: it cannot be told apart
 from real acceleration. Flight needs the relative-nav sensor; until Phase 3
 vision exists, arm work keeps a mocap-grade `/chaser/odom`.
 
-**Sensor latency has to be right to about a millisecond.** While the base
+**Sensor latency has to be right to well under a millisecond.** While the base
 turns, a timing error is a yaw error, and the star tracker is accurate enough to
-notice:
+notice. `--latency-scale` mis-states every latency by the same factor, so a
+star-tracker error of ±1 ms comes with ±5 ms on the position fix:
 
-| latency error | yaw error | NEES (8 is honest) | star-tracker fixes rejected |
+| star-tracker latency error | yaw error | NEES (8 is honest) | star-tracker fixes rejected |
 |---|---|---|---|
-| 0 | 0.25 mrad | 8.0 | 1 of 299 |
-| ±1 ms | 0.37–0.59 mrad | 11–15 | 1 |
-| ±5 ms | 1.1–1.6 mrad | 51–73 | 0–13 |
-| ±10 ms | 2.2–2.5 mrad | 125–201 | 12–79 |
+| 0 | 0.055 mrad | 7.7 | 1 of 299 |
+| ±1 ms | 0.21–1.0 mrad | 24–87 | 17–143 |
+| ±5 ms | 0.9–1.5 mrad | 112–159 | 175–217 |
+| ±10 ms | 10.5–19.2 mrad | 187–236 | 273–288 |
 
 So on hardware the drivers must stamp each reading with its acquisition time
 and the configured latency should be zero; a fixed latency guessed to the
@@ -1236,7 +1265,10 @@ Fusing every copy as new would make the filter wildly overconfident.
 `tools/nav_score/score_tracking.py` recovers the arms' TRUE end-effector
 position from the simulator's ground truth. The arms' own `ee_pose` is in the
 frame they believe the base is in, which hides the estimate's error. Three
-45 s runs each, waypoint loop, headless:
+45 s runs each, waypoint loop, headless, measured with the EARLIER flight
+profile (5 mm position fix 0.2 s late, 0.5 mrad star tracker); the offline,
+deterministic version on the current profile is `tools/thesis_eval`'s
+`observer` study:
 
 | | left arm true error | right arm true error | EE error from the estimate |
 |---|---|---|---|

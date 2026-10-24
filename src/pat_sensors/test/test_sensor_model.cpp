@@ -5,11 +5,11 @@
 #include <string>
 #include <vector>
 
-#include "pat_simulation/sensors/sensor_model.hpp"
+#include "pat_sensors/sensor_model.hpp"
 
-using pat_simulation::ChannelConfig;
-using pat_simulation::SensorChannel;
-using pat_simulation::SensorModel;
+using pat_sensors::ChannelConfig;
+using pat_sensors::SensorChannel;
+using pat_sensors::SensorModel;
 
 namespace {
 

@@ -110,6 +110,7 @@
  *    contact_bench --trajectory circle --sweep-speed 1,2,3,4
  */
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -126,6 +127,8 @@
 #include "pat_arm_control/reference/reference_trajectory.h"
 #include "bench_yaml.h"
 #include "contact_scenario.h"
+#include "run_summary.h"
+#include "state_source.h"
 
 namespace {
 
@@ -214,6 +217,7 @@ public:
     long referenceSamplesOutside() const { return law_->referenceSamplesOutside(); }
     void snapshotProfile(ProfileSnapshot& out) const { law_->snapshotProfile(out); }
     bool hasSolver() const { return law_->hasSolver(); }
+    int mode() const { return static_cast<int>(law_->mode()); }
 
 private:
     std::unique_ptr<TaskSpaceController> law_;
@@ -232,18 +236,23 @@ private:
  *  Falls back to the compiled-in guess, so the failure is a clear "cannot open
  *  <path>" rather than an empty string. --scene overrides either way.
  */
-std::string findScene() {
-    const char* rel = "/share/pat_simulation/models/environment/air_bearing_table.xml";
+std::string findShare(const std::string& pkg, const std::string& rel) {
     if (const char* paths = std::getenv("AMENT_PREFIX_PATH")) {
         std::stringstream ss(paths);
         std::string prefix;
         while (std::getline(ss, prefix, ':')) {
             if (prefix.empty()) continue;
-            const std::string candidate = prefix + rel;
+            const std::string candidate = prefix + "/share/" + pkg + "/" + rel;
             if (std::ifstream(candidate).good()) return candidate;
         }
     }
-    return PAT_CONTACT_BENCH_SCENE;
+    return "";
+}
+
+std::string findScene() {
+    const std::string found =
+        findShare("pat_simulation", "models/environment/air_bearing_table.xml");
+    return found.empty() ? std::string(PAT_CONTACT_BENCH_SCENE) : found;
 }
 
 struct Options {
@@ -255,6 +264,56 @@ struct Options {
     std::string common = PAT_NMPC_BENCH_COMMON;    //!< arm_common.yaml, loaded first
     std::string model;                             //!< controller MJCF override
     std::string out_csv;                           //!< per-tick series, optional
+    //! The full per-tick record of the scored arm (torque, joint velocity, base
+    //! motion, tick time), for the comparison studies. Separate from --out,
+    //! whose format is the observer scorers' and does not change.
+    std::string series_csv;
+    //! Append one row of scalar figures of merit to this CSV, under a header
+    //! written when the file is new. `tag` labels the configuration.
+    std::string summary_csv;
+    std::string tag;
+    int seed = 0;                                  //!< recorded in the summary row
+
+    //! "key=value" overrides applied over the YAML (the dotted ROS parameter
+    //! name, a YAML value), so any tuning knob is reachable without editing a
+    //! file. Repeatable.
+    std::vector<std::string> sets;
+
+    /*! A setpoint STEP: the scored arm holds its start pose until `step_t`, then
+     *  is told to go (step_dx, step_dy) metres away in the world frame and stay
+     *  there. The response shape (rise, overshoot, settling) is scored from it. */
+    bool has_step = false;
+    double step_dx = 0.0, step_dy = 0.0, step_t = 1.0;
+
+    //! A constant torque [N*m] on the scored arm's first joint that no
+    //! controller knows about. 0 disables.
+    double disturb_torque = 0.0;
+
+    /*! What the OTHER arm does during a trajectory run: "hold" its start pose
+     *  (the default, and what every earlier measurement used), follow the
+     *  "mirror" image of the scored arm's shape (the two yaw reactions cancel),
+     *  or follow the "same" shape in the same direction (they add). */
+    std::string partner = "hold";
+
+    /*! What the controllers are told about the plant. "exact" is the plant's own
+     *  state (every earlier measurement); "noisy" is seeded noise (and
+     *  --delay-ticks of delay) on every measured quantity; "ekf" gives the arms
+     *  the base state estimator's output, fed by seeded IMU, position and
+     *  star-tracker measurements, with encoder noise on the joints; "raw" gives
+     *  them the same flight sensors' readings with no estimator. */
+    std::string state_source = "exact";
+    double noise = 1.0;                    //!< scales every sigma in the noise profile
+    int delay_ticks = 0;                   //!< noisy/ekf/raw: measurement delay, control ticks
+    std::vector<std::string> noise_sigma;  //!< "name=value" overrides of the profile
+    //! "kalman" passes the joint readings through a JointKalmanFilter.
+    std::string joint_filter = "none";
+    //! ekf/raw: seconds the flight instruments run, arms at rest, before the task.
+    double nav_warmup = 0.0;
+    double joint_accel_psd = pat_arm_control::JointKalmanParams{}.accel_psd;
+    //! The estimator's inputs, found on AMENT_PREFIX_PATH like the scene is.
+    std::string sim_yaml     = findShare("pat_simulation", "config/simulation.yaml");
+    std::string sensors_yaml = findShare("pat_simulation", "config/sensors_flight.yaml");
+    std::string nav_yaml     = findShare("pat_gnc", "config/nav_flight.yaml");
     std::string arm = "left";                      //!< which arm is scored
     double seconds = 6.0;
     double hz = 100.0;                             //!< control rate
@@ -387,10 +446,13 @@ bool hasModelError(const Options& o) { return o.mass_scale != 1.0; }
 //! True when --trajectory asked for trajectory following.
 bool trajMode(const Options& o) { return !o.trajectory.empty(); }
 
+//! True when --step asked for a setpoint step.
+bool stepMode(const Options& o) { return o.has_step; }
+
 //! The alternative modes park the target out of reach, so none is scored
 //! against a signal contaminated by contact.
 bool quietMode(const Options& o) {
-    return dragMode(o) || trackingMode(o) || trajMode(o);
+    return dragMode(o) || trackingMode(o) || trajMode(o) || stepMode(o);
 }
 
 /*! The planner's shape for this run: ee_target_publisher's defaults (the
@@ -465,6 +527,60 @@ R"(contact_bench - deterministic scoring of the disturbance observer against
   --ab-preview       run preview on, preview off and streamed setpoint, compared
   --sweep-speed A,B  that three-way comparison per speed factor, in one table
   --out CSV          write the per-tick series
+  --series CSV       write the scored arm's full per-tick record (reference and
+                     EE position, torque, joint velocity, base motion, tick time)
+  --summary-csv CSV  append one row of scalar figures of merit (tracking error,
+                     control effort, base yaw disturbance, timing) to CSV, with
+                     a header if the file is new. Single runs only
+  --tag LABEL        configuration label recorded in the summary row
+  --seed N           seed recorded in the summary row (default 0)
+  --set KEY=VALUE    override one parameter over the YAML, by its dotted ROS name
+                     and with a YAML value, e.g. nmpc.full_nonlinear=false,
+                     nmpc.N=20, smc.epsilon=0.1. Repeatable. A key no loader
+                     maps is an error
+  --step DX,DY[,T]   hold the start pose until T seconds (default 1), then step
+                     the scored arm's setpoint by DX,DY metres (world frame) and
+                     score the response. Free base, target parked out of reach
+  --disturb-torque N a constant unmodelled torque [N*m] on the scored arm's first
+                     joint, for the whole run
+  --partner hold|mirror|same
+                     with --trajectory, what the other arm does: hold its start
+                     pose (default), follow the mirror image of the shape (the two
+                     yaw reactions cancel), or follow the same shape (they add)
+  --state-source exact|noisy|ekf|raw
+                     what the controllers (and the observer) are told about the
+                     plant. exact: its state, as always. noisy: seeded noise on
+                     every measured quantity. ekf: the base state from pat_gnc's
+                     estimator, fed by seeded IMU / position / star-tracker
+                     measurements (the flight sensing profile), joints read as
+                     noisy encoders. raw: the same flight sensors with no
+                     estimator (last fix, last star-tracker reading, gyro rate,
+                     velocity from the last two fixes). Scoring always uses the
+                     plant's truth
+  --noise S          scale every sigma in the noise profile (default 1; 0 turns
+                     the noise off but keeps the delay). With ekf/raw it also
+                     scales every flight sensor error, and the estimators are
+                     told the scaled figures
+  --joint-filter none|kalman
+                     pass the joint readings through a per-joint Kalman filter
+                     (default none; not with exact)
+  --nav-warmup S     with a flight source, run the instruments and the estimator S
+                     seconds with the arms at rest before the task starts, as
+                     the navigation filter would be running long before an arm
+                     task in flight (default 0). Task time starts after it
+  --joint-accel-psd Q
+                     the joint filter's white-acceleration density
+                     [(rad/s^2)^2/Hz] (default: JointKalmanParams')
+  --noise-sigma NAME=V
+                     set one profile figure: joint_pos [rad] joint_vel [rad/s]
+                     base_pos [m] base_yaw [rad] base_vel [m/s] base_wz [rad/s].
+                     Defaults are assumptions (see state_source.h). Repeatable
+  --delay-ticks N    delay every noisy/ekf/raw joint and base measurement by N
+                     control ticks (default 0)
+  --sim-config PATH  | the flight inputs for --state-source ekf|raw (default:
+  --sensors PATH     | the installed simulation.yaml, sensors_flight.yaml and
+  --nav PATH         | nav_flight.yaml)
+  --seed N           (above) also seeds the noise and the estimator's instruments
 )";
 }
 
@@ -497,6 +613,36 @@ bool parseArgs(int argc, char** argv, Options& o, int& code) {
             else if (a == "--model")   o.model   = next();
             else if (a == "--arm")     o.arm     = next();
             else if (a == "--out")     o.out_csv = next();
+            else if (a == "--series")  o.series_csv = next();
+            else if (a == "--summary-csv") o.summary_csv = next();
+            else if (a == "--set")     o.sets.push_back(next());
+            else if (a == "--partner") o.partner = next();
+            else if (a == "--state-source") o.state_source = next();
+            else if (a == "--noise")   o.noise = std::stod(next());
+            else if (a == "--delay-ticks") o.delay_ticks = std::stoi(next());
+            else if (a == "--noise-sigma") o.noise_sigma.push_back(next());
+            else if (a == "--joint-filter") o.joint_filter = next();
+            else if (a == "--nav-warmup") o.nav_warmup = std::stod(next());
+            else if (a == "--joint-accel-psd") o.joint_accel_psd = std::stod(next());
+            else if (a == "--sim-config") o.sim_yaml = next();
+            else if (a == "--sensors") o.sensors_yaml = next();
+            else if (a == "--nav")     o.nav_yaml = next();
+            else if (a == "--disturb-torque") o.disturb_torque = std::stod(next());
+            else if (a == "--step") {
+                // "DX,DY" or "DX,DY,T"
+                const std::string v = next();
+                const auto c1 = v.find(',');
+                if (c1 == std::string::npos) throw std::runtime_error("wanted DX,DY[,T]");
+                const auto c2 = v.find(',', c1 + 1);
+                o.step_dx = std::stod(v.substr(0, c1));
+                o.step_dy = std::stod(v.substr(c1 + 1, c2 == std::string::npos
+                                                           ? std::string::npos
+                                                           : c2 - c1 - 1));
+                if (c2 != std::string::npos) o.step_t = std::stod(v.substr(c2 + 1));
+                o.has_step = true;
+            }
+            else if (a == "--tag")     o.tag = next();
+            else if (a == "--seed")    o.seed = std::stoi(next());
             else if (a == "--seconds") { o.seconds = std::stod(next()); o.seconds_set = true; }
             else if (a == "--trajectory")  o.trajectory = next();
             else if (a == "--traj-speed")  o.traj_speed = std::stod(next());
@@ -554,10 +700,59 @@ bool parseArgs(int argc, char** argv, Options& o, int& code) {
         code = 2;
         return false;
     }
+    const bool flight = o.state_source == "ekf" || o.state_source == "raw";
+    if (o.state_source != "exact" && o.state_source != "noisy" && !flight) {
+        std::cerr << "contact_bench: --state-source must be exact, noisy, ekf or raw\n";
+        code = 2;
+        return false;
+    }
+    if (o.joint_filter != "none" && o.joint_filter != "kalman") {
+        std::cerr << "contact_bench: --joint-filter must be none or kalman\n";
+        code = 2;
+        return false;
+    }
+    if (o.nav_warmup < 0.0 || (o.nav_warmup > 0.0 && !flight)) {
+        std::cerr << "contact_bench: --nav-warmup is seconds >= 0, for --state-source "
+                     "ekf or raw\n";
+        code = 2;
+        return false;
+    }
+    if (o.joint_filter != "none" && o.state_source == "exact") {
+        std::cerr << "contact_bench: --joint-filter needs measured joints "
+                     "(any --state-source but exact)\n";
+        code = 2;
+        return false;
+    }
+    if (o.noise < 0.0 || o.delay_ticks < 0) {
+        std::cerr << "contact_bench: --noise and --delay-ticks cannot be negative\n";
+        code = 2;
+        return false;
+    }
+    if (o.partner != "hold" && o.partner != "mirror" && o.partner != "same") {
+        std::cerr << "contact_bench: --partner must be hold, mirror or same\n";
+        code = 2;
+        return false;
+    }
+    if (o.partner != "hold" && !trajMode(o)) {
+        std::cerr << "contact_bench: --partner mirror|same needs --trajectory\n";
+        code = 2;
+        return false;
+    }
     if (o.params.empty()) {
         o.params = o.law == "ompc" ? PAT_OMPC_BENCH_PARAMS
                  : o.law == "smc"  ? PAT_SMC_BENCH_PARAMS
                                    : PAT_NMPC_BENCH_PARAMS;
+    }
+    // A series or a summary row describes ONE run; the sweeps and A/B modes
+    // make several, and writing "the" record of them would be a guess.
+    if ((!o.series_csv.empty() || !o.summary_csv.empty()) &&
+        (o.ab_preview || !o.sweep_speed.empty() || o.ab_ff >= 0.0 ||
+         !o.sweep_gain.empty())) {
+        std::cerr << "contact_bench: --series and --summary-csv record a single "
+                     "run; drop --ab-preview, --sweep-speed, --ab-ff or "
+                     "--sweep-gain\n";
+        code = 2;
+        return false;
     }
     // Preview is a property of a horizon: a one-step law reads the reference at
     // the current time only, so preview on and off are the same run, and a
@@ -588,7 +783,24 @@ bool parseArgs(int argc, char** argv, Options& o, int& code) {
     // Model error without motion measures nothing: the mismatch torque is
     // (M_scene - M_model) * qacc. Rather than silently reporting zeros, supply
     // the motion the mode needs. An explicit --osc still wins.
-    if (hasModelError(o) && o.osc_amp == 0.0) o.osc_amp = 0.08;
+    // A step or a trajectory already moves the arm, so they supply their own
+    // motion and keep a model error alongside it.
+    if (hasModelError(o) && o.osc_amp == 0.0 && !stepMode(o) && !trajMode(o)) {
+        o.osc_amp = 0.08;
+    }
+    if (stepMode(o)) {
+        if (trajMode(o) || dragMode(o) || trackingMode(o)) {
+            std::cerr << "contact_bench: --step replaces the setpoint that "
+                         "--trajectory/--osc/--drag drive; run them separately\n";
+            code = 2;
+            return false;
+        }
+        if (!(o.step_t >= 0.0) || o.step_t >= o.seconds) {
+            std::cerr << "contact_bench: --step's time must be in [0, --seconds)\n";
+            code = 2;
+            return false;
+        }
+    }
     if (dragMode(o) && trackingMode(o)) {
         std::cerr << "contact_bench: --drag and --osc/--mass-scale score "
                      "different rows against different truths; run them "
@@ -665,14 +877,14 @@ ContactScenario::Config sceneConfig(const Options& o,
 
     c.target_x = o.tgt_x;
     c.target_y = o.tgt_y;
-    // Zero damping leaves the target at whatever the MJCF ships, i.e. free.
-    if (o.free_target) c.target_damping = {{0.0, 0.0, 0.0}};
+    // A free target keeps the MJCF's own light damping.
+    if (o.free_target) c.target_damping = {{-1.0, -1.0, -1.0}};
 
     if (dragMode(o)) {
         // Moderate damping on all three planar DOFs, so the base moves (drag
         // is proportional to velocity) without drifting far.
         c.base_damping = {{o.drag_damping, o.drag_damping, o.drag_damping}};
-    } else if (trackingMode(o) || trajMode(o)) {
+    } else if (trackingMode(o) || trajMode(o) || stepMode(o)) {
         // NOT the pinning value: see Options::base_damping. Pinning would put
         // the rig's own drag into the feedforward through the base elimination,
         // and a trajectory run should see the free-floating base the arm has.
@@ -715,6 +927,8 @@ MomentumObserverParams observerConfig(const pat_arm_control::bench::Loaded& cfg,
 /*! Everything one run produced. */
 struct Trial {
     std::vector<ContactRow> rows;          //!< one per control tick
+    //! The scored arm's full record, for --series and --summary-csv.
+    pat_arm_control::bench::RunSeries series;
     std::vector<int> scored_joints;        //!< model indices the scored arm owns
     std::vector<std::string> joint_names;  //!< all model joints, for labelling
     int contact_ticks = 0;
@@ -803,11 +1017,11 @@ Trial runTrial(const Options& o, double gain_override) {
     // to be controlled too (see the hold-pose comment below).
     auto cfg = pat_arm_control::bench::loadConfig(
         {o.common, o.params}, o.arm, o.model, PAT_NMPC_BENCH_MODEL, kNotOurs,
-        "contact_bench", o.law);
+        "contact_bench", o.law, o.sets);
     const std::string other = (o.arm == "left") ? "right" : "left";
     auto cfg_other = pat_arm_control::bench::loadConfig(
         {o.common, o.params}, other, o.model, PAT_NMPC_BENCH_MODEL, kNotOurs,
-        "contact_bench", o.law);
+        "contact_bench", o.law, o.sets);
     if (o.ff_gain >= 0.0) cfg.common().ff_gain = o.ff_gain;
     if (trajMode(o) && o.no_preview) cfg.common().reference_preview = false;
 
@@ -820,6 +1034,29 @@ Trial runTrial(const Options& o, double gain_override) {
     // --- 2. The plant and the controllers --------------------------------- //
     ContactScenario scene(sceneConfig(o, cfg.joints.model));
     const int n_joints = scene.numJoints();
+
+    // What the controllers are told about the plant: its state as it is, or a
+    // noisy measurement of it, or the base state estimator's output.
+    pat_arm_control::bench::StateSourceConfig ssc;
+    ssc.kind = o.state_source == "noisy" ? pat_arm_control::bench::StateSourceKind::Noisy
+             : o.state_source == "ekf"   ? pat_arm_control::bench::StateSourceKind::Ekf
+             : o.state_source == "raw"   ? pat_arm_control::bench::StateSourceKind::Raw
+                                         : pat_arm_control::bench::StateSourceKind::Exact;
+    ssc.joint_filter = o.joint_filter == "kalman";
+    ssc.joint_kf.accel_psd = o.joint_accel_psd;
+    ssc.noise_scale = o.noise;
+    ssc.delay_ticks = o.delay_ticks;
+    ssc.seed = static_cast<std::uint64_t>(o.seed);
+    for (const auto& ns : o.noise_sigma) {
+        const auto eq = ns.find('=');
+        if (eq == std::string::npos) throw std::runtime_error("--noise-sigma wants NAME=VALUE");
+        ssc.profile.set(ns.substr(0, eq), std::stod(ns.substr(eq + 1)));
+    }
+    ssc.sim_yaml = o.sim_yaml;
+    ssc.sensors_yaml = o.sensors_yaml;
+    ssc.nav_yaml = o.nav_yaml;
+    pat_arm_control::bench::StateSource state(ssc, n_joints, 1.0 / o.hz, scene.timestep());
+    long substeps = 0;
 
     ArmProbe scored(cfg);
     ArmProbe held(cfg_other);
@@ -840,6 +1077,7 @@ Trial runTrial(const Options& o, double gain_override) {
     // Reused across ticks so the loop does not reallocate. q is 7+n (the
     // freejoint carries a quaternion), v and tau are 6+n.
     Eigen::VectorXd q, v, tau_full(6 + n_joints), d_reduced(n_joints), truth;
+    Eigen::VectorXd q_true, v_true;   // the plant's own state, for scoring
     Eigen::MatrixXd M, R;
     Eigen::VectorXd bias;
     // The acceleration-derived truth channel: acc from the plant, resid from the
@@ -885,6 +1123,13 @@ Trial runTrial(const Options& o, double gain_override) {
      *  uninterpretable. Tracking in the base frame removes it, and the base
      *  frame is the right one for arm control regardless. */
     const auto setpointAt = [&](double now, double& x, double& y) {
+        if (stepMode(o)) {
+            // Hold the start pose, then the stepped point, both world-frame.
+            const bool stepped = now >= o.step_t;
+            x = start.pos.x() + (stepped ? o.step_dx : 0.0);
+            y = start.pos.y() + (stepped ? o.step_dy : 0.0);
+            return;
+        }
         if (o.osc_amp == 0.0) {
             x = o.sp_x;
             y = o.sp_y;
@@ -921,6 +1166,29 @@ Trial runTrial(const Options& o, double gain_override) {
     // The live planner's window: 2 s ahead at 10 ms, the horizon being ~1 s.
     constexpr double kWindowS = 2.0, kSampleDt = 0.01;
 
+    // The other arm's own reference, when it is asked to move too. "mirror" is
+    // the reflection of the scored arm's shape about the base's x axis: the same
+    // path traversed the other way round, from the partner's own start pose, so
+    // the two arms' yaw reaction torques are equal and opposite. "same" is the
+    // identical shape and direction, which adds them. Both shapes are centred
+    // about their anchor, so the reflection is the opposite circulation and a
+    // negated centre offset in y.
+    std::unique_ptr<pat_arm_control::ReferenceTrajectory> partner_shape;
+    pat_arm_control::ReferenceWindow partner_window;
+    if (trajMode(o) && o.partner != "hold") {
+        pat_arm_control::TrajectorySpec ps = trajSpec(o);
+        if (o.partner == "mirror") {
+            ps.circle.ccw = !ps.circle.ccw;
+            ps.circle.center_dy = -ps.circle.center_dy;
+            ps.rectangle.ccw = !ps.rectangle.ccw;
+            ps.rectangle.center_dy = -ps.rectangle.center_dy;
+        }
+        partner_shape = pat_arm_control::makeTrajectory(
+            ps, pat_arm_control::Anchor{hold.pos.x(), hold.pos.y(), 0.0});
+        for (int i = 0; i < 4; ++i) partner_window.quat0[i] = hold.quat(i);
+        partner_window.yaw0 = 0.0;
+    }
+
     t.applied_gain   = op.gain(6);     // a joint row, past any base override
     t.applied_ff     = cfg.common().ff_gain;
     t.law            = o.law;
@@ -942,6 +1210,40 @@ Trial runTrial(const Options& o, double gain_override) {
                            ? scored.ff_max_vec_(i) / cfg.common().ff_max_frac : 0.0;
     }
 
+    // In flight the navigation filter runs continuously, long before an arm task
+    // starts. --nav-warmup runs the flight instruments (and the estimator) that
+    // long first, with the arms at rest, so the task starts from a converged
+    // estimate rather than a cold one. Task time starts when the warm-up ends.
+    double t_task0 = 0.0;
+    if (o.nav_warmup > 0.0) {
+        const long n = std::lround(o.nav_warmup / scene.timestep());
+        for (long i = 0; i < n; ++i) {
+            scene.step(1);
+            state.onSubstep(scene, ++substeps);
+        }
+        t_task0 = scene.time();
+    }
+
+    // An unmodelled torque on the scored arm's first joint, if asked for.
+    if (o.disturb_torque != 0.0) {
+        scene.setJointDisturbance(scored.ownedJointInds.front(), o.disturb_torque);
+    }
+
+    // The scored arm's own tracks, one per owned joint, with each joint's torque
+    // limit so the rail fraction knows what "at the limit" means, and its
+    // configured (software) position box, by name, for the limit metrics.
+    t.series.setJoints(scored.ownedJointInds.size());
+    for (const int idx : scored.ownedJointInds) {
+        t.series.tau_limit.push_back(t.tau_max[static_cast<std::size_t>(idx)]);
+        const std::string& jn = cfg.joints.model[static_cast<std::size_t>(idx)];
+        double lo = -INFINITY, hi = INFINITY;
+        for (const auto& jl : cfg.common().joint_lims) {
+            if (jl.name == jn) { lo = jl.q_min; hi = jl.q_max; }
+        }
+        t.series.q_min.push_back(lo);
+        t.series.q_max.push_back(hi);
+    }
+
     // Physics runs faster than control (500 Hz against 100 Hz as shipped), so
     // each control tick advances the plant several physics steps.
     const int steps_per_tick =
@@ -952,15 +1254,19 @@ Trial runTrial(const Options& o, double gain_override) {
     // --- 4. The loop ------------------------------------------------------ //
     for (int k = 0; k < ticks; ++k) {
         // (a) Plant state -> controller coordinates. Both controllers see the
-        //     whole model state; each acts only on the joints it owns.
-        scene.readControllerState(cfg.anchor.x, cfg.anchor.y, q, v);
+        //     whole model state; each acts only on the joints it owns. q and v
+        //     are what they are TOLD (the state source's output); q_true and
+        //     v_true are what the plant did, and are what everything is scored
+        //     against.
+        scene.readControllerState(cfg.anchor.x, cfg.anchor.y, q_true, v_true);
+        state.measure(q_true, v_true, cfg.anchor.x, cfg.anchor.y, q, v);
 
         // (a2) Command this tick's setpoint, and measure how far the EE is from
         //      it right now. Measured BEFORE the solve, against the setpoint
         //      this tick was asked to reach, so the number is a tracking error
         //      and not a comparison with where the arm is about to be sent.
         double sx = 0.0, sy = 0.0;
-        const double t_now = scene.time();
+        const double t_now = scene.time() - t_task0;
         if (trajMode(o)) {
             // A fresh window every tick, as the planner sends one, and the
             // state's own time to evaluate it at -- or, streaming, just the
@@ -975,6 +1281,17 @@ Trial runTrial(const Options& o, double gain_override) {
                 scored.setReferenceWindow(window);
                 scored.setReferenceTime(t_now);
             }
+            if (partner_shape) {
+                if (o.stream_setpoint) {
+                    const pat_arm_control::RefPoint pr = partner_shape->at(t_now);
+                    held.setDesiredPos(pr.x, pr.y, hold.pos.z());
+                } else {
+                    pat_arm_control::sampleWindow(*partner_shape, 0.0, t_now, kWindowS,
+                                                  kSampleDt, partner_window);
+                    held.setReferenceWindow(partner_window);
+                    held.setReferenceTime(t_now);
+                }
+            }
             sx = r.x;
             sy = r.y;
             Trial::TrajRow tr;
@@ -986,16 +1303,25 @@ Trial runTrial(const Options& o, double gain_override) {
             setpointAt(t_now, sx, sy);
             scored.setDesiredPos(sx, sy, start.pos.z());
         }
+        // Where the EE actually is. With the exact state source that is the
+        // pose the controller computed from its state; with a measurement or an
+        // estimate in the loop it has to come from the plant's own state, or the
+        // estimate's error would vanish from the score.
         const ArmProbe::EePose now_ee = scored.currentEePose(q, v);
-        const double ee_err = std::hypot(now_ee.pos.x() - sx, now_ee.pos.y() - sy);
+        const ArmProbe::EePose true_ee =
+            state.exact() ? now_ee : scored.currentEePose(q_true, v_true);
+        const double ee_err = std::hypot(true_ee.pos.x() - sx, true_ee.pos.y() - sy);
         if (trajMode(o)) {
-            t.traj.back().ex = now_ee.pos.x();
-            t.traj.back().ey = now_ee.pos.y();
+            t.traj.back().ex = true_ee.pos.x();
+            t.traj.back().ey = true_ee.pos.y();
         }
 
         // (b) Solve. Each returns a vector over ALL model joints with only its
         //     own entries meaningful.
+        const auto tick_start = std::chrono::steady_clock::now();
         const Eigen::VectorXd tau_s = scored.computeControl(q, v);
+        const double tick_us = std::chrono::duration<double, std::micro>(
+            std::chrono::steady_clock::now() - tick_start).count();
         const Eigen::VectorXd tau_h = held.computeControl(q, v);
 
         // (c) The APPLIED torque, assembled per model joint from whichever arm
@@ -1006,6 +1332,53 @@ Trial runTrial(const Options& o, double gain_override) {
         tau_full.setZero();
         for (const int idx : scored.ownedJointInds) tau_full(6 + idx) = tau_s(idx);
         for (const int idx : held.ownedJointInds)   tau_full(6 + idx) = tau_h(idx);
+
+        // (c0) The scored arm's record for this tick, for the comparison
+        //      studies. The state here is what the controller was given, which
+        //      is the plant's truth until a measurement model is in the loop.
+        {
+            auto& S = t.series;
+            S.t.push_back(t_now);
+            S.rx.push_back(sx);  S.ry.push_back(sy);
+            if (trajMode(o)) {
+                S.rvx.push_back(t.traj.back().rvx);
+                S.rvy.push_back(t.traj.back().rvy);
+            } else {
+                S.rvx.push_back(0.0);
+                S.rvy.push_back(0.0);
+            }
+            S.ex.push_back(true_ee.pos.x());
+            S.ey.push_back(true_ee.pos.y());
+            if (!state.exact()) {
+                const auto& e = state.lastError();
+                S.est_x.push_back(e.x);   S.est_y.push_back(e.y);
+                S.est_yaw.push_back(e.yaw);
+                S.est_vx.push_back(e.vx); S.est_vy.push_back(e.vy);
+                S.est_wz.push_back(e.wz);
+            }
+            // Yaw of the EE site about z from its quaternion [w, x, y, z],
+            // against the orientation it was told to hold (its start pose).
+            const auto yawOf = [](const Eigen::Vector4d& qu) {
+                return std::atan2(2.0 * (qu(0) * qu(3) + qu(1) * qu(2)),
+                                  1.0 - 2.0 * (qu(2) * qu(2) + qu(3) * qu(3)));
+            };
+            S.eth.push_back(std::remainder(yawOf(true_ee.quat) - yawOf(start.quat),
+                                           2.0 * M_PI));
+            for (std::size_t j = 0; j < scored.ownedJointInds.size(); ++j) {
+                const int idx = scored.ownedJointInds[j];
+                S.tau[j].push_back(tau_s(idx));
+                S.qd[j].push_back(v(6 + idx));
+                S.q[j].push_back(q_true(7 + idx));
+            }
+            const auto bp = scene.basePose();
+            const auto bv = scene.baseVelocity();
+            S.base_x.push_back(bp[0]);
+            S.base_y.push_back(bp[1]);
+            S.base_yaw.push_back(bp[2]);
+            S.base_wz.push_back(bv[2]);
+            S.tick_us.push_back(tick_us);
+            S.mode.push_back(scored.mode());
+        }
 
         // (c1) How hard the actuators are working, before anything else looks
         //      at the torque.
@@ -1053,8 +1426,9 @@ Trial runTrial(const Options& o, double gain_override) {
         //     so both describe the same instant.
         scene.armConstraintForce(truth);
         ContactRow row;
-        row.t    = scene.time();
+        row.t    = scene.time() - t_task0;
         row.ncon = scene.contactCount();
+        t.series.ncon.push_back(row.ncon);
         row.ee_err = ee_err;
         row.truth.resize(static_cast<std::size_t>(n_joints));
         row.raw.resize(static_cast<std::size_t>(n_joints));
@@ -1111,7 +1485,17 @@ Trial runTrial(const Options& o, double gain_override) {
 
         // (g) Advance. The torque was applied at (c2), before the truth was
         //     read, so this only runs the physics forward one control period.
-        scene.step(steps_per_tick);
+        if (state.isFlight()) {
+            // The flight instruments (and the estimator) run at their own rates,
+            // inside a control period, so the plant is stepped one physics step
+            // at a time.
+            for (int i = 0; i < steps_per_tick; ++i) {
+                scene.step(1);
+                state.onSubstep(scene, ++substeps);
+            }
+        } else {
+            scene.step(steps_per_tick);
+        }
     }
 
     const auto base_end = scene.basePose();
@@ -1297,9 +1681,97 @@ void reportTracking(const Options& o, const Trial& t) {
 
 void reportTrajectory(const Options& o, const Trial& t);   // below, with its scoring
 
+/*! What the summary needs to know about a finished run besides its series: the
+ *  scenario, the scoring window and the controller's counters. */
+pat_arm_control::bench::RunContext makeContext(const Options& o, const Trial& t) {
+    pat_arm_control::bench::RunContext ctx;
+    ctx.scenario = trajMode(o)       ? o.trajectory
+                 : stepMode(o)       ? "step"
+                 : dragMode(o)       ? "drag"
+                 : hasModelError(o)  ? "mass"
+                 : o.osc_amp > 0.0   ? "osc"
+                                     : "contact";
+    ctx.law  = t.law;
+    ctx.tag  = o.tag;
+    ctx.seed = o.seed;
+    // The settings that tell the cells of a study apart, as columns. The same
+    // names on every row, so a study's rows share one header.
+    const auto num = [](double x) {
+        char buf[32];
+        std::snprintf(buf, sizeof buf, "%.9g", x);
+        return std::string(buf);
+    };
+    ctx.labels = {
+        {"state_source", o.state_source},
+        {"joint_filter", o.joint_filter},
+        {"nav_warmup", num(o.nav_warmup)},
+        {"noise_scale", num(o.noise)},
+        {"delay_ticks", std::to_string(o.delay_ticks)},
+        {"partner", o.partner},
+        {"ff_gain", num(t.applied_ff)},
+        {"mass_scale", num(o.mass_scale)},
+        {"disturb_torque", num(o.disturb_torque)},
+        {"traj_speed", num(o.traj_speed)},
+        {"base_damping", num(t.base_damping)},
+    };
+    // The window the tracking and effort figures are taken over: past the
+    // approach and the circle's ramp for a trajectory (the same window
+    // scoreTrajectory uses), past the first quarter of the run otherwise.
+    if (trajMode(o)) {
+        ctx.window_start_s = t.traj_shape->approachDuration() + 2.0;
+    } else if (stepMode(o)) {
+        // The whole response is the point, not what follows it: tracking and
+        // effort are taken from the step onward.
+        ctx.window_start_s = o.step_t;
+        ctx.has_step = true;
+        ctx.step_dx = o.step_dx;
+        ctx.step_dy = o.step_dy;
+        ctx.step_t  = o.step_t;
+    } else {
+        const std::size_t from = steadyFrom(t);
+        ctx.window_start_s = from < t.rows.size() ? t.rows[from].t : 0.0;
+    }
+    ctx.safe_ticks      = t.safe_ticks;
+    ctx.tier1_entries   = t.tier1_entries;
+    ctx.ref_outside     = t.ref_outside;
+    ctx.ff_saturated    = t.ff_saturated;
+    ctx.ff_slew_limited = t.ff_slew_limited;
+    ctx.qp_iter_mean    = t.qp_iter_mean;
+    ctx.qp_iter_max     = t.qp_iter_max;
+    ctx.has_solver      = t.has_solver;
+    return ctx;
+}
+
+/*! A step's report: the response shape, then what it cost. */
+void reportStep(const Options& o, const Trial& t) {
+    namespace b = pat_arm_control::bench;
+    const b::RunContext ctx = makeContext(o, t);
+    const auto v = b::summarise(t.series, ctx);
+    const auto get = [&v](const char* name) {
+        for (const auto& [k, x] : v) if (k == name) return x;
+        return std::nan("");
+    };
+    std::printf("\n  step of (%.3f, %.3f) m at %.2f s, scored from the step on\n",
+                o.step_dx, o.step_dy, o.step_t);
+    std::printf("    rise (10-90%%) %.3f s   overshoot %.2f %%   settle (2%%) %.3f s   "
+                "steady-state error %.3f mm\n",
+                get("step_rise_s"), get("step_overshoot_pct"), get("step_settle_s"),
+                get("step_sse_mm"));
+    std::printf("    tracking error rms %.3f mm   peak %.3f mm\n", get("rmse_mm"),
+                get("err_peak_mm"));
+    std::printf("    effort: int tau^2 %.4g   torque peak %.3f N*m   at the rail %.1f %% "
+                "of joint-ticks\n    base yaw: int psi^2 %.4g   peak %.2f mrad\n",
+                get("tau2_int_win"), get("tau_peak"), 100.0 * get("rail_frac"),
+                get("yaw2_int_total"), get("yaw_peak_mrad"));
+}
+
 void reportTrial(const Options& o, const Trial& t) {
     if (trajMode(o)) {
         reportTrajectory(o, t);
+        return;
+    }
+    if (stepMode(o)) {
+        reportStep(o, t);
         return;
     }
     if (dragMode(o)) {
@@ -1731,6 +2203,21 @@ void reportSweep(const Options& o, const std::vector<Trial>& trials) {
 
 }  // namespace
 
+/*! Write the full per-tick record and/or one summary row for a finished run,
+ *  if either was asked for. Single runs only (parseArgs refuses the sweeps and
+ *  A/B modes, which have no single run to describe). */
+void emitRecords(const Options& o, const Trial& t) {
+    if (o.series_csv.empty() && o.summary_csv.empty()) return;
+    namespace b = pat_arm_control::bench;
+
+    const b::RunContext ctx = makeContext(o, t);
+
+    if (!o.series_csv.empty()) b::writeSeriesCsv(o.series_csv, t.series);
+    if (!o.summary_csv.empty()) {
+        b::appendSummaryCsv(o.summary_csv, ctx, b::summarise(t.series, ctx));
+    }
+}
+
 int main(int argc, char** argv) {
     Options o;
     int code = 0;
@@ -1781,12 +2268,14 @@ int main(int argc, char** argv) {
             const Trial t = runTrial(ot, ot.gain);
             reportTrial(ot, t);
             if (!o.out_csv.empty()) writeTrajCsv(o.out_csv, t);
+            emitRecords(ot, t);
             return 0;
         }
 
         // The scenario, echoed up front: these numbers decide whether contact
         // happens at all, so a run is not interpretable without them.
         const char* mode = dragMode(o) ? "drag"
+                         : stepMode(o) ? "step"
                          : trackingMode(o)
                                ? (hasModelError(o) ? "tracking, model error"
                                                    : "tracking, baseline")
@@ -1835,6 +2324,7 @@ int main(int argc, char** argv) {
                     o.ff_gain >= 0.0 ? o.ff_gain : 0.0);
         reportTrial(o, t);
         if (!o.out_csv.empty()) writeCsv(o.out_csv, t);
+        emitRecords(o, t);
         // The drag and model-error modes have no contact by design, so "no
         // contact" is not a failure there -- it is the point.
         if (quietMode(o)) return 0;

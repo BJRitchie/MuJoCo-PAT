@@ -14,6 +14,7 @@ Physics: MuJoCo 3. Control: PID (MVP) → LQR → MPC. Navigation: direct (MVP) 
 |---|---|---|
 | `pat_msgs` | ✅ | ThrusterCommand, ControlError |
 | `pat_rt` | ✅ | Header-only, zero-ROS realtime primitives: `SeqlockMailbox` / `SpscRing` (`rt_mailbox.h`) and `applyAffinity` / `applyRealtimePolicy` / `lockMemory` / `PeriodicWaker` (`rt_thread.h`). Every periodic-loop thread (arm control, arm observer, base navigator) uses these rather than its own copy; `PeriodicWaker`'s resync must stay before the sleep, or the loop runs at half rate (`PeriodicWaker.CheckingAfterTheWorkWouldHalveTheRate`). |
+| `pat_sensors` | ✅ | Static lib, zero-ROS, zero-MuJoCo, no dependencies: `SensorModel` / `SensorChannel` (`sensor_model.hpp`), the seeded per-channel noise, bias walk, delay and rate model. Shared by `pat_simulation` (which corrupts what it publishes with it; `pat_simulation/sensors/sensor_model.hpp` forwards to it) and `pat_arm_control`'s benches (which corrupt what the controller is told). |
 | `pat_platform_description` | ✅ | shared xacro macros: `pat_platform_bus` (real PAT bus) + `piper_planar_arm` (planar 3R). Consumed by `pat_simulation` and `pat_arm_control`; expanded to MJCF at build time. |
 | `pat_simulation` | ✅ | MuJoCo simulation node (the hardware stand-in). `/chaser/imu` publishes from the physics loop at `imu_rate_hz` (default = `pub_rate_hz`); every sensor channel is built with the period it is actually advanced at, since `delay_s` / `rate_hz` / `bias_walk_std` are counted in calls. `config/sensors_flight.yaml` is a flight-sensing overlay (`sensor_profile:=`); `nav_bench` scores `pat_gnc`'s estimator against MuJoCo truth offline and deterministically (`--seeds N` for NEES consistency, `--no-position`, `--latency-scale`). |
 | `pat_gnc` | ✅ | IController + INavigator; PID, DirectNav, EKF, and `ImuEkf` (`navigation/imu_ekf.hpp`): the IMU-driven error-state EKF for flight sensing — gyro/accel bias states, late measurements placed by exact state-history replay, χ² gating, allocation-free. Two executables share one navigator factory (`src/navigator_factory.hpp`): `gnc_node` (navigator + PID station-keeping, thrusts) and `nav_node` (navigator only, on its own `SCHED_FIFO` thread via `pat_rt`, publishes `/chaser/nav/odom`, safe alongside `pat_arm_control`). `nav_node` times a worst-case replay at startup and refuses a `imu_ekf.history_len` / `nav_hz` it cannot meet. **PID gains / `planar_dynamics.hpp` still tuned for a 15 kg chaser — the bus is now 49 kg; retune pending.** |
@@ -98,7 +99,7 @@ to `~/.bashrc`.
 source setup.sh                 # or work inside the container
 colcon build --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_TESTING=ON
 source install/setup.bash
-colcon test --packages-select pat_gnc pat_robotics pat_simulation pat_arm_control
+colcon test --packages-select pat_sensors pat_gnc pat_robotics pat_simulation pat_arm_control
 colcon test-result --verbose
 ```
 
@@ -257,6 +258,23 @@ they compare a horizon's preview. `nmpc_bench` measures the QP and is
 NMPC-only. `summarise_timing.py` completes a window on the next one opening, so
 a law without a `qp_iter` line parses.
 
+**Thesis comparison:** `tools/thesis_eval/` (README there) runs every law through
+a matrix of `contact_bench` scenarios and draws the figures. The bench flags it
+relies on are `--summary-csv`/`--series` (one metric row per run, and the
+per-tick record: metrics in `src/bench/metrics.{h,cpp}` and `run_summary.cpp`,
+unit-tested), `--set key=value` (any YAML key, applied before the loaders, so an
+unknown key is still refused), `--step DX,DY[,T]`, `--partner hold|mirror|same`,
+`--disturb-torque`, and `--state-source exact|noisy|ekf|raw` with `--noise`,
+`--delay-ticks`, `--seed`, `--nav-warmup`, `--joint-filter kalman`
+(`src/bench/state_source.h`: seeded `pat_sensors` noise; the flight sensors raw
+or through `pat_gnc`'s `ImuEkf`; optionally a `JointKalmanFilter` on the
+encoders). `--base-damping 0` is a frictionless
+table, which every thesis study runs on; a negative value keeps the MJCF's own
+damping. Scoring always reads plant truth, never the state the controller was
+told. With none of these flags the
+bench's printed output is unchanged, byte for byte. A change to the bench binary
+or to any config file invalidates `run_study.py`'s cache, so every study reruns.
+
 ## Package architecture pattern
 
 Every C++ package follows this exactly — do not deviate:
@@ -291,6 +309,8 @@ control/nmpc/  ArmNMPC, NMPCParams + loadNmpcParams, the acados/HPIPM QP
 control/ompc/  ArmOMPC (one-step MPC), OMPCParams + loadOmpcParams
 control/smc/   ArmSMC (sliding mode), SMCParams + loadSmcParams
 observers/     IDisturbanceObserver, MomentumObserver
+estimation/    JointKalmanFilter: per-joint [q, qdot] Kalman filter for encoder
+               readings, allocation-free (benches only so far; not in the node)
 reference/     reference window, trajectory shapes, teleop (own dependency-free lib)
 src/nodes/     ROS nodes, headers private: ArmControlNode (law-agnostic, split
                into node/loop/observer/report), nmpc_node.cpp, ompc_node.cpp,

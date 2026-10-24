@@ -79,9 +79,9 @@ ContactScenario::ContactScenario(const Config& cfg) : cfg_(cfg) {
     ty_  = m_->jnt_qposadr[jointId(m_, "target_y")];
 
     // Damping is a model constant, so it is set once here rather than on every
-    // reset. Zero leaves the body free at whatever the MJCF ships.
+    // reset. A negative value keeps whatever the MJCF ships; zero is frictionless.
     const auto damp = [this](int dof, double value) {
-        if (value > 0.0) m_->dof_damping[dof] = value;
+        if (value >= 0.0) m_->dof_damping[dof] = value;
     };
     damp(cxd_, cfg_.base_damping[0]);
     damp(cyd_, cfg_.base_damping[1]);
@@ -153,11 +153,33 @@ void ContactScenario::applyArmTorque(const Eigen::VectorXd& tau_joints) {
     }
 }
 
+void ContactScenario::setJointDisturbance(int model_joint, double torque) {
+    if (model_joint < 0 || model_joint >= static_cast<int>(joints_.size())) {
+        throw std::runtime_error("setJointDisturbance: no such model joint");
+    }
+    d_->qfrc_applied[joints_[static_cast<std::size_t>(model_joint)].dof] = torque;
+}
+
 void ContactScenario::step(int n_steps) {
     for (int i = 0; i < n_steps; ++i) mj_step(m_, d_);
 }
 
 void ContactScenario::refreshDerived() { mj_forward(m_, d_); }
+
+void ContactScenario::readImu(double& ax, double& ay, double& gz) {
+    const auto adr = [this](const char* name) {
+        const int id = mj_name2id(m_, mjOBJ_SENSOR, name);
+        if (id < 0) {
+            throw std::runtime_error(std::string("the scene has no sensor '") + name + "'");
+        }
+        return m_->sensor_adr[id];
+    };
+    mj_forward(m_, d_);
+    const int a = adr("chaser_accel"), g = adr("chaser_gyro");
+    ax = d_->sensordata[a];
+    ay = d_->sensordata[a + 1];
+    gz = d_->sensordata[g + 2];
+}
 
 double ContactScenario::time() const { return d_->time; }
 double ContactScenario::timestep() const { return m_->opt.timestep; }

@@ -1,0 +1,38 @@
+\begin{tabular}{llrr}
+\toprule
+controller & knob & shipped & tuned \\
+\midrule
+SQP-NMPC & \texttt{qpos\_xy} & 10 & 4 \\
+SQP-NMPC & \texttt{qpos\_th} & 1 & 0.0875 \\
+SQP-NMPC & \texttt{qvel\_xy} & 1 & 160 \\
+SQP-NMPC & \texttt{qvel\_th} & 3 & 0.023 \\
+SQP-NMPC & \texttt{r} & 0.1 & 0.035 \\
+SQP-NMPC & \texttt{N} & 30 & 24 \\
+SQP-NMPC & \texttt{Ts} & 0.033 & 0.033 \\
+SQP-NMPC & \texttt{term} & 100 & 560 \\
+ & \emph{objective [mm]} & 8.84 & 1.62 (infeasible) \\
+\addlinespace
+LMPC & \texttt{qpos\_xy} & 10 & 1 \\
+LMPC & \texttt{qpos\_th} & 1 & 1000 \\
+LMPC & \texttt{qvel\_xy} & 1 & 1.4 \\
+LMPC & \texttt{qvel\_th} & 3 & 0.188 \\
+LMPC & \texttt{r} & 0.1 & 0.07 \\
+LMPC & \texttt{N} & 30 & 45 \\
+LMPC & \texttt{Ts} & 0.033 & 0.033 \\
+LMPC & \texttt{term} & 100 & 200 \\
+ & \emph{objective [mm]} & 5.53 & 6.63 \\
+\addlinespace
+OMPC & \texttt{Ts} & 1 & 1.4 \\
+OMPC & \texttt{q\_xy} & 100000 & 1600000 \\
+OMPC & \texttt{q\_th} & 100000 & 100000 \\
+ & \emph{objective [mm]} & 6.29 & 7.75 \\
+\addlinespace
+SMC & \texttt{lam\_xy} & 3 & 0.75 \\
+SMC & \texttt{lam\_th} & 3 & 0.75 \\
+SMC & \texttt{alpha} & 0.5 & 5.6 \\
+SMC & \texttt{epsilon} & 0.05 & 5 \\
+SMC & \texttt{tau\_bound} & 0.25 & $3.5\times10^{-3}$ \\
+SMC & \texttt{k2} & 1.3 & 0.01 \\
+ & \emph{objective [mm]} & 5.5 & 7.98 \\
+\bottomrule
+\end{tabular}

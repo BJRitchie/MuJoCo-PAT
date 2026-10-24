@@ -1,0 +1,29 @@
+\begin{tabular}{lrrrrrrrr}
+\toprule
+ & RMSE [mm] & $\sigma^2_e$ [mm$^2$] & peak [mm] & $\int\|\tau\|^2$ & $\sigma^2_\tau$ & at limit & $\int\psi^2$ & tick [\textmu s] \\
+\midrule
+\multicolumn{9}{l}{\emph{6 cm step}} \\
+SQP-NMPC & 32.6 & 661 & 84.9 & 0.0109 & $4.1\times10^{-4}$ & \textbf{0} & \textbf{0.0498} & 1116 \\
+LMPC & 29.2 & 572 & 84.9 & \textbf{$8.1\times10^{-3}$} & \textbf{$3.1\times10^{-4}$} & 0 & 0.0533 & 810 \\
+OMPC & 24.8 & 490 & \textbf{84.9} & 0.0151 & $5.7\times10^{-4}$ & 0 & 0.0649 & \textbf{6.02} \\
+SMC & \textbf{23.4} & \textbf{465} & 97.4 & 1.68 & 0.0623 & 0.997 & 0.0652 & 6.65 \\
+\midrule
+\multicolumn{9}{l}{\emph{12 cm step}} \\
+SQP-NMPC & 38.3 & 1154 & 120 & 0.0111 & $4.2\times10^{-4}$ & \textbf{0} & 0.0643 & 1054 \\
+LMPC & 38.3 & 1146 & 120 & \textbf{0.0104} & \textbf{$3.9\times10^{-4}$} & 0 & \textbf{0.0642} & 789 \\
+OMPC & 35.1 & 989 & 120 & 0.0209 & $7.8\times10^{-4}$ & $4.1\times10^{-3}$ & 0.0651 & \textbf{6.41} \\
+SMC & \textbf{30.4} & \textbf{807} & \textbf{120} & 1.68 & 0.0624 & 0.997 & 0.07 & 7.46 \\
+\midrule
+\multicolumn{9}{l}{\emph{circle}} \\
+SQP-NMPC & 2.31 & 1.82 & 5.47 & \textbf{0.0146} & \textbf{$3.2\times10^{-4}$} & \textbf{0} & \textbf{0.355} & 1048 \\
+LMPC & \textbf{0.311} & \textbf{$8.4\times10^{-3}$} & \textbf{0.562} & 0.0151 & $3.4\times10^{-4}$ & 0 & 0.359 & 775 \\
+OMPC & 0.416 & 0.0102 & 0.642 & 0.0152 & $3.4\times10^{-4}$ & 0 & 0.36 & \textbf{6.11} \\
+SMC & 0.838 & 0.175 & 2.04 & 2.81 & 0.0625 & 0.999 & 0.357 & 6.64 \\
+\midrule
+\multicolumn{9}{l}{\emph{rectangle}} \\
+SQP-NMPC & \textbf{4.46} & \textbf{6.14} & \textbf{12.8} & \textbf{0.0258} & \textbf{$5.7\times10^{-4}$} & \textbf{0} & \textbf{0.393} & 1018 \\
+LMPC & 11 & 35 & 20.2 & 0.0728 & $1.6\times10^{-3}$ & 0 & 0.419 & 775 \\
+OMPC & 20.3 & 34.5 & 26.5 & 0.0551 & $1.2\times10^{-3}$ & 0 & 0.438 & 6.35 \\
+SMC & 5.33 & 21 & 27 & 2.8 & 0.0624 & 0.997 & 0.424 & \textbf{6.33} \\
+\bottomrule
+\end{tabular}

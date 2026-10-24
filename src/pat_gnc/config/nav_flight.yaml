@@ -1,8 +1,18 @@
-# nav_node configured for flight sensing -- the estimator half of
-# pat_simulation/config/sensors_flight.yaml. Every noise figure and latency
-# below is that profile's, so the filter is told the truth about its sensors.
-# Use with nav_params:=<this file> (and sensor_profile:=sensors_flight.yaml on
-# the simulation). Every option is written out; see nav.yaml for what each means.
+# nav_node configured for flight-representative sensing on an ISAM servicer.
+# Values are taken from flight / tactical-grade hardware datasheets (see the
+# per-block notes) rather than from a generic profile.
+#
+# Units, as ImuEkf::Params and pat_sensors' ChannelConfig define them:
+#   *_noise_std      per-sample 1-sigma at imu_hz   (= density * sqrt(imu_hz))
+#   *_bias_walk      continuous random-walk DENSITY, units/sqrt(s)
+#   *_meas_std       1-sigma of one fix
+#
+# pat_simulation/config/sensors_flight.yaml carries the same figures (and the
+# constant biases noted under the priors): change both together, or the filter
+# is no longer told the truth. Told the truth, it is consistent (nav_bench
+# --seeds 20: NEES 8.15 against 8) and no noise setting beats it: each one moved
+# x0.5 or x2 leaves the error the same or worse. Its accuracy is set by the
+# relative-nav fix (15 mm, 2 Hz, 0.5 s late), not by the tuning.
 pat_nav:
   ros__parameters:
     navigator: "imu_ekf"
@@ -11,34 +21,67 @@ pat_nav:
     nav_hz:       500.0              # one wake per IMU sample
     publish_hz:   100.0
     output_topic: "/chaser/nav/odom"
-    imu_hz:       500.0              # sensors_flight.yaml's imu_rate_hz
+    imu_hz:       500.0              # STIM300 runs up to 2000 S/s, LN-200S 200-400 Hz,
+                                     # HG4930 600 Hz: 500 Hz is representative
 
     # --- Realtime ------------------------------------------------------------
     rt_priority_nav: 0
     lock_memory:     false
     # rt_cpus_nav: [2, 3]
 
-    # --- imu_ekf: noise model (sensors_flight.yaml's imu_* channels) ----------
-    imu_ekf.gyro_noise_std:  0.002   # imu_gyro_z.noise_std
-    imu_ekf.accel_noise_std: 0.02    # imu_accel_*.noise_std
-    imu_ekf.gyro_bias_walk:  0.00005 # imu_gyro_z.bias_walk_std
-    imu_ekf.accel_bias_walk: 0.0005  # imu_accel_*.bias_walk_std
+    # --- imu_ekf: noise model -------------------------------------------------
+    # Reference unit: Safran STIM300 class (tactical MEMS, flown on smallsats).
+    #   gyro ARW 0.15 deg/sqrt(h) -> density 4.4e-5 rad/s/sqrt(Hz) -> 9.8e-4 per sample
+    #   accel VRW 0.07 m/s/sqrt(h) -> density 1.2e-3 m/s^2/sqrt(Hz) -> 2.6e-2 per sample
+    # For a FOG unit (LN-200S, ARW <0.07 deg/sqrt(h), 35 ug/sqrt(Hz)) use
+    # gyro 4.6e-4, accel 7.7e-3.
+    imu_ekf.gyro_noise_std:  0.001   # was 0.002 (~0.31 deg/sqrt(h), 2x STIM300)
+    imu_ekf.accel_noise_std: 0.025   # was 0.02  (already STIM300-class)
 
-    imu_ekf.yaw_meas_std: 0.0005     # star_yaw.noise_std
-    imu_ekf.pos_meas_std: 0.005      # nav_*.noise_std
-    imu_ekf.vel_meas_std: 0.01
+    # Bias random walk sized so the bias can wander by roughly the datasheet
+    # over-temperature figure (gyro 10 deg/h, accel ~1 mg) in a 10 min phase,
+    # with ~3x margin for the filter:
+    #   gyro  density ~6e-6 rad/s/sqrt(s)
+    #   accel density ~1.2e-4 m/s^2/sqrt(s)
+    # The old 5e-5 / 5e-4 let the gyro bias drift by thousands of deg/h in
+    # 10 min, several hundred times any flight IMU.
+    imu_ekf.gyro_bias_walk:  6.0e-6
+    imu_ekf.accel_bias_walk: 1.2e-4
 
-    # Priors wide enough to contain the profile's constant biases (gyro 0.003,
-    # accel 0.02 / -0.015) at well under 1 sigma.
-    imu_ekf.init_pos_std:        0.01
+    # Star tracker, smallsat class (e.g. BCT NST: 6" cross-boresight,
+    # 40" about-boresight, 1 sigma, 5 Hz). Yaw here is the in-plane angle, so
+    # which figure applies depends on the boresight direction:
+    #   boresight out of plane (yaw = about-boresight) -> ~2e-4 rad
+    #   boresight in plane     (yaw = cross-boresight) -> ~3e-5 rad
+    # 1e-4 (~20") sits between them; set it from the mounting.
+    imu_ekf.yaw_meas_std: 1.0e-4     # was 5e-4 (~103")
+
+    # Relative-navigation fix (lidar or vision pose). Close-range servicing
+    # targets cm-level position; the common rule of thumb is ~1% of range,
+    # so ~1-2 cm at 1-2 m. 5 mm is achievable only with markers at very short
+    # range.
+    imu_ekf.pos_meas_std: 0.015      # was 0.005
+    imu_ekf.vel_meas_std: 0.01       # unused while use_twist is false
+
+    # Priors. Matching sim constant biases (set in sensors_flight.yaml):
+    #   gyro  5e-5 rad/s (~10 deg/h, turn-on/over-temp class)
+    #   accel 0.015 / -0.01 m/s^2 (~1.5 / 1 mg)
+    # Both sit at <=0.5 sigma of the priors below. The old gyro prior (0.01 rad/s
+    # = ~2000 deg/h) was wide enough for a consumer MEMS part.
+    imu_ekf.init_pos_std:        0.02
     imu_ekf.init_yaw_std:        0.01
     imu_ekf.init_vel_std:        0.05
-    imu_ekf.init_gyro_bias_std:  0.01
-    imu_ekf.init_accel_bias_std: 0.05
+    imu_ekf.init_gyro_bias_std:  1.0e-4
+    imu_ekf.init_accel_bias_std: 0.03
 
-    # --- imu_ekf: sensor latency (sensors_flight.yaml's delay_s) --------------
-    imu_ekf.latency_yaw: 0.1         # star_yaw.delay_s
-    imu_ekf.latency_pos: 0.2         # nav_*.delay_s
+    # --- imu_ekf: sensor latency ---------------------------------------------
+    # Star trackers: tens to a few hundred ms exposure-to-output. 0.1 s is fine.
+    imu_ekf.latency_yaw: 0.1
+    # Relative nav: lidar pose estimation is slow (Jena-Optronik quote 2 Hz
+    # pose updates with ~1 s latency for RVS3000-3D model matching); camera
+    # pipelines are typically a few hundred ms. 0.5 s is a middle value; use
+    # 1.0 for a lidar-only servicer.
+    imu_ekf.latency_pos: 0.5         # was 0.2
     imu_ekf.latency_vel: 0.0
     imu_ekf.use_twist: false
     # Essential with this profile: the 2 Hz position fix and 5 Hz star tracker
@@ -47,10 +90,70 @@ pat_nav:
     imu_ekf.use_position: true
 
     # --- imu_ekf: robustness and realtime bound ------------------------------
-    # 0.2 s at 500 Hz is 100 steps; 256 leaves room. Replay cost is timed at
-    # startup against half of 1/nav_hz.
-    imu_ekf.history_len: 256
+    # 0.5 s at 500 Hz is 250 steps, so 256 no longer leaves room: 512 does.
+    # (latency_pos 1.0 needs 1024.) Re-check the startup replay timing
+    # against half of 1/nav_hz after changing this.
+    imu_ekf.history_len: 512
     imu_ekf.max_imu_gap: 0.1
+    # chi-square 99.9% gates: 1 dof = 10.83, 2 dof = 13.82. Correct as-is.
     imu_ekf.gate_yaw: 10.83
     imu_ekf.gate_pos: 13.82
     imu_ekf.gate_vel: 13.82
+
+
+# # nav_node configured for flight sensing -- the estimator half of
+# # pat_simulation/config/sensors_flight.yaml. Every noise figure and latency
+# # below is that profile's, so the filter is told the truth about its sensors.
+# # Use with nav_params:=<this file> (and sensor_profile:=sensors_flight.yaml on
+# # the simulation). Every option is written out; see nav.yaml for what each means.
+# pat_nav:
+#   ros__parameters:
+#     navigator: "imu_ekf"
+
+#     # --- Thread and output ---------------------------------------------------
+#     nav_hz:       500.0              # one wake per IMU sample
+#     publish_hz:   100.0
+#     output_topic: "/chaser/nav/odom"
+#     imu_hz:       500.0              # sensors_flight.yaml's imu_rate_hz
+
+#     # --- Realtime ------------------------------------------------------------
+#     rt_priority_nav: 0
+#     lock_memory:     false
+#     # rt_cpus_nav: [2, 3]
+
+#     # --- imu_ekf: noise model (sensors_flight.yaml's imu_* channels) ----------
+#     imu_ekf.gyro_noise_std:  0.002   # imu_gyro_z.noise_std
+#     imu_ekf.accel_noise_std: 0.02    # imu_accel_*.noise_std
+#     imu_ekf.gyro_bias_walk:  0.00005 # imu_gyro_z.bias_walk_std
+#     imu_ekf.accel_bias_walk: 0.0005  # imu_accel_*.bias_walk_std
+
+#     imu_ekf.yaw_meas_std: 0.0005     # star_yaw.noise_std
+#     imu_ekf.pos_meas_std: 0.005      # nav_*.noise_std
+#     imu_ekf.vel_meas_std: 0.01
+
+#     # Priors wide enough to contain the profile's constant biases (gyro 0.003,
+#     # accel 0.02 / -0.015) at well under 1 sigma.
+#     imu_ekf.init_pos_std:        0.01
+#     imu_ekf.init_yaw_std:        0.01
+#     imu_ekf.init_vel_std:        0.05
+#     imu_ekf.init_gyro_bias_std:  0.01
+#     imu_ekf.init_accel_bias_std: 0.05
+
+#     # --- imu_ekf: sensor latency (sensors_flight.yaml's delay_s) --------------
+#     imu_ekf.latency_yaw: 0.1         # star_yaw.delay_s
+#     imu_ekf.latency_pos: 0.2         # nav_*.delay_s
+#     imu_ekf.latency_vel: 0.0
+#     imu_ekf.use_twist: false
+#     # Essential with this profile: the 2 Hz position fix and 5 Hz star tracker
+#     # ride on 100 Hz odometry, so each reading is republished many times.
+#     imu_ekf.skip_repeated: true
+#     imu_ekf.use_position: true
+
+#     # --- imu_ekf: robustness and realtime bound ------------------------------
+#     # 0.2 s at 500 Hz is 100 steps; 256 leaves room. Replay cost is timed at
+#     # startup against half of 1/nav_hz.
+#     imu_ekf.history_len: 256
+#     imu_ekf.max_imu_gap: 0.1
+#     imu_ekf.gate_yaw: 10.83
+#     imu_ekf.gate_pos: 13.82
+#     imu_ekf.gate_vel: 13.82

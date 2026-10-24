@@ -1,0 +1,17 @@
+\begin{tabular}{lrrrrrr}
+\toprule
+ & rise [s] & overshoot [\%] & settle 2\% [s] & ss error [mm] & $\int\|\tau\|^2$ & peak $|\psi|$ [mrad] \\
+\midrule
+\multicolumn{7}{l}{\emph{6 cm diagonal step}} \\
+SQP-NMPC & 3.65 & 1.85 & 4.79 & 0.522 & 0.0109 & 92.4 \\
+LMPC & 3.21 & \textbf{1.17} & 4.61 & 0.323 & \textbf{$8.1\times10^{-3}$} & \textbf{92.1} \\
+OMPC & 1.52 & 5.39 & 4.39 & \textbf{$6.1\times10^{-3}$} & 0.0151 & 98.5 \\
+SMC & \textbf{0.694} & 17.5 & \textbf{2.35} & 0.0321 & 1.68 & 115 \\
+\midrule
+\multicolumn{7}{l}{\emph{12 cm step along x}} \\
+SQP-NMPC & 1.57 & 3.86 & 4.08 & \textbf{$3.8\times10^{-4}$} & 0.0111 & 98.9 \\
+LMPC & 1.75 & \textbf{2.35} & 3.97 & $7.6\times10^{-3}$ & \textbf{0.0104} & 98 \\
+OMPC & 1.5 & 5.03 & 4.3 & $2.4\times10^{-3}$ & 0.0209 & \textbf{96.9} \\
+SMC & \textbf{0.785} & 3.88 & \textbf{2} & 0.234 & 1.68 & 116 \\
+\bottomrule
+\end{tabular}

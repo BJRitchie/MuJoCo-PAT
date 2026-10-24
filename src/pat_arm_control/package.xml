@@ -21,6 +21,10 @@
   <depend>trajectory_msgs</depend>
   <depend>std_msgs</depend>
   <depend>pat_rt</depend>
+  <!-- contact_bench only: the base state estimator and the seeded sensor model
+       it is fed with, so a study can run the arms on an estimate. -->
+  <depend>pat_gnc</depend>
+  <depend>pat_sensors</depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>

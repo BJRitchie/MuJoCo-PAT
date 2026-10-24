@@ -1,0 +1,17 @@
+\begin{tabular}{llrrrr}
+\toprule
+state & ff gain & SQP-NMPC & LMPC & OMPC & SMC \\
+\midrule
+exact & 0 & 0.317 & 0.485 & 0.528 & 0.681 \\
+exact & 0.5 & 0.311 & 0.411 & 0.423 & 0.59 \\
+exact & 1 & 0.307 & 0.357 & 0.347 & 0.509 \\
+\addlinespace
+raw sensors & 0 & 8.5 $\pm$ 0.98 & 9.19 $\pm$ 1.1 & 9.05 $\pm$ 1.1 & 7.4 $\pm$ 1 \\
+raw sensors & 0.5 & 8.49 $\pm$ 0.97 & 9.19 $\pm$ 1.1 & 9.04 $\pm$ 1.1 & 7.39 $\pm$ 0.99 \\
+raw sensors & 1 & 8.48 $\pm$ 0.95 & 9.21 $\pm$ 1 & 9.06 $\pm$ 0.98 & 7.39 $\pm$ 0.9 \\
+\addlinespace
+EKF + joint KF & 0 & 10.6 $\pm$ 2 & 10.9 $\pm$ 1.6 & 11.1 $\pm$ 1.7 & 9.79 $\pm$ 1.7 \\
+EKF + joint KF & 0.5 & 10.6 $\pm$ 2 & 10.9 $\pm$ 1.6 & 11.1 $\pm$ 1.7 & 9.76 $\pm$ 1.7 \\
+EKF + joint KF & 1 & 10.6 $\pm$ 2 & 10.9 $\pm$ 1.6 & 11.1 $\pm$ 1.7 & 9.71 $\pm$ 1.7 \\
+\bottomrule
+\end{tabular}

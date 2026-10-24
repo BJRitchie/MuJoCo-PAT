@@ -1,0 +1,463 @@
+{
+ "sqp": {
+  "law": "nmpc",
+  "args": [
+   "--set",
+   "weights.Q_pos=[4,4,0.0875]",
+   "--set",
+   "weights.Q_vel=[160,160,0.0229687]",
+   "--set",
+   "weights.R=[0.035,0.035,0.035]",
+   "--set",
+   "nmpc.N=24",
+   "--set",
+   "nmpc.Ts=0.033",
+   "--set",
+   "nmpc.terminal_cost_multiplier=560"
+  ],
+  "state": {
+   "qpos_xy": 4.0,
+   "qpos_th": 0.0875,
+   "qvel_xy": 160.0,
+   "qvel_th": 0.022968749999999996,
+   "r": 0.034999999999999996,
+   "N": 24,
+   "Ts": 0.033,
+   "term": 560.0
+  },
+  "feasible": false,
+  "gmean_rmse_mm": {
+   "shipped": 8.836583922417564,
+   "tuned": 1.6171676975486944
+  },
+  "per_scenario": {
+   "shipped": {
+    "circle": {
+     "rmse_mm": 2.3105831,
+     "rail_frac": 0.0,
+     "safe_ticks": 0.0,
+     "tick_us_max": 2007.425,
+     "tau2_int_win": 0.0145579102,
+     "err_var_mm2": 1.82298362
+    },
+    "rectangle": {
+     "rmse_mm": 4.45757106,
+     "rail_frac": 0.0,
+     "safe_ticks": 0.0,
+     "tick_us_max": 3034.176,
+     "tau2_int_win": 0.0257596101,
+     "err_var_mm2": 6.13874799
+    },
+    "step6": {
+     "rmse_mm": 32.6498064,
+     "rail_frac": 0.0,
+     "safe_ticks": 0.0,
+     "tick_us_max": 1553.153,
+     "tau2_int_win": 0.010927021,
+     "err_var_mm2": 661.297517
+    },
+    "circle2x": {
+     "rmse_mm": 10.9697953,
+     "rail_frac": 0.0,
+     "safe_ticks": 0.0,
+     "tick_us_max": 2829.51,
+     "tau2_int_win": 0.0773435526,
+     "err_var_mm2": 23.9646621
+    },
+    "rectangle2x": {
+     "rmse_mm": 14.605722,
+     "rail_frac": 0.0,
+     "safe_ticks": 0.0,
+     "tick_us_max": 1932.636,
+     "tau2_int_win": 0.0957259928,
+     "err_var_mm2": 51.212008
+    }
+   },
+   "tuned": {
+    "circle": {
+     "rmse_mm": 0.31677116,
+     "rail_frac": 0.0,
+     "safe_ticks": 0.0,
+     "tick_us_max": 1798.296,
+     "tau2_int_win": 0.0148903433,
+     "err_var_mm2": 0.0187874392
+    },
+    "rectangle": {
+     "rmse_mm": 0.480551751,
+     "rail_frac": 0.00845007783,
+     "safe_ticks": 0.0,
+     "tick_us_max": 1934.814,
+     "tau2_int_win": 0.0870207576,
+     "err_var_mm2": 0.0550060739
+    },
+    "step6": {
+     "rmse_mm": 35.8538932,
+     "rail_frac": 0.0,
+     "safe_ticks": 0.0,
+     "tick_us_max": 3094.717,
+     "tau2_int_win": 0.00602462799,
+     "err_var_mm2": 521.998629
+    },
+    "circle2x": {
+     "rmse_mm": 0.551708809,
+     "rail_frac": 0.0,
+     "safe_ticks": 0.0,
+     "tick_us_max": 1783.242,
+     "tau2_int_win": 0.101775727,
+     "err_var_mm2": 0.0270050251
+    },
+    "rectangle2x": {
+     "rmse_mm": 3.6731888,
+     "rail_frac": 0.0863137816,
+     "safe_ticks": 0.0,
+     "tick_us_max": 3366.942,
+     "tau2_int_win": 0.221681064,
+     "err_var_mm2": 4.63840276
+    }
+   }
+  },
+  "evaluations": 112
+ },
+ "iter": {
+  "law": "nmpc",
+  "args": [
+   "--set",
+   "nmpc.full_nonlinear=false",
+   "--set",
+   "weights.Q_pos=[1,1,1000]",
+   "--set",
+   "weights.Q_vel=[1.4,1.4,0.1875]",
+   "--set",
+   "weights.R=[0.07,0.07,0.07]",
+   "--set",
+   "nmpc.N=45",
+   "--set",
+   "nmpc.Ts=0.033",
+   "--set",
+   "nmpc.terminal_cost_multiplier=200"
+  ],
+  "state": {
+   "qpos_xy": 1.0,
+   "qpos_th": 1000.0,
+   "qvel_xy": 1.4,
+   "qvel_th": 0.1875,
+   "r": 0.06999999999999999,
+   "N": 45,
+   "Ts": 0.033,
+   "term": 200.0
+  },
+  "feasible": true,
+  "gmean_rmse_mm": {
+   "shipped": 5.526343338463261,
+   "tuned": 6.626248462589661
+  },
+  "per_scenario": {
+   "shipped": {
+    "circle": {
+     "rmse_mm": 0.310887704,
+     "rail_frac": 0.0,
+     "safe_ticks": 0.0,
+     "tick_us_max": 1748.236,
+     "tau2_int_win": 0.0151348417,
+     "err_var_mm2": 0.00843613924
+    },
+    "rectangle": {
+     "rmse_mm": 11.037275,
+     "rail_frac": 0.0,
+     "safe_ticks": 0.0,
+     "tick_us_max": 1591.248,
+     "tau2_int_win": 0.0728069964,
+     "err_var_mm2": 34.9867588
+    },
+    "step6": {
+     "rmse_mm": 29.1938351,
+     "rail_frac": 0.0,
+     "safe_ticks": 0.0,
+     "tick_us_max": 1088.428,
+     "tau2_int_win": 0.00810178516,
+     "err_var_mm2": 572.495806
+    },
+    "circle2x": {
+     "rmse_mm": 0.651908187,
+     "rail_frac": 0.0,
+     "safe_ticks": 0.0,
+     "tick_us_max": 1004.762,
+     "tau2_int_win": 0.110472773,
+     "err_var_mm2": 0.0483406199
+    },
+    "rectangle2x": {
+     "rmse_mm": 78.9307666,
+     "rail_frac": 0.159275155,
+     "safe_ticks": 171.0,
+     "tick_us_max": 4307.404,
+     "tau2_int_win": 0.30259909,
+     "err_var_mm2": 1365.50154
+    }
+   },
+   "tuned": {
+    "circle": {
+     "rmse_mm": 0.485268244,
+     "rail_frac": 0.0,
+     "safe_ticks": 0.0,
+     "tick_us_max": 1724.553,
+     "tau2_int_win": 0.0151756159,
+     "err_var_mm2": 0.0194707002
+    },
+    "rectangle": {
+     "rmse_mm": 19.6004934,
+     "rail_frac": 0.0,
+     "safe_ticks": 0.0,
+     "tick_us_max": 1427.493,
+     "tau2_int_win": 0.0533732885,
+     "err_var_mm2": 46.0139857
+    },
+    "step6": {
+     "rmse_mm": 37.0410818,
+     "rail_frac": 0.0,
+     "safe_ticks": 0.0,
+     "tick_us_max": 2198.618,
+     "tau2_int_win": 0.00190444914,
+     "err_var_mm2": 657.877187
+    },
+    "circle2x": {
+     "rmse_mm": 0.783094155,
+     "rail_frac": 0.0,
+     "safe_ticks": 0.0,
+     "tick_us_max": 5628.003,
+     "tau2_int_win": 0.109581894,
+     "err_var_mm2": 0.088161513
+    },
+    "rectangle2x": {
+     "rmse_mm": 46.3011803,
+     "rail_frac": 0.0400572246,
+     "safe_ticks": 0.0,
+     "tick_us_max": 2360.712,
+     "tau2_int_win": 0.223470757,
+     "err_var_mm2": 153.896888
+    }
+   }
+  },
+  "evaluations": 137
+ },
+ "ompc": {
+  "law": "ompc",
+  "args": [
+   "--set",
+   "ompc.Ts=1.4",
+   "--set",
+   "ompc.Q=[1.6e+06,1.6e+06,100000]"
+  ],
+  "state": {
+   "Ts": 1.4,
+   "q_xy": 1600000.0,
+   "q_th": 100000.0
+  },
+  "feasible": true,
+  "gmean_rmse_mm": {
+   "shipped": 6.287705458133207,
+   "tuned": 7.753435487890677
+  },
+  "per_scenario": {
+   "shipped": {
+    "circle": {
+     "rmse_mm": 0.415707923,
+     "rail_frac": 0.0,
+     "safe_ticks": 0.0,
+     "tick_us_max": 17.596,
+     "tau2_int_win": 0.0152083799,
+     "err_var_mm2": 0.010226049
+    },
+    "rectangle": {
+     "rmse_mm": 20.3359963,
+     "rail_frac": 0.0,
+     "safe_ticks": 0.0,
+     "tick_us_max": 15.279,
+     "tau2_int_win": 0.0550889465,
+     "err_var_mm2": 34.4927784
+    },
+    "step6": {
+     "rmse_mm": 24.7708537,
+     "rail_frac": 0.0,
+     "safe_ticks": 0.0,
+     "tick_us_max": 19.477,
+     "tau2_int_win": 0.0150708847,
+     "err_var_mm2": 490.450807
+    },
+    "circle2x": {
+     "rmse_mm": 0.797186194,
+     "rail_frac": 0.0,
+     "safe_ticks": 0.0,
+     "tick_us_max": 17.327,
+     "tau2_int_win": 0.110163291,
+     "err_var_mm2": 0.0614532659
+    },
+    "rectangle2x": {
+     "rmse_mm": 58.8716825,
+     "rail_frac": 0.0953743443,
+     "safe_ticks": 0.0,
+     "tick_us_max": 133.812,
+     "tau2_int_win": 0.253341127,
+     "err_var_mm2": 162.314981
+    }
+   },
+   "tuned": {
+    "circle": {
+     "rmse_mm": 0.527935147,
+     "rail_frac": 0.0,
+     "safe_ticks": 0.0,
+     "tick_us_max": 22.108,
+     "tau2_int_win": 0.0152195177,
+     "err_var_mm2": 0.0191368956
+    },
+    "rectangle": {
+     "rmse_mm": 33.0515881,
+     "rail_frac": 0.0,
+     "safe_ticks": 0.0,
+     "tick_us_max": 18.327,
+     "tau2_int_win": 0.0452638651,
+     "err_var_mm2": 35.0619813
+    },
+    "step6": {
+     "rmse_mm": 29.2702709,
+     "rail_frac": 0.0,
+     "safe_ticks": 0.0,
+     "tick_us_max": 14.584,
+     "tau2_int_win": 0.00552490294,
+     "err_var_mm2": 618.038031
+    },
+    "circle2x": {
+     "rmse_mm": 0.891095305,
+     "rail_frac": 0.0,
+     "safe_ticks": 0.0,
+     "tick_us_max": 18.244,
+     "tau2_int_win": 0.108810042,
+     "err_var_mm2": 0.113995669
+    },
+    "rectangle2x": {
+     "rmse_mm": 61.5668712,
+     "rail_frac": 0.0,
+     "safe_ticks": 0.0,
+     "tick_us_max": 119.472,
+     "tau2_int_win": 0.155129721,
+     "err_var_mm2": 39.3627741
+    }
+   }
+  },
+  "evaluations": 20
+ },
+ "smc": {
+  "law": "smc",
+  "args": [
+   "--set",
+   "smc.lam=[0.75,0.75,0.75]",
+   "--set",
+   "smc.alpha=[5.6,5.6,5.6]",
+   "--set",
+   "smc.epsilon=5",
+   "--set",
+   "smc.tau_bound=0.0035",
+   "--set",
+   "smc.k2=0.01"
+  ],
+  "state": {
+   "lam_xy": 0.75,
+   "lam_th": 0.75,
+   "alpha": 5.6,
+   "epsilon": 5.0,
+   "tau_bound": 0.0034999999999999996,
+   "k2": 0.01
+  },
+  "feasible": true,
+  "gmean_rmse_mm": {
+   "shipped": 5.501059234644336,
+   "tuned": 7.981934867018334
+  },
+  "per_scenario": {
+   "shipped": {
+    "circle": {
+     "rmse_mm": 0.838231449,
+     "rail_frac": 0.998888148,
+     "safe_ticks": 0.0,
+     "tick_us_max": 16.726,
+     "tau2_int_win": 2.80662033,
+     "err_var_mm2": 0.175361578
+    },
+    "rectangle": {
+     "rmse_mm": 5.33190193,
+     "rail_frac": 0.996664443,
+     "safe_ticks": 0.0,
+     "tick_us_max": 99.042,
+     "tau2_int_win": 2.80347924,
+     "err_var_mm2": 21.040978
+    },
+    "step6": {
+     "rmse_mm": 23.397671,
+     "rail_frac": 0.996666667,
+     "safe_ticks": 0.0,
+     "tick_us_max": 17.85,
+     "tau2_int_win": 1.68125108,
+     "err_var_mm2": 464.706626
+    },
+    "circle2x": {
+     "rmse_mm": 1.04942203,
+     "rail_frac": 0.996661898,
+     "safe_ticks": 0.0,
+     "tick_us_max": 24.183,
+     "tau2_int_win": 1.30664669,
+     "err_var_mm2": 0.0407896022
+    },
+    "rectangle2x": {
+     "rmse_mm": 45.9052859,
+     "rail_frac": 0.999046257,
+     "safe_ticks": 0.0,
+     "tick_us_max": 21.134,
+     "tau2_int_win": 1.30813294,
+     "err_var_mm2": 796.819953
+    }
+   },
+   "tuned": {
+    "circle": {
+     "rmse_mm": 0.680808009,
+     "rail_frac": 0.0,
+     "safe_ticks": 0.0,
+     "tick_us_max": 23.137,
+     "tau2_int_win": 0.0152294488,
+     "err_var_mm2": 0.0423342845
+    },
+    "rectangle": {
+     "rmse_mm": 26.1703944,
+     "rail_frac": 0.0,
+     "safe_ticks": 0.0,
+     "tick_us_max": 45.233,
+     "tau2_int_win": 0.0473499282,
+     "err_var_mm2": 17.6625762
+    },
+    "step6": {
+     "rmse_mm": 33.1887851,
+     "rail_frac": 0.0,
+     "safe_ticks": 0.0,
+     "tick_us_max": 17.285,
+     "tau2_int_win": 0.00265426729,
+     "err_var_mm2": 687.136523
+    },
+    "circle2x": {
+     "rmse_mm": 1.10779483,
+     "rail_frac": 0.0,
+     "safe_ticks": 0.0,
+     "tick_us_max": 33.301,
+     "tau2_int_win": 0.108786127,
+     "err_var_mm2": 0.194384218
+    },
+    "rectangle2x": {
+     "rmse_mm": 49.4601336,
+     "rail_frac": 0.0491177873,
+     "safe_ticks": 0.0,
+     "tick_us_max": 15.741,
+     "tau2_int_win": 0.175296607,
+     "err_var_mm2": 44.0174807
+    }
+   }
+  },
+  "evaluations": 35
+ }
+}

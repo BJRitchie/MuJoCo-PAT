@@ -9,6 +9,7 @@
   <license>MIT</license>
   <buildtool_depend>ament_cmake</buildtool_depend>
   <build_depend>pat_platform_description</build_depend>
+  <depend>pat_sensors</depend>
   <build_depend>xacro</build_depend>
   <depend>rclcpp</depend>
   <depend>rosgraph_msgs</depend>

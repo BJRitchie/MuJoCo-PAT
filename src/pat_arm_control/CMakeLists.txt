@@ -49,6 +49,7 @@ find_package(acados REQUIRED)
 #   dynamics/   FloatingBaseDynamics, the plant model the control laws use
 #   control/    the control laws; control/nmpc/ is the NMPC and its QP solver
 #   observers/  disturbance observers
+#   estimation/ per-joint Kalman filter for encoder readings
 #   reference/  reference windows, trajectory shapes, teleop (no dependencies)
 #   src/nodes/  the ROS nodes -- their headers are private, never installed
 #   src/bench/  ROS-free benches and the support library they share with tests
@@ -79,7 +80,8 @@ add_library(pat_arm_control_lib STATIC
     src/control/ompc/ompc_config.cpp
     src/control/smc/arm_smc.cpp
     src/control/smc/smc_config.cpp
-    src/observers/momentum_observer.cpp)
+    src/observers/momentum_observer.cpp
+    src/estimation/joint_kalman_filter.cpp)
 target_include_directories(pat_arm_control_lib PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>)
@@ -176,12 +178,21 @@ install(FILES "${_model_xml}" "${CMAKE_CURRENT_SOURCE_DIR}/models/platform.xml"
 # Shared by both benches and by the tests, which score the bench outputs: one
 # compiled copy, so a test checks the code a bench actually runs.
 find_package(yaml-cpp REQUIRED)
+# The estimator and the sensor model it is fed with, so a study can hand the arms
+# a noisy measurement or the base state estimator's output. Both are ROS-free
+# libraries, which keeps the bench inside the layering rules.
+find_package(pat_gnc     REQUIRED)
+find_package(pat_sensors REQUIRED)
 add_library(pat_arm_control_bench STATIC
     src/bench/bench_yaml.cpp
-    src/bench/contact_scenario.cpp)
+    src/bench/contact_scenario.cpp
+    src/bench/metrics.cpp
+    src/bench/run_summary.cpp
+    src/bench/state_source.cpp)
 target_include_directories(pat_arm_control_bench PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src/bench)
-target_link_libraries(pat_arm_control_bench PUBLIC pat_arm_control_lib yaml-cpp)
+target_link_libraries(pat_arm_control_bench PUBLIC pat_arm_control_lib yaml-cpp
+                      pat_gnc::pat_gnc_lib pat_sensors::pat_sensors)
 target_compile_options(pat_arm_control_bench PRIVATE -Wall -Wextra -Wpedantic)
 pat_arm_control_arch_flags(pat_arm_control_bench)
 
@@ -259,7 +270,11 @@ if(BUILD_TESTING)
         test/test_param_loading.cpp
         test/test_ompc.cpp
         test/test_smc.cpp
+        test/test_bench_metrics.cpp
+        test/test_run_summary.cpp
+        test/test_state_source.cpp
         test/test_momentum_observer.cpp
+        test/test_joint_kalman_filter.cpp
         test/test_bench_scoring.cpp
         test/test_reference.cpp
         test/test_teleop_reference.cpp)

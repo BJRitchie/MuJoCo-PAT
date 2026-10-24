@@ -101,13 +101,18 @@ struct Loaded {
  *  @param tool            named in the error message
  *  @param law             "nmpc", "ompc" or "smc": which node block and which
  *                         loader. Anything else is an error.
+ *  @param overrides       "key=value" strings applied over the merged files, the
+ *                         dotted key being the ROS parameter name (e.g.
+ *                         "nmpc.full_nonlinear=false"). The value is YAML. A key
+ *                         no loader maps is an error, like one in a file.
  */
 Loaded loadConfig(const std::vector<std::string>& yaml_paths, const std::string& arm,
                   const std::string& mjcf_override,
                   const std::string& default_model,
                   const std::set<std::string>& not_ours,
                   const std::string& tool,
-                  const std::string& law = "nmpc");
+                  const std::string& law = "nmpc",
+                  const std::vector<std::string>& overrides = {});
 
 }  // namespace bench
 }  // namespace pat_arm_control

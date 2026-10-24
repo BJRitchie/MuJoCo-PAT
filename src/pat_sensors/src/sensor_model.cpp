@@ -1,10 +1,10 @@
-#include "pat_simulation/sensors/sensor_model.hpp"
+#include "pat_sensors/sensor_model.hpp"
 
 #include <cmath>
 #include <sstream>
 #include <stdexcept>
 
-namespace pat_simulation {
+namespace pat_sensors {
 
 std::uint64_t channelSeed(const std::string& name, std::uint64_t master) {
     // FNV-1a, 64-bit.
@@ -175,4 +175,4 @@ std::string SensorModel::report() const {
     return os.str();
 }
 
-} // namespace pat_simulation
+} // namespace pat_sensors

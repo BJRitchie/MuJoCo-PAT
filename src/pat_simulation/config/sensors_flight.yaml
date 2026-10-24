@@ -10,9 +10,9 @@
 # fix. pat_gnc's nav_node fuses these; its
 # matching configuration is pat_gnc/config/nav_flight.yaml.
 #
-# The figures are representative of a tactical-grade MEMS IMU and a small star
-# tracker -- chosen to exercise every part of the estimator, not taken from a
-# particular datasheet.
+# The figures are from flight / tactical-grade datasheets, the same ones
+# nav_flight.yaml cites: a Safran STIM300-class MEMS IMU, a smallsat star tracker
+# (BCT NST class) and a close-range lidar/vision relative-navigation fix.
 pat_simulation:
   ros__parameters:
     # The IMU at the physics rate. Odometry and joint states stay at
@@ -24,16 +24,19 @@ pat_simulation:
     publish_ground_truth: true
 
     sensors:
-      # IMU -- per-sample sigmas at 500 Hz; biases constant plus a slow walk.
-      imu_accel_x:  {scale_error: 0.0, bias:  0.02,  bias_walk_std: 0.0005, noise_std: 0.02,   quantisation: 0.0, rate_hz: 0.0, dropout_prob: 0.0,  delay_s: 0.0}
-      imu_accel_y:  {scale_error: 0.0, bias: -0.015, bias_walk_std: 0.0005, noise_std: 0.02,   quantisation: 0.0, rate_hz: 0.0, dropout_prob: 0.0,  delay_s: 0.0}
-      imu_gyro_z:   {scale_error: 0.0, bias:  0.003, bias_walk_std: 0.00005, noise_std: 0.002, quantisation: 0.0, rate_hz: 0.0, dropout_prob: 0.0,  delay_s: 0.0}
-      # Relative-navigation position: 2 Hz, 5 mm, 200 ms late.
+      # IMU, STIM300 class -- per-sample sigmas at 500 Hz (gyro ARW 0.15
+      # deg/sqrt(h), accel VRW 0.07 m/s/sqrt(h)); constant turn-on biases
+      # (gyro ~10 deg/h, accel ~1.5 / 1 mg) plus a walk density sized to the
+      # datasheet over-temperature drift.
+      imu_accel_x:  {scale_error: 0.0, bias:  0.015, bias_walk_std: 1.2e-4, noise_std: 0.025,  quantisation: 0.0, rate_hz: 0.0, dropout_prob: 0.0,  delay_s: 0.0}
+      imu_accel_y:  {scale_error: 0.0, bias: -0.01,  bias_walk_std: 1.2e-4, noise_std: 0.025,  quantisation: 0.0, rate_hz: 0.0, dropout_prob: 0.0,  delay_s: 0.0}
+      imu_gyro_z:   {scale_error: 0.0, bias:  5.0e-5, bias_walk_std: 6.0e-6, noise_std: 0.001, quantisation: 0.0, rate_hz: 0.0, dropout_prob: 0.0,  delay_s: 0.0}
+      # Relative-navigation position (lidar / vision pose): 2 Hz, 15 mm, 0.5 s late.
       # No dropout: the sensor model drops each channel independently, so a
       # dropout here would produce fixes with one fresh coordinate and one
       # held from the previous sample -- something a real sensor, which loses
       # the whole fix, never emits, and which the estimator would fuse as new.
-      nav_x:        {scale_error: 0.0, bias:  0.0,   bias_walk_std: 0.0,    noise_std: 0.005,  quantisation: 0.0, rate_hz: 2.0, dropout_prob: 0.0,  delay_s: 0.2}
-      nav_y:        {scale_error: 0.0, bias:  0.0,   bias_walk_std: 0.0,    noise_std: 0.005,  quantisation: 0.0, rate_hz: 2.0, dropout_prob: 0.0,  delay_s: 0.2}
-      # Star tracker: 5 Hz, 0.5 mrad (~100 arcsec), 100 ms late.
-      star_yaw:     {scale_error: 0.0, bias:  0.0,   bias_walk_std: 0.0,    noise_std: 0.0005, quantisation: 0.0, rate_hz: 5.0, dropout_prob: 0.0,  delay_s: 0.1}
+      nav_x:        {scale_error: 0.0, bias:  0.0,   bias_walk_std: 0.0,    noise_std: 0.015,  quantisation: 0.0, rate_hz: 2.0, dropout_prob: 0.0,  delay_s: 0.5}
+      nav_y:        {scale_error: 0.0, bias:  0.0,   bias_walk_std: 0.0,    noise_std: 0.015,  quantisation: 0.0, rate_hz: 2.0, dropout_prob: 0.0,  delay_s: 0.5}
+      # Star tracker: 5 Hz, 0.1 mrad (~20 arcsec), 100 ms late.
+      star_yaw:     {scale_error: 0.0, bias:  0.0,   bias_walk_std: 0.0,    noise_std: 1.0e-4, quantisation: 0.0, rate_hz: 5.0, dropout_prob: 0.0,  delay_s: 0.1}

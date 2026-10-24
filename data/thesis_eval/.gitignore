@@ -1,0 +1,6 @@
+# The cache and the per-tick records are regenerable and large. What is kept in
+# git is each study's summary.csv and manifest.json (for the shipped settings
+# here, for the tuned ones under tuned/): small, and the numbers the thesis
+# quotes, with what produced them.
+**/cells/
+**/series/

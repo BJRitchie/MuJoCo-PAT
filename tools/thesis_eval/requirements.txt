@@ -1,0 +1,10 @@
+# Host-side plotting for tools/thesis_eval (figures.py, tables.py). Install into a
+# venv OUTSIDE the repo; the dev image's matplotlib is broken (numpy ABI clash),
+# and the system one on the host is too:
+#
+#   python3 -m venv ~/.venvs/thesis_eval
+#   ~/.venvs/thesis_eval/bin/pip install -r tools/thesis_eval/requirements.txt
+#   ~/.venvs/thesis_eval/bin/python tools/thesis_eval/figures.py --all
+numpy>=1.26,<2.3
+pandas>=2.1,<2.3
+matplotlib>=3.8,<3.10

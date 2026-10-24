@@ -15,6 +15,7 @@ find_package(tf2_ros       REQUIRED)
 find_package(pat_msgs      REQUIRED)
 find_package(glfw3         REQUIRED)
 find_package(pat_platform_description REQUIRED)   # shared piper_planar_arm.xacro
+find_package(pat_sensors   REQUIRED)              # the seeded sensor model
 
 # The precompiled MuJoCo release tarball does not ship a mujocoConfig.cmake,
 # so provide our own Find module (searches for the library/headers directly).
@@ -24,12 +25,11 @@ find_package(mujoco        REQUIRED)
 add_library(mujoco_sim STATIC
     src/mujoco_sim.cpp
     src/mujoco_vis.cpp
-    src/sensor_model.cpp
     src/disturbance_model.cpp)
 target_include_directories(mujoco_sim PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>)
-target_link_libraries(mujoco_sim PUBLIC mujoco::mujoco glfw)
+target_link_libraries(mujoco_sim PUBLIC mujoco::mujoco glfw pat_sensors::pat_sensors)
 
 add_executable(simulation_node src/simulation_node.cpp)
 target_include_directories(simulation_node PRIVATE include)
@@ -68,8 +68,8 @@ install(TARGETS nav_bench RUNTIME DESTINATION lib/${PROJECT_NAME})
 
 if(BUILD_TESTING)
     find_package(ament_cmake_gtest REQUIRED)
+    # The sensor model's own tests moved with it, to pat_sensors.
     ament_add_gtest(test_pat_simulation
-        test/test_sensor_model.cpp
         test/test_scene_sensors.cpp
         test/test_disturbance_model.cpp)
     # test_scene_sensors loads the real generated scene, so it has to wait for

@@ -1,0 +1,12 @@
+\begin{tabular}{lrrrrrrr}
+\toprule
+ & \multicolumn{5}{c}{control tick [\textmu s]} & & \\
+\cmidrule(lr){2-6}
+ & mean & p50 & p95 & p99 & max & headroom & QP iter \\
+\midrule
+SQP-NMPC & 841 & 841 & 897 & 945 & 1565 & 10.6 & \textbf{6.97} \\
+LMPC & 623 & 614 & 694 & 813 & 1332 & 12.3 & 7.08 \\
+OMPC & \textbf{4.86} & \textbf{4.47} & \textbf{7.09} & \textbf{9.85} & 53.8 & \textbf{1015} & -- \\
+SMC & 5.37 & 5 & 7.67 & 10.6 & \textbf{36.2} & 942 & -- \\
+\bottomrule
+\end{tabular}

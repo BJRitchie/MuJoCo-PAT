@@ -70,7 +70,8 @@ Loaded loadConfig(const std::vector<std::string>& yaml_paths, const std::string&
                   const std::string& default_model,
                   const std::set<std::string>& not_ours,
                   const std::string& tool,
-                  const std::string& law) {
+                  const std::string& law,
+                  const std::vector<std::string>& overrides) {
     if (law != "nmpc" && law != "ompc" && law != "smc") {
         throw std::runtime_error("unknown control law '" + law +
                                  "' (wanted nmpc, ompc or smc)");
@@ -102,6 +103,19 @@ Loaded loadConfig(const std::vector<std::string>& yaml_paths, const std::string&
     if (!have_node) {
         throw std::runtime_error("no '" + node_name + ": ros__parameters:' block in " +
                                  files);
+    }
+
+    // Command-line overrides win over every file, as a launch-time parameter
+    // does. The value is parsed as YAML, so `false`, `30` and `[1, 2, 3]` take
+    // the types the loaders expect. A key nothing maps is caught by the same
+    // unmapped-key guard as one in a file, so a misspelt override is an error,
+    // not a silent no-op.
+    for (const auto& ov : overrides) {
+        const auto eq = ov.find('=');
+        if (eq == std::string::npos || eq == 0) {
+            throw std::runtime_error("override '" + ov + "': wanted key=value");
+        }
+        f[ov.substr(0, eq)] = YAML::Load(ov.substr(eq + 1));
     }
 
     // The library's loaders, the same ones the node runs.

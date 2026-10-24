@@ -1,0 +1,27 @@
+\begin{tabular}{llrrrr}
+\toprule
+controller & knob & range tested & RMSE, best & RMSE, worst & shipped \\
+ & & ($\times$ shipped) & [mm] & [mm] & [mm] \\
+\midrule
+SQP-NMPC & \texttt{weights.Q_pos} & 0.1--10 & 0.512 & 8.75 & 2.31 \\
+SQP-NMPC & \texttt{weights.R} & 0.1--10 & 0.443 & 9.39 & 2.31 \\
+SQP-NMPC & \texttt{nmpc.N} & 0.33--2 & 0.979 & 3.12 & 2.31 \\
+SQP-NMPC & \texttt{nmpc.Ts} & 0.61--3 & 2.31 & 7.09 & 2.31 \\
+SQP-NMPC & \texttt{qp.max_iter} & 0.17--1.7 & 2.31 & 2.31 & 2.31 \\
+SQP-NMPC & \texttt{nmpc.sqp_iters} & 1--3 & 2.31 & 2.31 & 2.31 \\
+\addlinespace
+LMPC & \texttt{weights.Q_pos} & 0.1--10 & 0.207 & 0.566 & 0.311 \\
+LMPC & \texttt{weights.R} & 0.1--10 & 0.228 & 0.552 & 0.311 \\
+LMPC & \texttt{nmpc.N} & 0.33--2 & 0.308 & 0.423 & 0.311 \\
+LMPC & \texttt{nmpc.Ts} & 0.61--3 & 0.311 & 1.16 & 0.311 \\
+LMPC & \texttt{qp.max_iter} & 0.17--1.7 & 0.311 & 0.311 & 0.311 \\
+\addlinespace
+OMPC & \texttt{ompc.Ts} & 0.25--4 & 0.238 & 0.853 & 0.416 \\
+OMPC & \texttt{ompc.Q} & 0.1--10 & 0.41 & 0.495 & 0.416 \\
+\addlinespace
+SMC & \texttt{smc.epsilon} & 0.2--10 & 0.431 & 1.4 & 0.838 \\
+SMC & \texttt{smc.lam} & 0.33--2.7 & 0.361 & 1.9 & 0.838 \\
+SMC & \texttt{smc.alpha} & 0.2--4 & 0.736 & 0.838 & 0.838 \\
+SMC & \texttt{smc.tau_bound} & 0.1--16 & 0.716 & 0.838 & 0.838 \\
+\bottomrule
+\end{tabular}
