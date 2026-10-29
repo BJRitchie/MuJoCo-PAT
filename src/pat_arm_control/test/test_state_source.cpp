@@ -14,6 +14,7 @@
 #include <vector>
 
 #include <Eigen/Dense>
+#include <yaml-cpp/yaml.h>
 
 #include "state_source.h"
 
@@ -195,6 +196,31 @@ TEST(StateSource, ANoiseFigureIsSetByNameAndAnUnknownOneIsRefused) {
     p.set("joint_vel", 0.05);
     EXPECT_DOUBLE_EQ(p.joint_vel, 0.05);
     EXPECT_THROW(p.set("joint_velocity", 0.05), std::runtime_error);
+}
+
+// The live simulator's arm encoders must be the ones the bench hands its
+// controllers, or a live run and a bench run are not given the same measurements.
+TEST(StateSource, TheSimulatorsEncoderProfileIsTheBenchsNoiseProfile) {
+    const YAML::Node root = YAML::LoadFile(PAT_SIM_ENCODER_PROFILE);
+    const YAML::Node sensors = root["pat_simulation"]["ros__parameters"]["sensors"];
+    const NoiseProfile bench;
+    int seen = 0;
+    for (const char* kind : {"joint_pos", "joint_vel"}) {
+        ASSERT_TRUE(sensors[kind]) << kind;
+        for (const auto& joint : sensors[kind]) {
+            const YAML::Node c = joint.second;
+            const double want = std::string(kind) == "joint_pos" ? bench.joint_pos
+                                                                 : bench.joint_vel;
+            EXPECT_DOUBLE_EQ(c["noise_std"].as<double>(), want) << kind << " " << joint.first;
+            // White noise only: nothing the bench does not model.
+            for (const char* other : {"bias", "bias_walk_std", "scale_error", "quantisation",
+                                      "rate_hz", "dropout_prob", "delay_s"}) {
+                EXPECT_DOUBLE_EQ(c[other].as<double>(), 0.0) << kind << " " << other;
+            }
+            ++seen;
+        }
+    }
+    EXPECT_EQ(seen, 12);   // two per arm joint, six joints
 }
 
 TEST(StateSource, ANegativeScaleOrDelayIsRefused) {

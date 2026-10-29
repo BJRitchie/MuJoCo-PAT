@@ -1,0 +1,105 @@
+/**:
+  ros__parameters:
+    safe_mode:
+      tier1_max_replay_ticks: 5
+    nmpc:
+      Ts: 0.033
+      N: 24
+      full_nonlinear: true
+      sqp_iters: 1
+      Hg_damping: 0.0001
+      rollout_v_clamp_mult: 2.0
+      du_max_frac: 1.0
+      terminal_velocity_constraint: true
+      terminal_cost_multiplier: 560.0
+      reference_preview: true
+    weights:
+      Q_pos:
+      - 4.0
+      - 4.0
+      - 0.0875
+      Q_vel:
+      - 160.0
+      - 160.0
+      - 0.0229687
+      R:
+      - 0.035
+      - 0.035
+      - 0.035
+    qp:
+      max_iter: 60
+      tol: 1.0e-05
+      reg_prim: 1.0e-06
+      warm_start: 1
+      joint_slack_linear: 1000.0
+      joint_slack_quadratic: 10000.0
+      torque_slack_linear: 100.0
+      torque_slack_quadratic: 1000.0
+      soft_joint_limits: true
+      soft_torque_limits: false
+      relax_box_to_contain_x0: false
+      relax_box_margin: 0.001
+    rt_priority: 80
+    lock_memory: true
+pat_arm_nmpc_left:
+  ros__parameters:
+    arm_side: left
+    ee_site_name: ee_site_L
+    joint_names:
+    - joint2_L
+    - joint3_L
+    - joint5_L
+    owned_joints:
+    - joint2_L
+    - joint3_L
+    - joint5_L
+    limits:
+      q_min:
+      - 0.05
+      - -2.917
+      - -1.17
+      q_max:
+      - 3.09
+      - -0.05
+      - 1.17
+      qd_max:
+      - 2.0
+      - 2.0
+      - 1.5
+    rt_cpus:
+    - 4
+    - 5
+    rt_cpus_observer:
+    - 8
+    - 9
+pat_arm_nmpc_right:
+  ros__parameters:
+    arm_side: right
+    ee_site_name: ee_site_R
+    joint_names:
+    - joint2_R
+    - joint3_R
+    - joint5_R
+    owned_joints:
+    - joint2_R
+    - joint3_R
+    - joint5_R
+    limits:
+      q_min:
+      - 0.05
+      - -2.917
+      - -1.17
+      q_max:
+      - 3.09
+      - -0.05
+      - 1.17
+      qd_max:
+      - 2.0
+      - 2.0
+      - 1.5
+    rt_cpus:
+    - 6
+    - 7
+    rt_cpus_observer:
+    - 10
+    - 11

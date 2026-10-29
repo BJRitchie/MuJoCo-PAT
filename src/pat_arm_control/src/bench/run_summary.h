@@ -45,6 +45,13 @@ struct RunSeries {
     //! x, y [m], yaw [rad], vx, vy [m/s], yaw rate [rad/s], one entry per tick.
     std::vector<double> est_x, est_y, est_yaw, est_vx, est_vy, est_wz;
 
+    //! Planar momentum of the whole chaser (mom_*) and of the bus alone (bus_*),
+    //! both about the chaser's centre of mass: px, py [kg*m/s], lz [kg*m^2/s].
+    //! Written when filled, one entry per tick.
+    std::vector<double> mom_px, mom_py, mom_lz, bus_px, bus_py, bus_lz;
+    //! [J] kinetic energy of the whole chaser, written when filled.
+    std::vector<double> ke;
+
     std::size_t size() const { return t.size(); }
     //! Size the per-joint tracks for `n_owned` joints.
     void setJoints(std::size_t n_owned) {

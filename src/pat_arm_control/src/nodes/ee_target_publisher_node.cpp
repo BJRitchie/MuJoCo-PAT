@@ -190,6 +190,11 @@ void EeTargetPublisher::onHome(std::size_t idx,
                                const geometry_msgs::msg::PoseStamped& m) {
     Arm& arm = arms_[idx];
     if (arm.have_home) return;   // freeze the reference on the first sample
+    // On simulated time the clock reads 0 until the first /clock message arrives.
+    // A shape started then has its time zero at 0 and is far into its lap by the
+    // time the clock catches up, so the target jumps away from the arm. Wait for
+    // the next pose instead; on a wall clock this never triggers.
+    if (get_clock()->get_clock_type() == RCL_ROS_TIME && now().nanoseconds() == 0) return;
     arm.home_x  = m.pose.position.x;
     arm.home_y  = m.pose.position.y;
     arm.home_z  = m.pose.position.z;

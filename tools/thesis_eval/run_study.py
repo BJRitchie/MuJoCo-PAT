@@ -71,6 +71,11 @@ def find_bench() -> str:
              "(inside the dev container) after building pat_arm_control")
 
 
+#: Installed configs only the live stack reads, never the bench: changing one
+#: changes no bench result, so it must not invalidate the cache.
+LIVE_ONLY_CONFIGS = {"sensors_flight_encoders.yaml"}
+
+
 def config_files() -> List[str]:
     """Every installed file whose contents change what a run measures."""
     out: List[str] = []
@@ -78,7 +83,8 @@ def config_files() -> List[str]:
         for pkg, pattern in (("pat_arm_control", "config/*.yaml"),
                              ("pat_simulation", "config/*.yaml"),
                              ("pat_gnc", "config/nav*.yaml")):
-            out += glob.glob(os.path.join(prefix, "share", pkg, pattern))
+            out += [p for p in glob.glob(os.path.join(prefix, "share", pkg, pattern))
+                    if os.path.basename(p) not in LIVE_ONLY_CONFIGS]
         out += glob.glob(os.path.join(prefix, "share", "pat_simulation", "models",
                                       "environment", "air_bearing_table.xml"))
         out += glob.glob(os.path.join(prefix, "share", "pat_arm_control", "models",

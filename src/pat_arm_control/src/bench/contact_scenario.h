@@ -185,6 +185,27 @@ public:
     //! caller can compute the drag it should be seeing.
     std::array<double, 3> baseDamping() const { return cfg_.base_damping; }
 
+    //! Planar momentum: linear (px, py) [kg*m/s] and angular about z through
+    //! the chaser's centre of mass (lz) [kg*m^2/s].
+    struct PlanarMomentum {
+        double px = 0.0, py = 0.0, lz = 0.0;
+    };
+
+    /*! The momentum of the whole chaser (bus and both arms) and of the bus
+     *  alone, at the current state; the arms carry the difference.
+     *
+     *  With no base damping and nothing touching, the chaser is a closed system
+     *  and `system` stays at its start value; `bus` is the momentum the arms
+     *  have pushed into the bus, the scale that conservation is judged against.
+     *  Both are taken about the chaser's centre of mass, so they add. Reads the
+     *  kinematics as they stand: call after refreshDerived() or a reset. */
+    void chaserMomentum(PlanarMomentum& system, PlanarMomentum& bus) const;
+
+    //! Kinetic energy of the whole chaser (bus and both arms), 0.5 v'Mv over
+    //! its DOFs [J]. Reads the mass matrix as it stands: call after
+    //! refreshDerived() or a reset.
+    double chaserKineticEnergy() const;
+
     //! Total mass of the arm links after any arm_mass_scale, so a report can
     //! state how much inertia the controller's model is actually missing.
     double armMass() const;
@@ -207,6 +228,9 @@ private:
     int cx_ = 0, cy_ = 0, cw_ = 0;          //!< chaser qpos addresses
     int cxd_ = 0, cyd_ = 0, cwd_ = 0;       //!< chaser dof addresses
     int tx_ = 0, ty_ = 0;                   //!< target qpos addresses
+    int chaser_body_ = 0;                   //!< the bus body, root of the chaser subtree
+    mutable std::vector<double> jacp_, jacr_;   //!< 3 x nv scratch for chaserMomentum
+    mutable std::vector<double> mv_;            //!< nv scratch for chaserKineticEnergy
 };
 
 /*! One recorded control tick. */

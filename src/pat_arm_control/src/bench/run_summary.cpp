@@ -220,6 +220,10 @@ void writeSeriesCsv(const std::string& path, const RunSeries& s) {
     os << ",base_x,base_y,base_yaw,base_wz,tick_us,mode";
     const bool have_est = !s.est_x.empty();
     if (have_est) os << ",est_x,est_y,est_yaw,est_vx,est_vy,est_wz";
+    const bool have_mom = s.mom_px.size() == s.size() && s.size() > 0;
+    if (have_mom) os << ",mom_px,mom_py,mom_lz,bus_px,bus_py,bus_lz";
+    const bool have_ke = s.ke.size() == s.size() && s.size() > 0;
+    if (have_ke) os << ",ke_j";
     os << '\n';
     char buf[64];
     const auto put = [&](double x) {
@@ -254,6 +258,17 @@ void writeSeriesCsv(const std::string& path, const RunSeries& s) {
                 os << ',';
                 put(x);
             }
+        }
+        if (have_mom) {
+            for (const double x : {s.mom_px[k], s.mom_py[k], s.mom_lz[k], s.bus_px[k],
+                                   s.bus_py[k], s.bus_lz[k]}) {
+                os << ',';
+                put(x);
+            }
+        }
+        if (have_ke) {
+            os << ',';
+            put(s.ke[k]);
         }
         os << '\n';
     }

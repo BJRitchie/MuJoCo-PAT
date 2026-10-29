@@ -1,0 +1,742 @@
+[INFO] [launch]: All log files can be found below /home/dev/.ros/log/2026-10-29-05-58-52-720956-ben-XPS-15-9530-32645
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [simulation_node-1]: process started with pid [32647]
+[INFO] [nav_node-2]: process started with pid [32649]
+[INFO] [smc_node-3]: process started with pid [32651]
+[INFO] [smc_node-4]: process started with pid [32653]
+[smc_node-4] [0m[INFO] [1793253532.772751367] [pat_arm_smc_right]: pat_arm_smc[right]: tracing every tick to /ws/data/thesis_eval/live/pilot/trials/3b23ed34dc37b8d4.partial/trace_right.csv[0m
+[smc_node-4] [0m[INFO] [1793253532.772890669] [pat_arm_smc_right]: pat_arm_smc[right]: model N=6, owned=3, ee_site=ee_site_R, eps=5.000 ctrl=100 Hz[0m
+[nav_node-2] [0m[INFO] [1793253532.773436773] [pat_nav]: nav_node: worst replay of 256 steps measured at 188 us; worst wake (2 replays) 376 us against a budget of 1000 us (half of 1/nav_hz)[0m
+[nav_node-2] [0m[INFO] [1793253532.775665584] [pat_nav]: nav_node: navigator imu_ekf, thread 500 Hz, publishing /chaser/nav/odom at 100 Hz[0m
+[smc_node-3] [0m[INFO] [1793253532.779520333] [pat_arm_smc_left]: pat_arm_smc[left]: tracing every tick to /ws/data/thesis_eval/live/pilot/trials/3b23ed34dc37b8d4.partial/trace_left.csv[0m
+[smc_node-3] [0m[INFO] [1793253532.779613462] [pat_arm_smc_left]: pat_arm_smc[left]: model N=6, owned=3, ee_site=ee_site_L, eps=5.000 ctrl=100 Hz[0m
+[simulation_node-1] [0m[INFO] [1793253533.017873729] [pat_simulation]: MuJoCo loaded. dt=0.0020 s[0m
+[simulation_node-1] [0m[INFO] [1793253533.018075260] [pat_simulation]: Applied initial_arm_qpos override (6 joints)[0m
+[simulation_node-1] [33m[WARN] [1793253533.019378941] [pat_simulation]: sensors: IMPERFECT, seed 20251014 -- measurements are NOT ground truth, and the committed timing and constraint figures do not apply to this run:
+[simulation_node-1]   imu_accel_x: sigma=0.025 bias=0.015 walk=0.00012/sqrt(s)
+[simulation_node-1]   imu_accel_y: sigma=0.025 bias=-0.01 walk=0.00012/sqrt(s)
+[simulation_node-1]   imu_gyro_z: sigma=0.001 bias=5e-05 walk=6e-06/sqrt(s)
+[simulation_node-1]   nav_x: sigma=0.004 bias=0.001 delay=15 steps rate=5Hz
+[simulation_node-1]   nav_y: sigma=0.0002 delay=15 steps rate=5Hz
+[simulation_node-1]   star_yaw: sigma=0.0001 delay=10 steps rate=5Hz
+[simulation_node-1]   joint_pos.joint2_L: sigma=0.0005
+[simulation_node-1]   joint_pos.joint3_L: sigma=0.0005
+[simulation_node-1]   joint_pos.joint5_L: sigma=0.0005
+[simulation_node-1]   joint_pos.joint2_R: sigma=0.0005
+[simulation_node-1]   joint_pos.joint3_R: sigma=0.0005
+[simulation_node-1]   joint_pos.joint5_R: sigma=0.0005
+[simulation_node-1]   joint_vel.joint2_L: sigma=0.01
+[simulation_node-1]   joint_vel.joint3_L: sigma=0.01
+[simulation_node-1]   joint_vel.joint5_L: sigma=0.01
+[simulation_node-1]   joint_vel.joint2_R: sigma=0.01
+[simulation_node-1]   joint_vel.joint3_R: sigma=0.01
+[simulation_node-1]   joint_vel.joint5_R: sigma=0.01[0m
+[simulation_node-1] [0m[INFO] [1793253533.021579274] [pat_simulation]: publishing /sim_only/ground_truth (constraint forces + applied wrench) -- simulation diagnostics only[0m
+[smc_node-4] [0m[INFO] [1793253533.772980219] [pat_arm_smc_right]: pat_arm_smc[right]: control thread at SCHED_FIFO priority 80[0m
+[smc_node-4] [0m[INFO] [1793253533.773009984] [pat_arm_smc_right]: pat_arm_smc[right]: control thread pinned to CPUs 6 7 [0m
+[smc_node-4] [0m[INFO] [1793253533.773018716] [pat_arm_smc_right]: pat_arm_smc[right]: memory locked (mlockall)[0m
+[smc_node-4] [0m[INFO] [1793253533.773022167] [pat_arm_smc_right]: pat_arm_smc[right]: no ee_setpoint yet — holding start pose (-0.119, 0.418)[0m
+[smc_node-4] [33m[WARN] [1793253533.773028820] [pat_arm_smc_right]: pat_arm_smc[right]: waiting for joint_states and/or odom (26 ticks)[0m
+[smc_node-4] [0m[INFO] [1793253533.773234404] [pat_arm_smc_right]: pat_arm_smc[right] 73 ticks @ 10000 us | period jitter mean 42 max 155 us | callback wall mean 53 max 117 / cpu mean 51 max 110 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-4] profile over 73 ticks (us)  TICK mean=9.3 max=34.9 over_period=0/73
+[smc_node-4]   hist(tick) <=50.0:73 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-4]   phases dynamics(n=73 mean=4.4 max=28.3) jdotqdot(n=73 mean=0.7 max=5.0) pinv(n=73 mean=1.4 max=2.4) lambda(n=73 mean=0.2 max=0.6) law(n=73 mean=1.5 max=3.0) finalize(n=73 mean=0.3 max=0.7) 
+[smc_node-4]   unattributed=0.9 us/tick  trace 73/6000[0m
+[smc_node-4] [0m[INFO] [1793253533.773248671] [pat_arm_smc_right]: pat_arm_smc[right] publish us  torque(n=73 mean=15.6 max=30.8)   ee_pose(n=73 mean=4.8 max=18.5) 
+[smc_node-4]   hist(publish_us) <=50.0:146 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793253533.775820867] [pat_nav]: nav_node: nav thread at SCHED_FIFO 80[0m
+[nav_node-2] [0m[INFO] [1793253533.775852554] [pat_nav]: nav[imu_ekf] 499 wakes, work mean 6 max 90 us, overruns 0 | in imu 375 pose 75, ring drops 0/0 | yaw 3/0 rej, pos 2/0 rej, too_old 0, gaps 0, replays 5 (max 75 steps) | NIS yaw 0.00 pos 0.01[0m
+[smc_node-3] [0m[INFO] [1793253533.779709030] [pat_arm_smc_left]: pat_arm_smc[left]: control thread at SCHED_FIFO priority 80[0m
+[smc_node-3] [0m[INFO] [1793253533.779738901] [pat_arm_smc_left]: pat_arm_smc[left]: control thread pinned to CPUs 4 5 [0m
+[smc_node-3] [0m[INFO] [1793253533.779749787] [pat_arm_smc_left]: pat_arm_smc[left]: memory locked (mlockall)[0m
+[smc_node-3] [0m[INFO] [1793253533.779758370] [pat_arm_smc_left]: pat_arm_smc[left]: no ee_setpoint yet — holding start pose (-0.119, -0.419)[0m
+[smc_node-3] [33m[WARN] [1793253533.779770923] [pat_arm_smc_left]: pat_arm_smc[left]: waiting for joint_states and/or odom (25 ticks)[0m
+[smc_node-3] [0m[INFO] [1793253533.780042029] [pat_arm_smc_left]: pat_arm_smc[left] 74 ticks @ 10000 us | period jitter mean 51 max 160 us | callback wall mean 49 max 129 / cpu mean 48 max 128 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-3] profile over 74 ticks (us)  TICK mean=11.4 max=46.0 over_period=0/74
+[smc_node-3]   hist(tick) <=50.0:74 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-3]   phases dynamics(n=74 mean=5.1 max=36.1) jdotqdot(n=74 mean=0.8 max=6.0) pinv(n=74 mean=1.6 max=7.9) lambda(n=74 mean=0.2 max=1.6) law(n=74 mean=2.0 max=13.2) finalize(n=74 mean=0.4 max=2.7) 
+[smc_node-3]   unattributed=1.2 us/tick  trace 74/6000[0m
+[smc_node-3] [0m[INFO] [1793253533.780076537] [pat_arm_smc_left]: pat_arm_smc[left] publish us  torque(n=74 mean=17.5 max=37.0)   ee_pose(n=74 mean=6.8 max=20.7) 
+[smc_node-3]   hist(publish_us) <=50.0:148 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[smc_node-4] [0m[INFO] [1793253534.773408198] [pat_arm_smc_right]: pat_arm_smc[right] 99 ticks @ 10000 us | period jitter mean 42 max 142 us | callback wall mean 51 max 101 / cpu mean 49 max 94 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-4] profile over 99 ticks (us)  TICK mean=9.0 max=17.2 over_period=0/99
+[smc_node-4]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-4]   phases dynamics(n=99 mean=4.0 max=8.3) jdotqdot(n=99 mean=0.7 max=1.3) pinv(n=99 mean=1.4 max=4.2) lambda(n=99 mean=0.2 max=0.3) law(n=99 mean=1.5 max=2.9) finalize(n=99 mean=0.3 max=0.8) 
+[smc_node-4]   unattributed=0.9 us/tick  trace 100/6000[0m
+[smc_node-4] [0m[INFO] [1793253534.773475568] [pat_arm_smc_right]: pat_arm_smc[right] publish us  torque(n=100 mean=15.9 max=30.2)   ee_pose(n=100 mean=6.4 max=29.8) 
+[smc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793253534.775874090] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 8 max 96 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 8/0 rej, pos 7/0 rej, too_old 0, gaps 0, replays 15 (max 75 steps) | NIS yaw 0.18 pos 0.06[0m
+[smc_node-3] [0m[INFO] [1793253534.780095413] [pat_arm_smc_left]: pat_arm_smc[left] 99 ticks @ 10000 us | period jitter mean 41 max 170 us | callback wall mean 50 max 112 / cpu mean 48 max 111 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-3] profile over 99 ticks (us)  TICK mean=10.7 max=20.0 over_period=0/99
+[smc_node-3]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-3]   phases dynamics(n=99 mean=4.8 max=9.8) jdotqdot(n=99 mean=0.8 max=1.4) pinv(n=99 mean=1.6 max=5.5) lambda(n=99 mean=0.2 max=0.5) law(n=99 mean=1.9 max=4.9) finalize(n=99 mean=0.4 max=0.9) 
+[smc_node-3]   unattributed=1.1 us/tick  trace 100/6000[0m
+[smc_node-3] [0m[INFO] [1793253534.780142085] [pat_arm_smc_left]: pat_arm_smc[left] publish us  torque(n=100 mean=17.7 max=43.1)   ee_pose(n=100 mean=6.6 max=14.5) 
+[smc_node-3]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[smc_node-4] [0m[INFO] [1793253535.773416957] [pat_arm_smc_right]: pat_arm_smc[right] 99 ticks @ 10000 us | period jitter mean 33 max 150 us | callback wall mean 51 max 110 / cpu mean 49 max 109 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-4] profile over 99 ticks (us)  TICK mean=8.9 max=16.9 over_period=0/99
+[smc_node-4]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-4]   phases dynamics(n=99 mean=4.0 max=9.7) jdotqdot(n=99 mean=0.7 max=1.6) pinv(n=99 mean=1.4 max=2.5) lambda(n=99 mean=0.2 max=0.4) law(n=99 mean=1.5 max=6.0) finalize(n=99 mean=0.3 max=0.8) 
+[smc_node-4]   unattributed=0.9 us/tick  trace 100/6000[0m
+[smc_node-4] [0m[INFO] [1793253535.773472244] [pat_arm_smc_right]: pat_arm_smc[right] publish us  torque(n=100 mean=15.5 max=29.9)   ee_pose(n=100 mean=6.6 max=31.8) 
+[smc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793253535.775910911] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 8 max 96 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 13/0 rej, pos 12/0 rej, too_old 0, gaps 0, replays 25 (max 75 steps) | NIS yaw 0.07 pos 0.01[0m
+[smc_node-3] [0m[INFO] [1793253535.780122007] [pat_arm_smc_left]: pat_arm_smc[left] 99 ticks @ 10000 us | period jitter mean 30 max 169 us | callback wall mean 47 max 121 / cpu mean 46 max 120 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-3] profile over 99 ticks (us)  TICK mean=10.2 max=25.3 over_period=0/99
+[smc_node-3]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-3]   phases dynamics(n=99 mean=4.6 max=13.5) jdotqdot(n=99 mean=0.7 max=1.6) pinv(n=99 mean=1.5 max=3.0) lambda(n=99 mean=0.2 max=0.4) law(n=99 mean=1.8 max=7.8) finalize(n=99 mean=0.3 max=0.9) 
+[smc_node-3]   unattributed=1.0 us/tick  trace 100/6000[0m
+[smc_node-3] [0m[INFO] [1793253535.780173736] [pat_arm_smc_left]: pat_arm_smc[left] publish us  torque(n=100 mean=16.9 max=60.1)   ee_pose(n=100 mean=6.3 max=32.9) 
+[smc_node-3]   hist(publish_us) <=50.0:199 <=100.0:1 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[smc_node-4] [0m[INFO] [1793253536.773323801] [pat_arm_smc_right]: pat_arm_smc[right] 99 ticks @ 10000 us | period jitter mean 37 max 138 us | callback wall mean 52 max 121 / cpu mean 50 max 121 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-4] profile over 99 ticks (us)  TICK mean=10.5 max=35.6 over_period=0/99
+[smc_node-4]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-4]   phases dynamics(n=99 mean=4.6 max=16.0) jdotqdot(n=99 mean=0.8 max=2.8) pinv(n=99 mean=1.6 max=5.8) lambda(n=99 mean=0.2 max=0.9) law(n=99 mean=1.8 max=5.9) finalize(n=99 mean=0.4 max=1.1) 
+[smc_node-4]   unattributed=1.1 us/tick  trace 100/6000[0m
+[smc_node-4] [0m[INFO] [1793253536.773387062] [pat_arm_smc_right]: pat_arm_smc[right] publish us  torque(n=100 mean=16.9 max=39.0)   ee_pose(n=100 mean=6.6 max=26.4) 
+[smc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793253536.775946988] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 8 max 96 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 18/0 rej, pos 17/0 rej, too_old 0, gaps 0, replays 35 (max 75 steps) | NIS yaw 0.21 pos 1.81[0m
+[smc_node-3] [0m[INFO] [1793253536.780147696] [pat_arm_smc_left]: pat_arm_smc[left] 99 ticks @ 10000 us | period jitter mean 38 max 174 us | callback wall mean 49 max 94 / cpu mean 48 max 93 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-3] profile over 99 ticks (us)  TICK mean=10.9 max=25.9 over_period=0/99
+[smc_node-3]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-3]   phases dynamics(n=99 mean=4.9 max=10.8) jdotqdot(n=99 mean=0.8 max=2.0) pinv(n=99 mean=1.6 max=4.4) lambda(n=99 mean=0.2 max=0.8) law(n=99 mean=1.9 max=5.5) finalize(n=99 mean=0.4 max=0.9) 
+[smc_node-3]   unattributed=1.2 us/tick  trace 100/6000[0m
+[smc_node-3] [0m[INFO] [1793253536.780211345] [pat_arm_smc_left]: pat_arm_smc[left] publish us  torque(n=100 mean=17.8 max=37.9)   ee_pose(n=100 mean=7.1 max=27.7) 
+[smc_node-3]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[smc_node-4] [0m[INFO] [1793253537.773472636] [pat_arm_smc_right]: pat_arm_smc[right] 99 ticks @ 10000 us | period jitter mean 44 max 153 us | callback wall mean 48 max 96 / cpu mean 46 max 92 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-4] profile over 99 ticks (us)  TICK mean=9.8 max=22.3 over_period=0/99
+[smc_node-4]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-4]   phases dynamics(n=99 mean=4.4 max=16.3) jdotqdot(n=99 mean=0.7 max=1.9) pinv(n=99 mean=1.5 max=2.9) lambda(n=99 mean=0.2 max=0.7) law(n=99 mean=1.6 max=4.4) finalize(n=99 mean=0.3 max=0.8) 
+[smc_node-4]   unattributed=1.0 us/tick  trace 100/6000[0m
+[smc_node-4] [0m[INFO] [1793253537.773539972] [pat_arm_smc_right]: pat_arm_smc[right] publish us  torque(n=100 mean=15.4 max=27.0)   ee_pose(n=100 mean=5.5 max=23.8) 
+[smc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793253537.775942687] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 8 max 96 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 23/0 rej, pos 22/0 rej, too_old 0, gaps 0, replays 45 (max 75 steps) | NIS yaw 0.33 pos 2.46[0m
+[smc_node-3] [0m[INFO] [1793253537.780197891] [pat_arm_smc_left]: pat_arm_smc[left] 99 ticks @ 10000 us | period jitter mean 48 max 149 us | callback wall mean 48 max 125 / cpu mean 47 max 118 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-3] profile over 99 ticks (us)  TICK mean=10.7 max=46.5 over_period=0/99
+[smc_node-3]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-3]   phases dynamics(n=99 mean=4.6 max=11.3) jdotqdot(n=99 mean=0.7 max=1.9) pinv(n=99 mean=1.7 max=17.1) lambda(n=99 mean=0.2 max=2.6) law(n=99 mean=1.9 max=15.1) finalize(n=99 mean=0.4 max=1.9) 
+[smc_node-3]   unattributed=1.1 us/tick  trace 100/6000[0m
+[smc_node-3] [0m[INFO] [1793253537.780251961] [pat_arm_smc_left]: pat_arm_smc[left] publish us  torque(n=100 mean=15.7 max=33.2)   ee_pose(n=100 mean=6.8 max=22.0) 
+[smc_node-3]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[smc_node-4] [0m[INFO] [1793253538.773422822] [pat_arm_smc_right]: pat_arm_smc[right] 99 ticks @ 10000 us | period jitter mean 34 max 145 us | callback wall mean 45 max 73 / cpu mean 43 max 73 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-4] profile over 99 ticks (us)  TICK mean=9.5 max=19.1 over_period=0/99
+[smc_node-4]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-4]   phases dynamics(n=99 mean=4.2 max=8.6) jdotqdot(n=99 mean=0.7 max=1.5) pinv(n=99 mean=1.5 max=2.5) lambda(n=99 mean=0.2 max=0.4) law(n=99 mean=1.6 max=3.4) finalize(n=99 mean=0.3 max=0.6) 
+[smc_node-4]   unattributed=1.0 us/tick  trace 100/6000[0m
+[smc_node-4] [0m[INFO] [1793253538.773473172] [pat_arm_smc_right]: pat_arm_smc[right] publish us  torque(n=100 mean=15.9 max=25.7)   ee_pose(n=100 mean=4.9 max=10.1) 
+[smc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793253538.775963863] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 8 max 96 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 28/0 rej, pos 27/0 rej, too_old 0, gaps 0, replays 55 (max 75 steps) | NIS yaw 1.16 pos 0.03[0m
+[smc_node-3] [0m[INFO] [1793253538.780229227] [pat_arm_smc_left]: pat_arm_smc[left] 99 ticks @ 10000 us | period jitter mean 44 max 167 us | callback wall mean 46 max 86 / cpu mean 45 max 85 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-3] profile over 99 ticks (us)  TICK mean=10.2 max=34.0 over_period=0/99
+[smc_node-3]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-3]   phases dynamics(n=99 mean=4.4 max=8.6) jdotqdot(n=99 mean=0.7 max=1.3) pinv(n=99 mean=1.5 max=4.7) lambda(n=99 mean=0.2 max=2.2) law(n=99 mean=2.0 max=19.5) finalize(n=99 mean=0.4 max=2.6) 
+[smc_node-3]   unattributed=1.0 us/tick  trace 100/6000[0m
+[smc_node-3] [0m[INFO] [1793253538.780276063] [pat_arm_smc_left]: pat_arm_smc[left] publish us  torque(n=100 mean=16.2 max=49.1)   ee_pose(n=100 mean=7.6 max=39.9) 
+[smc_node-3]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[smc_node-4] [0m[INFO] [1793253539.773564571] [pat_arm_smc_right]: pat_arm_smc[right] 99 ticks @ 10000 us | period jitter mean 11 max 115 us | callback wall mean 52 max 102 / cpu mean 51 max 99 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-4] profile over 99 ticks (us)  TICK mean=8.9 max=22.1 over_period=0/99
+[smc_node-4]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-4]   phases dynamics(n=99 mean=3.9 max=10.0) jdotqdot(n=99 mean=0.7 max=1.9) pinv(n=99 mean=1.4 max=7.1) lambda(n=99 mean=0.2 max=0.6) law(n=99 mean=1.5 max=4.0) finalize(n=99 mean=0.3 max=1.4) 
+[smc_node-4]   unattributed=0.9 us/tick  trace 100/6000[0m
+[smc_node-4] [0m[INFO] [1793253539.773623673] [pat_arm_smc_right]: pat_arm_smc[right] publish us  torque(n=100 mean=13.1 max=31.3)   ee_pose(n=100 mean=5.3 max=15.0) 
+[smc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793253539.775995051] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 8 max 118 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 33/0 rej, pos 32/0 rej, too_old 0, gaps 0, replays 65 (max 75 steps) | NIS yaw 0.11 pos 2.91[0m
+[smc_node-3] [0m[INFO] [1793253539.780255028] [pat_arm_smc_left]: pat_arm_smc[left] 99 ticks @ 10000 us | period jitter mean 51 max 187 us | callback wall mean 54 max 139 / cpu mean 53 max 138 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-3] profile over 99 ticks (us)  TICK mean=12.0 max=43.8 over_period=0/99
+[smc_node-3]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-3]   phases dynamics(n=99 mean=5.1 max=17.9) jdotqdot(n=99 mean=0.9 max=7.8) pinv(n=99 mean=2.0 max=16.7) lambda(n=99 mean=0.3 max=4.5) law(n=99 mean=2.0 max=8.5) finalize(n=99 mean=0.4 max=3.1) 
+[smc_node-3]   unattributed=1.3 us/tick  trace 100/6000[0m
+[smc_node-3] [0m[INFO] [1793253539.780303677] [pat_arm_smc_left]: pat_arm_smc[left] publish us  torque(n=100 mean=18.3 max=45.4)   ee_pose(n=100 mean=7.3 max=33.5) 
+[smc_node-3]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[smc_node-4] [0m[INFO] [1793253540.773597699] [pat_arm_smc_right]: pat_arm_smc[right] 99 ticks @ 10000 us | period jitter mean 35 max 156 us | callback wall mean 48 max 90 / cpu mean 46 max 88 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-4] profile over 99 ticks (us)  TICK mean=9.3 max=23.3 over_period=0/99
+[smc_node-4]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-4]   phases dynamics(n=99 mean=4.1 max=10.6) jdotqdot(n=99 mean=0.7 max=1.9) pinv(n=99 mean=1.4 max=3.3) lambda(n=99 mean=0.2 max=0.6) law(n=99 mean=1.6 max=5.3) finalize(n=99 mean=0.3 max=0.7) 
+[smc_node-4]   unattributed=0.9 us/tick  trace 100/6000[0m
+[smc_node-4] [0m[INFO] [1793253540.773653914] [pat_arm_smc_right]: pat_arm_smc[right] publish us  torque(n=100 mean=14.1 max=26.5)   ee_pose(n=100 mean=6.1 max=14.0) 
+[smc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793253540.776030515] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 8 max 118 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 38/0 rej, pos 37/0 rej, too_old 0, gaps 0, replays 75 (max 75 steps) | NIS yaw 0.93 pos 0.22[0m
+[smc_node-3] [0m[INFO] [1793253540.780204629] [pat_arm_smc_left]: pat_arm_smc[left] 99 ticks @ 10000 us | period jitter mean 37 max 170 us | callback wall mean 50 max 116 / cpu mean 49 max 116 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-3] profile over 99 ticks (us)  TICK mean=11.5 max=50.3 over_period=0/99
+[smc_node-3]   hist(tick) <=50.0:98 <=100.0:1 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-3]   phases dynamics(n=99 mean=5.3 max=31.1) jdotqdot(n=99 mean=0.8 max=8.1) pinv(n=99 mean=1.7 max=14.1) lambda(n=99 mean=0.2 max=2.6) law(n=99 mean=1.9 max=9.5) finalize(n=99 mean=0.4 max=1.0) 
+[smc_node-3]   unattributed=1.2 us/tick  trace 100/6000[0m
+[smc_node-3] [0m[INFO] [1793253540.780237901] [pat_arm_smc_left]: pat_arm_smc[left] publish us  torque(n=100 mean=16.9 max=50.4)   ee_pose(n=100 mean=7.7 max=20.9) 
+[smc_node-3]   hist(publish_us) <=50.0:199 <=100.0:1 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[smc_node-4] [0m[INFO] [1793253541.773636488] [pat_arm_smc_right]: pat_arm_smc[right] 99 ticks @ 10000 us | period jitter mean 39 max 165 us | callback wall mean 50 max 105 / cpu mean 48 max 99 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-4] profile over 99 ticks (us)  TICK mean=10.2 max=25.2 over_period=0/99
+[smc_node-4]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-4]   phases dynamics(n=99 mean=4.5 max=10.8) jdotqdot(n=99 mean=0.8 max=2.0) pinv(n=99 mean=1.6 max=3.1) lambda(n=99 mean=0.2 max=0.6) law(n=99 mean=1.8 max=7.6) finalize(n=99 mean=0.3 max=0.9) 
+[smc_node-4]   unattributed=1.0 us/tick  trace 100/6000[0m
+[smc_node-4] [0m[INFO] [1793253541.773714030] [pat_arm_smc_right]: pat_arm_smc[right] publish us  torque(n=100 mean=14.9 max=38.6)   ee_pose(n=100 mean=6.6 max=15.9) 
+[smc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793253541.776047968] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 8 max 118 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 43/0 rej, pos 42/0 rej, too_old 0, gaps 0, replays 85 (max 75 steps) | NIS yaw 0.00 pos 0.89[0m
+[smc_node-3] [0m[INFO] [1793253541.780332190] [pat_arm_smc_left]: pat_arm_smc[left] 99 ticks @ 10000 us | period jitter mean 36 max 170 us | callback wall mean 52 max 115 / cpu mean 51 max 109 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-3] profile over 99 ticks (us)  TICK mean=11.5 max=43.6 over_period=0/99
+[smc_node-3]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-3]   phases dynamics(n=99 mean=5.4 max=32.4) jdotqdot(n=99 mean=0.8 max=1.9) pinv(n=99 mean=1.7 max=6.6) lambda(n=99 mean=0.2 max=0.7) law(n=99 mean=1.9 max=4.2) finalize(n=99 mean=0.4 max=1.3) 
+[smc_node-3]   unattributed=1.2 us/tick  trace 100/6000[0m
+[smc_node-3] [0m[INFO] [1793253541.780395083] [pat_arm_smc_left]: pat_arm_smc[left] publish us  torque(n=100 mean=16.8 max=35.3)   ee_pose(n=100 mean=7.2 max=20.5) 
+[smc_node-3]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[smc_node-4] [0m[INFO] [1793253542.773668583] [pat_arm_smc_right]: pat_arm_smc[right] 99 ticks @ 10000 us | period jitter mean 28 max 159 us | callback wall mean 47 max 100 / cpu mean 46 max 99 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-4] profile over 99 ticks (us)  TICK mean=8.8 max=21.2 over_period=0/99
+[smc_node-4]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-4]   phases dynamics(n=99 mean=3.9 max=9.5) jdotqdot(n=99 mean=0.7 max=1.6) pinv(n=99 mean=1.3 max=3.1) lambda(n=99 mean=0.2 max=0.7) law(n=99 mean=1.5 max=4.0) finalize(n=99 mean=0.3 max=0.7) 
+[smc_node-4]   unattributed=0.9 us/tick  trace 100/6000[0m
+[smc_node-4] [0m[INFO] [1793253542.773738606] [pat_arm_smc_right]: pat_arm_smc[right] publish us  torque(n=100 mean=13.2 max=24.8)   ee_pose(n=100 mean=5.8 max=13.2) 
+[smc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793253542.776111000] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 8 max 118 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 48/0 rej, pos 47/0 rej, too_old 0, gaps 0, replays 95 (max 75 steps) | NIS yaw 0.89 pos 1.78[0m
+[smc_node-3] [0m[INFO] [1793253542.780259815] [pat_arm_smc_left]: pat_arm_smc[left] 99 ticks @ 10000 us | period jitter mean 33 max 179 us | callback wall mean 48 max 95 / cpu mean 47 max 95 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-3] profile over 99 ticks (us)  TICK mean=11.2 max=43.0 over_period=0/99
+[smc_node-3]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-3]   phases dynamics(n=99 mean=5.2 max=33.3) jdotqdot(n=99 mean=0.8 max=4.0) pinv(n=99 mean=1.6 max=2.9) lambda(n=99 mean=0.2 max=0.5) law(n=99 mean=1.9 max=4.5) finalize(n=99 mean=0.4 max=0.8) 
+[smc_node-3]   unattributed=1.1 us/tick  trace 100/6000[0m
+[smc_node-3] [0m[INFO] [1793253542.780289016] [pat_arm_smc_left]: pat_arm_smc[left] publish us  torque(n=100 mean=18.0 max=64.2)   ee_pose(n=100 mean=7.1 max=34.6) 
+[smc_node-3]   hist(publish_us) <=50.0:199 <=100.0:1 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[smc_node-4] [0m[INFO] [1793253543.773699773] [pat_arm_smc_right]: pat_arm_smc[right] 99 ticks @ 10000 us | period jitter mean 27 max 114 us | callback wall mean 46 max 79 / cpu mean 44 max 77 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-4] profile over 99 ticks (us)  TICK mean=9.0 max=15.4 over_period=0/99
+[smc_node-4]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-4]   phases dynamics(n=99 mean=4.0 max=7.9) jdotqdot(n=99 mean=0.7 max=2.4) pinv(n=99 mean=1.4 max=2.4) lambda(n=99 mean=0.2 max=0.4) law(n=99 mean=1.5 max=3.2) finalize(n=99 mean=0.3 max=3.7) 
+[smc_node-4]   unattributed=0.9 us/tick  trace 100/6000[0m
+[smc_node-4] [0m[INFO] [1793253543.773754691] [pat_arm_smc_right]: pat_arm_smc[right] publish us  torque(n=100 mean=13.3 max=22.7)   ee_pose(n=100 mean=6.5 max=19.2) 
+[smc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793253543.776141399] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 8 max 118 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 53/0 rej, pos 52/0 rej, too_old 0, gaps 0, replays 105 (max 75 steps) | NIS yaw 1.42 pos 1.33[0m
+[smc_node-3] [0m[INFO] [1793253543.780434762] [pat_arm_smc_left]: pat_arm_smc[left] 99 ticks @ 10000 us | period jitter mean 38 max 172 us | callback wall mean 47 max 93 / cpu mean 46 max 92 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-3] profile over 99 ticks (us)  TICK mean=10.5 max=16.7 over_period=0/99
+[smc_node-3]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-3]   phases dynamics(n=99 mean=4.7 max=8.1) jdotqdot(n=99 mean=0.8 max=1.3) pinv(n=99 mean=1.5 max=2.4) lambda(n=99 mean=0.2 max=0.6) law(n=99 mean=1.8 max=3.9) finalize(n=99 mean=0.4 max=0.8) 
+[smc_node-3]   unattributed=1.0 us/tick  trace 100/6000[0m
+[smc_node-3] [0m[INFO] [1793253543.780488079] [pat_arm_smc_left]: pat_arm_smc[left] publish us  torque(n=100 mean=17.8 max=34.6)   ee_pose(n=100 mean=7.9 max=53.0) 
+[smc_node-3]   hist(publish_us) <=50.0:199 <=100.0:1 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[smc_node-4] [0m[INFO] [1793253544.773732901] [pat_arm_smc_right]: pat_arm_smc[right] 99 ticks @ 10000 us | period jitter mean 47 max 127 us | callback wall mean 50 max 103 / cpu mean 48 max 103 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-4] profile over 99 ticks (us)  TICK mean=9.8 max=24.1 over_period=0/99
+[smc_node-4]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-4]   phases dynamics(n=99 mean=4.3 max=9.0) jdotqdot(n=99 mean=0.7 max=1.7) pinv(n=99 mean=1.5 max=6.7) lambda(n=99 mean=0.2 max=0.7) law(n=99 mean=1.7 max=13.7) finalize(n=99 mean=0.3 max=2.7) 
+[smc_node-4]   unattributed=1.0 us/tick  trace 100/6000[0m
+[smc_node-4] [0m[INFO] [1793253544.773788323] [pat_arm_smc_right]: pat_arm_smc[right] publish us  torque(n=100 mean=13.9 max=30.2)   ee_pose(n=100 mean=7.6 max=44.7) 
+[smc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793253544.776179411] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 8 max 118 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 58/0 rej, pos 57/0 rej, too_old 0, gaps 0, replays 115 (max 75 steps) | NIS yaw 0.03 pos 0.21[0m
+[smc_node-3] [0m[INFO] [1793253544.780371229] [pat_arm_smc_left]: pat_arm_smc[left] 99 ticks @ 10000 us | period jitter mean 43 max 172 us | callback wall mean 57 max 130 / cpu mean 55 max 114 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-3] profile over 99 ticks (us)  TICK mean=11.9 max=50.6 over_period=0/99
+[smc_node-3]   hist(tick) <=50.0:98 <=100.0:1 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-3]   phases dynamics(n=99 mean=5.2 max=19.9) jdotqdot(n=99 mean=1.0 max=8.9) pinv(n=99 mean=1.9 max=13.1) lambda(n=99 mean=0.2 max=0.4) law(n=99 mean=2.0 max=8.7) finalize(n=99 mean=0.4 max=0.9) 
+[smc_node-3]   unattributed=1.3 us/tick  trace 100/6000[0m
+[smc_node-3] [0m[INFO] [1793253544.780399199] [pat_arm_smc_left]: pat_arm_smc[left] publish us  torque(n=100 mean=19.7 max=105.2)   ee_pose(n=100 mean=6.3 max=34.9) 
+[smc_node-3]   hist(publish_us) <=50.0:199 <=100.0:0 <=250.0:1 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[smc_node-4] [0m[INFO] [1793253545.773781748] [pat_arm_smc_right]: pat_arm_smc[right] 99 ticks @ 10000 us | period jitter mean 35 max 159 us | callback wall mean 48 max 104 / cpu mean 46 max 100 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-4] profile over 99 ticks (us)  TICK mean=9.3 max=21.8 over_period=0/99
+[smc_node-4]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-4]   phases dynamics(n=99 mean=4.1 max=10.1) jdotqdot(n=99 mean=0.7 max=1.7) pinv(n=99 mean=1.4 max=3.4) lambda(n=99 mean=0.2 max=0.4) law(n=99 mean=1.6 max=7.3) finalize(n=99 mean=0.3 max=0.6) 
+[smc_node-4]   unattributed=1.0 us/tick  trace 100/6000[0m
+[smc_node-4] [0m[INFO] [1793253545.773858383] [pat_arm_smc_right]: pat_arm_smc[right] publish us  torque(n=100 mean=13.7 max=25.1)   ee_pose(n=100 mean=10.4 max=47.7) 
+[smc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793253545.776247386] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 8 max 118 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 63/0 rej, pos 62/0 rej, too_old 0, gaps 0, replays 125 (max 75 steps) | NIS yaw 0.97 pos 0.42[0m
+[smc_node-3] [0m[INFO] [1793253545.780513703] [pat_arm_smc_left]: pat_arm_smc[left] 99 ticks @ 10000 us | period jitter mean 46 max 175 us | callback wall mean 51 max 99 / cpu mean 50 max 99 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-3] profile over 99 ticks (us)  TICK mean=11.2 max=53.4 over_period=0/99
+[smc_node-3]   hist(tick) <=50.0:98 <=100.0:1 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-3]   phases dynamics(n=99 mean=5.1 max=39.3) jdotqdot(n=99 mean=0.9 max=8.0) pinv(n=99 mean=1.6 max=2.6) lambda(n=99 mean=0.2 max=4.4) law(n=99 mean=1.8 max=5.0) finalize(n=99 mean=0.4 max=2.0) 
+[smc_node-3]   unattributed=1.1 us/tick  trace 100/6000[0m
+[smc_node-3] [0m[INFO] [1793253545.780562125] [pat_arm_smc_left]: pat_arm_smc[left] publish us  torque(n=100 mean=17.6 max=38.1)   ee_pose(n=100 mean=4.3 max=13.5) 
+[smc_node-3]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[smc_node-4] [0m[INFO] [1793253546.773816240] [pat_arm_smc_right]: pat_arm_smc[right] 99 ticks @ 10000 us | period jitter mean 37 max 137 us | callback wall mean 59 max 114 / cpu mean 56 max 113 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-4] profile over 99 ticks (us)  TICK mean=10.0 max=31.2 over_period=0/99
+[smc_node-4]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-4]   phases dynamics(n=99 mean=4.4 max=17.1) jdotqdot(n=99 mean=0.7 max=2.2) pinv(n=99 mean=1.6 max=6.5) lambda(n=99 mean=0.2 max=0.6) law(n=99 mean=1.7 max=4.5) finalize(n=99 mean=0.3 max=1.0) 
+[smc_node-4]   unattributed=1.0 us/tick  trace 100/6000[0m
+[smc_node-4] [0m[INFO] [1793253546.773891170] [pat_arm_smc_right]: pat_arm_smc[right] publish us  torque(n=100 mean=14.1 max=47.0)   ee_pose(n=100 mean=7.7 max=22.3) 
+[smc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793253546.776262193] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 7 max 118 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 68/0 rej, pos 67/0 rej, too_old 0, gaps 0, replays 135 (max 75 steps) | NIS yaw 1.03 pos 0.14[0m
+[smc_node-3] [0m[INFO] [1793253546.780506188] [pat_arm_smc_left]: pat_arm_smc[left] 99 ticks @ 10000 us | period jitter mean 36 max 161 us | callback wall mean 54 max 147 / cpu mean 53 max 141 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-3] profile over 99 ticks (us)  TICK mean=11.9 max=38.7 over_period=0/99
+[smc_node-3]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-3]   phases dynamics(n=99 mean=5.5 max=30.2) jdotqdot(n=99 mean=0.9 max=4.0) pinv(n=99 mean=1.7 max=5.1) lambda(n=99 mean=0.2 max=0.7) law(n=99 mean=1.9 max=5.2) finalize(n=99 mean=0.4 max=1.0) 
+[smc_node-3]   unattributed=1.3 us/tick  trace 100/6000[0m
+[smc_node-3] [0m[INFO] [1793253546.780559802] [pat_arm_smc_left]: pat_arm_smc[left] publish us  torque(n=100 mean=17.9 max=36.0)   ee_pose(n=100 mean=6.4 max=13.8) 
+[smc_node-3]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[smc_node-4] [0m[INFO] [1793253547.773865559] [pat_arm_smc_right]: pat_arm_smc[right] 99 ticks @ 10000 us | period jitter mean 32 max 129 us | callback wall mean 51 max 101 / cpu mean 48 max 100 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-4] profile over 99 ticks (us)  TICK mean=9.1 max=23.9 over_period=0/99
+[smc_node-4]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-4]   phases dynamics(n=99 mean=4.1 max=11.5) jdotqdot(n=99 mean=0.7 max=1.7) pinv(n=99 mean=1.4 max=3.4) lambda(n=99 mean=0.2 max=0.6) law(n=99 mean=1.5 max=3.8) finalize(n=99 mean=0.3 max=0.8) 
+[smc_node-4]   unattributed=0.9 us/tick  trace 100/6000[0m
+[smc_node-4] [0m[INFO] [1793253547.773921131] [pat_arm_smc_right]: pat_arm_smc[right] publish us  torque(n=100 mean=14.4 max=26.9)   ee_pose(n=100 mean=7.9 max=38.4) 
+[smc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793253547.776319474] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 7 max 118 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 73/0 rej, pos 72/0 rej, too_old 0, gaps 0, replays 145 (max 75 steps) | NIS yaw 0.05 pos 0.29[0m
+[smc_node-3] [0m[INFO] [1793253547.780583833] [pat_arm_smc_left]: pat_arm_smc[left] 99 ticks @ 10000 us | period jitter mean 38 max 176 us | callback wall mean 50 max 87 / cpu mean 49 max 86 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-3] profile over 99 ticks (us)  TICK mean=10.7 max=19.3 over_period=0/99
+[smc_node-3]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-3]   phases dynamics(n=99 mean=4.8 max=9.7) jdotqdot(n=99 mean=0.8 max=1.4) pinv(n=99 mean=1.6 max=2.7) lambda(n=99 mean=0.2 max=0.5) law(n=99 mean=1.8 max=3.4) finalize(n=99 mean=0.4 max=0.9) 
+[smc_node-3]   unattributed=1.1 us/tick  trace 100/6000[0m
+[smc_node-3] [0m[INFO] [1793253547.780639017] [pat_arm_smc_left]: pat_arm_smc[left] publish us  torque(n=100 mean=18.0 max=35.0)   ee_pose(n=100 mean=6.7 max=31.5) 
+[smc_node-3]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[smc_node-4] [0m[INFO] [1793253548.773902062] [pat_arm_smc_right]: pat_arm_smc[right] 99 ticks @ 10000 us | period jitter mean 39 max 127 us | callback wall mean 52 max 120 / cpu mean 50 max 117 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-4] profile over 99 ticks (us)  TICK mean=9.6 max=31.6 over_period=0/99
+[smc_node-4]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-4]   phases dynamics(n=99 mean=4.3 max=14.3) jdotqdot(n=99 mean=0.7 max=3.0) pinv(n=99 mean=1.4 max=4.1) lambda(n=99 mean=0.2 max=0.7) law(n=99 mean=1.6 max=5.4) finalize(n=99 mean=0.3 max=1.2) 
+[smc_node-4]   unattributed=1.0 us/tick  trace 100/6000[0m
+[smc_node-4] [0m[INFO] [1793253548.773969947] [pat_arm_smc_right]: pat_arm_smc[right] publish us  torque(n=100 mean=14.8 max=29.9)   ee_pose(n=100 mean=7.0 max=36.3) 
+[smc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793253548.776352585] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 8 max 157 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 77/1 rej, pos 77/0 rej, too_old 0, gaps 0, replays 155 (max 75 steps) | NIS yaw 0.31 pos 0.10[0m
+[smc_node-3] [0m[INFO] [1793253548.780610718] [pat_arm_smc_left]: pat_arm_smc[left] 99 ticks @ 10000 us | period jitter mean 49 max 206 us | callback wall mean 51 max 115 / cpu mean 50 max 114 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-3] profile over 99 ticks (us)  TICK mean=11.2 max=55.2 over_period=0/99
+[smc_node-3]   hist(tick) <=50.0:98 <=100.0:1 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-3]   phases dynamics(n=99 mean=5.3 max=37.6) jdotqdot(n=99 mean=0.9 max=9.6) pinv(n=99 mean=1.6 max=4.5) lambda(n=99 mean=0.2 max=0.5) law(n=99 mean=1.8 max=5.0) finalize(n=99 mean=0.4 max=1.6) 
+[smc_node-3]   unattributed=1.1 us/tick  trace 100/6000[0m
+[smc_node-3] [0m[INFO] [1793253548.780655957] [pat_arm_smc_left]: pat_arm_smc[left] publish us  torque(n=100 mean=16.7 max=45.2)   ee_pose(n=100 mean=6.0 max=13.2) 
+[smc_node-3]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[smc_node-4] [0m[INFO] [1793253549.773919986] [pat_arm_smc_right]: pat_arm_smc[right] 99 ticks @ 10000 us | period jitter mean 38 max 142 us | callback wall mean 52 max 97 / cpu mean 50 max 91 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-4] profile over 99 ticks (us)  TICK mean=9.2 max=25.4 over_period=0/99
+[smc_node-4]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-4]   phases dynamics(n=99 mean=4.1 max=13.4) jdotqdot(n=99 mean=0.7 max=1.6) pinv(n=99 mean=1.4 max=2.9) lambda(n=99 mean=0.2 max=0.5) law(n=99 mean=1.6 max=8.1) finalize(n=99 mean=0.3 max=0.7) 
+[smc_node-4]   unattributed=0.9 us/tick  trace 100/6000[0m
+[smc_node-4] [0m[INFO] [1793253549.773974767] [pat_arm_smc_right]: pat_arm_smc[right] publish us  torque(n=100 mean=15.1 max=35.3)   ee_pose(n=100 mean=6.7 max=22.8) 
+[smc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793253549.776381218] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 7 max 157 us, overruns 0 | in imu 499 pose 99, ring drops 0/0 | yaw 82/1 rej, pos 82/0 rej, too_old 0, gaps 0, replays 165 (max 75 steps) | NIS yaw 0.76 pos 0.00[0m
+[smc_node-3] [0m[INFO] [1793253549.780621265] [pat_arm_smc_left]: pat_arm_smc[left] 99 ticks @ 10000 us | period jitter mean 45 max 172 us | callback wall mean 51 max 99 / cpu mean 50 max 95 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-3] profile over 99 ticks (us)  TICK mean=11.1 max=57.3 over_period=0/99
+[smc_node-3]   hist(tick) <=50.0:98 <=100.0:1 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-3]   phases dynamics(n=99 mean=5.2 max=48.6) jdotqdot(n=99 mean=0.8 max=1.6) pinv(n=99 mean=1.6 max=2.5) lambda(n=99 mean=0.2 max=2.4) law(n=99 mean=1.9 max=4.8) finalize(n=99 mean=0.4 max=0.9) 
+[smc_node-3]   unattributed=1.1 us/tick  trace 100/6000[0m
+[smc_node-3] [0m[INFO] [1793253549.780671237] [pat_arm_smc_left]: pat_arm_smc[left] publish us  torque(n=100 mean=18.0 max=37.6)   ee_pose(n=100 mean=5.8 max=17.0) 
+[smc_node-3]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[smc_node-4] [0m[INFO] [1793253550.773967892] [pat_arm_smc_right]: pat_arm_smc[right] 99 ticks @ 10000 us | period jitter mean 15 max 115 us | callback wall mean 55 max 95 / cpu mean 53 max 91 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-4] profile over 99 ticks (us)  TICK mean=8.2 max=22.5 over_period=0/99
+[smc_node-4]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-4]   phases dynamics(n=99 mean=3.6 max=10.4) jdotqdot(n=99 mean=0.6 max=1.8) pinv(n=99 mean=1.2 max=3.2) lambda(n=99 mean=0.2 max=0.5) law(n=99 mean=1.4 max=3.9) finalize(n=99 mean=0.3 max=6.7) 
+[smc_node-4]   unattributed=0.9 us/tick  trace 100/6000[0m
+[smc_node-4] [0m[INFO] [1793253550.774031438] [pat_arm_smc_right]: pat_arm_smc[right] publish us  torque(n=100 mean=13.5 max=34.6)   ee_pose(n=100 mean=5.8 max=32.4) 
+[smc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793253550.776407009] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 8 max 157 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 87/1 rej, pos 87/0 rej, too_old 0, gaps 0, replays 175 (max 75 steps) | NIS yaw 3.04 pos 0.16[0m
+[smc_node-3] [0m[INFO] [1793253550.780654751] [pat_arm_smc_left]: pat_arm_smc[left] 99 ticks @ 10000 us | period jitter mean 38 max 146 us | callback wall mean 54 max 89 / cpu mean 53 max 88 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-3] profile over 99 ticks (us)  TICK mean=12.4 max=27.5 over_period=0/99
+[smc_node-3]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-3]   phases dynamics(n=99 mean=5.8 max=20.3) jdotqdot(n=99 mean=0.9 max=4.4) pinv(n=99 mean=1.8 max=5.5) lambda(n=99 mean=0.2 max=0.5) law(n=99 mean=2.0 max=3.4) finalize(n=99 mean=0.4 max=0.8) 
+[smc_node-3]   unattributed=1.2 us/tick  trace 100/6000[0m
+[smc_node-3] [0m[INFO] [1793253550.780703212] [pat_arm_smc_left]: pat_arm_smc[left] publish us  torque(n=100 mean=18.8 max=35.5)   ee_pose(n=100 mean=5.6 max=19.3) 
+[smc_node-3]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[smc_node-4] [0m[INFO] [1793253551.774085562] [pat_arm_smc_right]: pat_arm_smc[right] 99 ticks @ 10000 us | period jitter mean 24 max 125 us | callback wall mean 56 max 96 / cpu mean 54 max 92 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-4] profile over 99 ticks (us)  TICK mean=9.3 max=25.5 over_period=0/99
+[smc_node-4]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-4]   phases dynamics(n=99 mean=4.1 max=11.9) jdotqdot(n=99 mean=0.7 max=1.9) pinv(n=99 mean=1.4 max=3.3) lambda(n=99 mean=0.2 max=0.6) law(n=99 mean=1.6 max=4.4) finalize(n=99 mean=0.3 max=0.9) 
+[smc_node-4]   unattributed=1.0 us/tick  trace 100/6000[0m
+[smc_node-4] [0m[INFO] [1793253551.774146350] [pat_arm_smc_right]: pat_arm_smc[right] publish us  torque(n=100 mean=14.4 max=33.4)   ee_pose(n=100 mean=6.8 max=28.7) 
+[smc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793253551.776447650] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 7 max 157 us, overruns 0 | in imu 496 pose 100, ring drops 0/0 | yaw 92/1 rej, pos 92/0 rej, too_old 0, gaps 0, replays 185 (max 75 steps) | NIS yaw 0.19 pos 0.35[0m
+[smc_node-3] [0m[INFO] [1793253551.780681849] [pat_arm_smc_left]: pat_arm_smc[left] 99 ticks @ 10000 us | period jitter mean 35 max 165 us | callback wall mean 54 max 141 / cpu mean 53 max 135 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-3] profile over 99 ticks (us)  TICK mean=12.5 max=45.8 over_period=0/99
+[smc_node-3]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-3]   phases dynamics(n=99 mean=5.9 max=36.9) jdotqdot(n=99 mean=0.8 max=1.7) pinv(n=99 mean=1.6 max=4.9) lambda(n=99 mean=0.2 max=1.0) law(n=99 mean=2.2 max=27.0) finalize(n=99 mean=0.4 max=1.8) 
+[smc_node-3]   unattributed=1.3 us/tick  trace 100/6000[0m
+[smc_node-3] [0m[INFO] [1793253551.780736370] [pat_arm_smc_left]: pat_arm_smc[left] publish us  torque(n=100 mean=19.0 max=49.6)   ee_pose(n=100 mean=12.6 max=52.1) 
+[smc_node-3]   hist(publish_us) <=50.0:198 <=100.0:2 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[smc_node-4] [0m[INFO] [1793253552.773900312] [pat_arm_smc_right]: pat_arm_smc[right] 99 ticks @ 10000 us | period jitter mean 37 max 127 us | callback wall mean 50 max 91 / cpu mean 48 max 86 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-4] profile over 99 ticks (us)  TICK mean=9.0 max=24.8 over_period=0/99
+[smc_node-4]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-4]   phases dynamics(n=99 mean=4.0 max=11.1) jdotqdot(n=99 mean=0.7 max=2.0) pinv(n=99 mean=1.4 max=3.3) lambda(n=99 mean=0.2 max=0.6) law(n=99 mean=1.5 max=4.2) finalize(n=99 mean=0.3 max=0.7) 
+[smc_node-4]   unattributed=0.9 us/tick  trace 100/6000[0m
+[smc_node-4] [0m[INFO] [1793253552.773938801] [pat_arm_smc_right]: pat_arm_smc[right] publish us  torque(n=100 mean=15.5 max=32.0)   ee_pose(n=100 mean=6.5 max=16.0) 
+[smc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793253552.776519218] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 8 max 157 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 97/1 rej, pos 97/0 rej, too_old 0, gaps 0, replays 195 (max 75 steps) | NIS yaw 0.10 pos 0.04[0m
+[smc_node-3] [0m[INFO] [1793253552.780747890] [pat_arm_smc_left]: pat_arm_smc[left] 99 ticks @ 10000 us | period jitter mean 39 max 163 us | callback wall mean 52 max 103 / cpu mean 51 max 102 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-3] profile over 99 ticks (us)  TICK mean=11.2 max=50.7 over_period=0/99
+[smc_node-3]   hist(tick) <=50.0:98 <=100.0:1 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-3]   phases dynamics(n=99 mean=5.4 max=38.4) jdotqdot(n=99 mean=0.8 max=1.4) pinv(n=99 mean=1.5 max=2.7) lambda(n=99 mean=0.2 max=0.4) law(n=99 mean=1.8 max=6.1) finalize(n=99 mean=0.4 max=1.4) 
+[smc_node-3]   unattributed=1.1 us/tick  trace 100/6000[0m
+[smc_node-3] [0m[INFO] [1793253552.780790885] [pat_arm_smc_left]: pat_arm_smc[left] publish us  torque(n=100 mean=19.0 max=54.8)   ee_pose(n=100 mean=7.8 max=32.2) 
+[smc_node-3]   hist(publish_us) <=50.0:199 <=100.0:1 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[smc_node-4] [0m[INFO] [1793253553.774185565] [pat_arm_smc_right]: pat_arm_smc[right] 99 ticks @ 10000 us | period jitter mean 56 max 166 us | callback wall mean 53 max 90 / cpu mean 51 max 85 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-4] profile over 99 ticks (us)  TICK mean=9.6 max=20.2 over_period=0/99
+[smc_node-4]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-4]   phases dynamics(n=99 mean=4.3 max=9.6) jdotqdot(n=99 mean=0.7 max=1.7) pinv(n=99 mean=1.4 max=2.6) lambda(n=99 mean=0.2 max=0.5) law(n=99 mean=1.7 max=5.8) finalize(n=99 mean=0.3 max=0.7) 
+[smc_node-4]   unattributed=1.0 us/tick  trace 100/6000[0m
+[smc_node-4] [0m[INFO] [1793253553.774238797] [pat_arm_smc_right]: pat_arm_smc[right] publish us  torque(n=100 mean=17.7 max=34.3)   ee_pose(n=100 mean=7.2 max=18.5) 
+[smc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793253553.776541100] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 7 max 157 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 102/1 rej, pos 102/0 rej, too_old 0, gaps 0, replays 205 (max 75 steps) | NIS yaw 0.03 pos 1.28[0m
+[smc_node-3] [0m[INFO] [1793253553.780874133] [pat_arm_smc_left]: pat_arm_smc[left] 99 ticks @ 10000 us | period jitter mean 50 max 161 us | callback wall mean 53 max 102 / cpu mean 52 max 101 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-3] profile over 99 ticks (us)  TICK mean=10.7 max=18.7 over_period=0/99
+[smc_node-3]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-3]   phases dynamics(n=99 mean=4.8 max=8.8) jdotqdot(n=99 mean=0.8 max=4.0) pinv(n=99 mean=1.6 max=2.6) lambda(n=99 mean=0.3 max=6.1) law(n=99 mean=1.8 max=2.9) finalize(n=99 mean=0.4 max=0.9) 
+[smc_node-3]   unattributed=1.1 us/tick  trace 100/6000[0m
+[smc_node-3] [0m[INFO] [1793253553.780919769] [pat_arm_smc_left]: pat_arm_smc[left] publish us  torque(n=100 mean=19.2 max=40.8)   ee_pose(n=100 mean=9.0 max=49.2) 
+[smc_node-3]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[smc_node-4] [0m[INFO] [1793253554.774098736] [pat_arm_smc_right]: pat_arm_smc[right] 99 ticks @ 10000 us | period jitter mean 27 max 155 us | callback wall mean 52 max 109 / cpu mean 51 max 96 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-4] profile over 99 ticks (us)  TICK mean=9.5 max=20.5 over_period=0/99
+[smc_node-4]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-4]   phases dynamics(n=99 mean=4.3 max=9.9) jdotqdot(n=99 mean=0.7 max=1.6) pinv(n=99 mean=1.4 max=2.7) lambda(n=99 mean=0.2 max=0.4) law(n=99 mean=1.6 max=3.3) finalize(n=99 mean=0.3 max=0.9) 
+[smc_node-4]   unattributed=1.0 us/tick  trace 100/6000[0m
+[smc_node-4] [0m[INFO] [1793253554.774166213] [pat_arm_smc_right]: pat_arm_smc[right] publish us  torque(n=100 mean=17.4 max=33.5)   ee_pose(n=100 mean=6.9 max=14.2) 
+[smc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793253554.776589909] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 8 max 157 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 107/1 rej, pos 107/0 rej, too_old 0, gaps 0, replays 215 (max 75 steps) | NIS yaw 0.39 pos 0.08[0m
+[smc_node-3] [0m[INFO] [1793253554.780843753] [pat_arm_smc_left]: pat_arm_smc[left] 99 ticks @ 10000 us | period jitter mean 37 max 159 us | callback wall mean 52 max 114 / cpu mean 51 max 114 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-3] profile over 99 ticks (us)  TICK mean=11.6 max=58.7 over_period=0/99
+[smc_node-3]   hist(tick) <=50.0:98 <=100.0:1 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-3]   phases dynamics(n=99 mean=5.1 max=37.5) jdotqdot(n=99 mean=0.8 max=4.3) pinv(n=99 mean=1.8 max=19.5) lambda(n=99 mean=0.2 max=2.3) law(n=99 mean=2.0 max=20.1) finalize(n=99 mean=0.4 max=4.4) 
+[smc_node-3]   unattributed=1.3 us/tick  trace 100/6000[0m
+[smc_node-3] [0m[INFO] [1793253554.780887443] [pat_arm_smc_left]: pat_arm_smc[left] reference: trajectory | 91 trajectory ticks, 0 node refs held past the window | windows rejected 0, truncated 0[0m
+[smc_node-3] [0m[INFO] [1793253554.780910349] [pat_arm_smc_left]: pat_arm_smc[left] publish us  torque(n=100 mean=18.2 max=32.5)   ee_pose(n=100 mean=17.2 max=35.7) 
+[smc_node-3]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[smc_node-4] [0m[INFO] [1793253555.774143851] [pat_arm_smc_right]: pat_arm_smc[right] 99 ticks @ 10000 us | period jitter mean 32 max 133 us | callback wall mean 57 max 98 / cpu mean 54 max 93 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-4] profile over 99 ticks (us)  TICK mean=9.4 max=21.6 over_period=0/99
+[smc_node-4]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-4]   phases dynamics(n=99 mean=4.2 max=9.2) jdotqdot(n=99 mean=0.7 max=1.7) pinv(n=99 mean=1.4 max=2.7) lambda(n=99 mean=0.2 max=0.3) law(n=99 mean=1.6 max=3.5) finalize(n=99 mean=0.3 max=0.8) 
+[smc_node-4]   unattributed=1.0 us/tick  trace 100/6000[0m
+[smc_node-4] [0m[INFO] [1793253555.774197782] [pat_arm_smc_right]: pat_arm_smc[right] publish us  torque(n=100 mean=16.8 max=32.4)   ee_pose(n=100 mean=7.0 max=17.3) 
+[smc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793253555.776582379] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 8 max 157 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 112/1 rej, pos 112/0 rej, too_old 0, gaps 0, replays 225 (max 75 steps) | NIS yaw 2.00 pos 0.08[0m
+[smc_node-3] [0m[INFO] [1793253555.802979552] [pat_arm_smc_left]: pat_arm_smc[left] 102 ticks @ 10000 us | period jitter mean 46 max 168 us | callback wall mean 51 max 89 / cpu mean 50 max 97 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-3] profile over 102 ticks (us)  TICK mean=10.8 max=20.8 over_period=0/102
+[smc_node-3]   hist(tick) <=50.0:102 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-3]   phases dynamics(n=102 mean=4.8 max=11.5) jdotqdot(n=102 mean=0.8 max=1.5) pinv(n=102 mean=1.5 max=2.3) lambda(n=102 mean=0.2 max=0.4) law(n=102 mean=1.8 max=6.7) finalize(n=102 mean=0.4 max=0.8) 
+[smc_node-3]   unattributed=1.3 us/tick  trace 3/6000[0m
+[smc_node-3] [0m[INFO] [1793253555.803010434] [pat_arm_smc_left]: pat_arm_smc[left] reference: trajectory | 194 trajectory ticks, 0 node refs held past the window | windows rejected 0, truncated 0[0m
+[smc_node-3] [0m[INFO] [1793253555.803018647] [pat_arm_smc_left]: pat_arm_smc[left] publish us  torque(n=103 mean=18.3 max=47.9)   ee_pose(n=100 mean=19.8 max=62.5) 
+[smc_node-3]   hist(publish_us) <=50.0:202 <=100.0:1 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[smc_node-4] [0m[INFO] [1793253556.774171339] [pat_arm_smc_right]: pat_arm_smc[right] 99 ticks @ 10000 us | period jitter mean 34 max 127 us | callback wall mean 58 max 115 / cpu mean 55 max 114 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-4] profile over 99 ticks (us)  TICK mean=9.2 max=22.7 over_period=0/99
+[smc_node-4]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-4]   phases dynamics(n=99 mean=4.1 max=10.8) jdotqdot(n=99 mean=0.7 max=1.4) pinv(n=99 mean=1.4 max=3.0) lambda(n=99 mean=0.2 max=0.5) law(n=99 mean=1.5 max=4.0) finalize(n=99 mean=0.4 max=5.2) 
+[smc_node-4]   unattributed=0.9 us/tick  trace 100/6000[0m
+[smc_node-4] [0m[INFO] [1793253556.774264179] [pat_arm_smc_right]: pat_arm_smc[right] publish us  torque(n=100 mean=17.2 max=36.1)   ee_pose(n=100 mean=7.0 max=21.2) 
+[smc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793253556.776678107] [pat_nav]: nav[imu_ekf] 501 wakes, work mean 8 max 157 us, overruns 0 | in imu 501 pose 101, ring drops 0/0 | yaw 117/1 rej, pos 117/0 rej, too_old 0, gaps 0, replays 235 (max 75 steps) | NIS yaw 0.69 pos 0.74[0m
+[smc_node-3] [0m[INFO] [1793253556.780893279] [pat_arm_smc_left]: pat_arm_smc[left] 96 ticks @ 10000 us | period jitter mean 36 max 165 us | callback wall mean 49 max 78 / cpu mean 48 max 76 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-3] profile over 96 ticks (us)  TICK mean=10.7 max=17.0 over_period=0/96
+[smc_node-3]   hist(tick) <=50.0:96 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-3]   phases dynamics(n=96 mean=4.8 max=8.3) jdotqdot(n=96 mean=0.8 max=1.5) pinv(n=96 mean=1.6 max=4.9) lambda(n=96 mean=0.2 max=0.3) law(n=96 mean=1.8 max=3.0) finalize(n=96 mean=0.4 max=0.8) 
+[smc_node-3]   unattributed=1.3 us/tick  trace 100/6000[0m
+[smc_node-3] [0m[INFO] [1793253556.780956078] [pat_arm_smc_left]: pat_arm_smc[left] reference: trajectory | 291 trajectory ticks, 0 node refs held past the window | windows rejected 0, truncated 0[0m
+[smc_node-3] [0m[INFO] [1793253556.780982444] [pat_arm_smc_left]: pat_arm_smc[left] publish us  torque(n=97 mean=18.4 max=30.6)   ee_pose(n=100 mean=17.5 max=41.9) 
+[smc_node-3]   hist(publish_us) <=50.0:197 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[smc_node-4] [0m[INFO] [1793253557.774073462] [pat_arm_smc_right]: pat_arm_smc[right] 99 ticks @ 10000 us | period jitter mean 19 max 129 us | callback wall mean 46 max 85 / cpu mean 45 max 81 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-4] profile over 99 ticks (us)  TICK mean=9.3 max=15.1 over_period=0/99
+[smc_node-4]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-4]   phases dynamics(n=99 mean=4.1 max=6.5) jdotqdot(n=99 mean=0.7 max=5.0) pinv(n=99 mean=1.5 max=3.6) lambda(n=99 mean=0.2 max=0.3) law(n=99 mean=1.6 max=3.7) finalize(n=99 mean=0.3 max=0.7) 
+[smc_node-4]   unattributed=0.9 us/tick  trace 100/6000[0m
+[smc_node-4] [0m[INFO] [1793253557.774118895] [pat_arm_smc_right]: pat_arm_smc[right] publish us  torque(n=100 mean=18.3 max=32.5)   ee_pose(n=100 mean=6.4 max=17.8) 
+[smc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793253557.776679286] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 8 max 157 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 122/1 rej, pos 122/0 rej, too_old 0, gaps 0, replays 245 (max 75 steps) | NIS yaw 0.32 pos 1.10[0m
+[smc_node-3] [0m[INFO] [1793253557.780912287] [pat_arm_smc_left]: pat_arm_smc[left] 99 ticks @ 10000 us | period jitter mean 27 max 120 us | callback wall mean 46 max 87 / cpu mean 45 max 86 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-3] profile over 99 ticks (us)  TICK mean=10.0 max=17.7 over_period=0/99
+[smc_node-3]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-3]   phases dynamics(n=99 mean=4.4 max=7.5) jdotqdot(n=99 mean=0.8 max=4.0) pinv(n=99 mean=1.5 max=2.6) lambda(n=99 mean=0.2 max=0.3) law(n=99 mean=1.7 max=4.8) finalize(n=99 mean=0.3 max=1.0) 
+[smc_node-3]   unattributed=1.2 us/tick  trace 100/6000[0m
+[smc_node-3] [0m[INFO] [1793253557.780953601] [pat_arm_smc_left]: pat_arm_smc[left] reference: trajectory | 391 trajectory ticks, 0 node refs held past the window | windows rejected 0, truncated 0[0m
+[smc_node-3] [0m[INFO] [1793253557.780972298] [pat_arm_smc_left]: pat_arm_smc[left] publish us  torque(n=100 mean=18.0 max=32.6)   ee_pose(n=100 mean=18.9 max=48.1) 
+[smc_node-3]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[smc_node-4] [0m[INFO] [1793253558.774226799] [pat_arm_smc_right]: pat_arm_smc[right] 99 ticks @ 10000 us | period jitter mean 57 max 143 us | callback wall mean 50 max 95 / cpu mean 48 max 89 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-4] profile over 99 ticks (us)  TICK mean=9.9 max=32.0 over_period=0/99
+[smc_node-4]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-4]   phases dynamics(n=99 mean=4.4 max=13.6) jdotqdot(n=99 mean=0.8 max=8.4) pinv(n=99 mean=1.5 max=2.9) lambda(n=99 mean=0.2 max=0.4) law(n=99 mean=1.6 max=3.7) finalize(n=99 mean=0.3 max=0.8) 
+[smc_node-4]   unattributed=1.0 us/tick  trace 100/6000[0m
+[smc_node-4] [0m[INFO] [1793253558.774278983] [pat_arm_smc_right]: pat_arm_smc[right] publish us  torque(n=100 mean=18.2 max=31.3)   ee_pose(n=100 mean=6.7 max=13.4) 
+[smc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793253558.776692639] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 8 max 157 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 127/1 rej, pos 127/0 rej, too_old 0, gaps 0, replays 255 (max 75 steps) | NIS yaw 0.36 pos 0.16[0m
+[smc_node-3] [0m[INFO] [1793253558.780965450] [pat_arm_smc_left]: pat_arm_smc[left] 99 ticks @ 10000 us | period jitter mean 34 max 171 us | callback wall mean 48 max 78 / cpu mean 47 max 77 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-3] profile over 99 ticks (us)  TICK mean=10.3 max=18.2 over_period=0/99
+[smc_node-3]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-3]   phases dynamics(n=99 mean=4.6 max=8.2) jdotqdot(n=99 mean=0.8 max=1.9) pinv(n=99 mean=1.5 max=2.6) lambda(n=99 mean=0.2 max=0.6) law(n=99 mean=1.7 max=5.3) finalize(n=99 mean=0.4 max=0.9) 
+[smc_node-3]   unattributed=1.2 us/tick  trace 100/6000[0m
+[smc_node-3] [0m[INFO] [1793253558.781012329] [pat_arm_smc_left]: pat_arm_smc[left] reference: trajectory | 491 trajectory ticks, 0 node refs held past the window | windows rejected 0, truncated 0[0m
+[smc_node-3] [0m[INFO] [1793253558.781032356] [pat_arm_smc_left]: pat_arm_smc[left] publish us  torque(n=100 mean=17.5 max=46.6)   ee_pose(n=100 mean=18.8 max=47.8) 
+[smc_node-3]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[smc_node-4] [0m[INFO] [1793253559.774271187] [pat_arm_smc_right]: pat_arm_smc[right] 99 ticks @ 10000 us | period jitter mean 45 max 133 us | callback wall mean 55 max 102 / cpu mean 52 max 96 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-4] profile over 99 ticks (us)  TICK mean=9.4 max=42.1 over_period=0/99
+[smc_node-4]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-4]   phases dynamics(n=99 mean=4.4 max=36.7) jdotqdot(n=99 mean=0.7 max=5.0) pinv(n=99 mean=1.4 max=3.4) lambda(n=99 mean=0.2 max=0.8) law(n=99 mean=1.5 max=2.9) finalize(n=99 mean=0.3 max=0.8) 
+[smc_node-4]   unattributed=0.9 us/tick  trace 100/6000[0m
+[smc_node-4] [0m[INFO] [1793253559.774328404] [pat_arm_smc_right]: pat_arm_smc[right] publish us  torque(n=100 mean=17.2 max=32.9)   ee_pose(n=100 mean=7.1 max=14.9) 
+[smc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793253559.776736487] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 8 max 167 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 132/1 rej, pos 132/0 rej, too_old 0, gaps 0, replays 265 (max 75 steps) | NIS yaw 2.31 pos 0.22[0m
+[smc_node-3] [0m[INFO] [1793253559.780996119] [pat_arm_smc_left]: pat_arm_smc[left] 99 ticks @ 10000 us | period jitter mean 45 max 165 us | callback wall mean 50 max 72 / cpu mean 48 max 71 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-3] profile over 99 ticks (us)  TICK mean=10.9 max=39.7 over_period=0/99
+[smc_node-3]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-3]   phases dynamics(n=99 mean=5.1 max=31.5) jdotqdot(n=99 mean=0.8 max=7.6) pinv(n=99 mean=1.5 max=2.8) lambda(n=99 mean=0.2 max=0.3) law(n=99 mean=1.7 max=3.3) finalize(n=99 mean=0.4 max=0.8) 
+[smc_node-3]   unattributed=1.3 us/tick  trace 100/6000[0m
+[smc_node-3] [0m[INFO] [1793253559.781043928] [pat_arm_smc_left]: pat_arm_smc[left] reference: trajectory | 591 trajectory ticks, 0 node refs held past the window | windows rejected 0, truncated 0[0m
+[smc_node-3] [0m[INFO] [1793253559.781065107] [pat_arm_smc_left]: pat_arm_smc[left] publish us  torque(n=100 mean=17.5 max=46.0)   ee_pose(n=100 mean=16.1 max=31.2) 
+[smc_node-3]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[smc_node-4] [0m[INFO] [1793253560.774196171] [pat_arm_smc_right]: pat_arm_smc[right] 99 ticks @ 10000 us | period jitter mean 38 max 143 us | callback wall mean 47 max 83 / cpu mean 45 max 81 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-4] profile over 99 ticks (us)  TICK mean=9.6 max=19.0 over_period=0/99
+[smc_node-4]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-4]   phases dynamics(n=99 mean=4.3 max=9.3) jdotqdot(n=99 mean=0.7 max=1.5) pinv(n=99 mean=1.5 max=2.8) lambda(n=99 mean=0.2 max=0.3) law(n=99 mean=1.7 max=7.2) finalize(n=99 mean=0.3 max=2.7) 
+[smc_node-4]   unattributed=0.9 us/tick  trace 100/6000[0m
+[smc_node-4] [0m[INFO] [1793253560.774238116] [pat_arm_smc_right]: pat_arm_smc[right] publish us  torque(n=100 mean=17.6 max=30.3)   ee_pose(n=100 mean=6.3 max=16.2) 
+[smc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793253560.776768991] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 8 max 167 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 137/1 rej, pos 137/0 rej, too_old 0, gaps 0, replays 275 (max 75 steps) | NIS yaw 0.19 pos 0.94[0m
+[smc_node-3] [0m[INFO] [1793253560.781014866] [pat_arm_smc_left]: pat_arm_smc[left] 99 ticks @ 10000 us | period jitter mean 40 max 162 us | callback wall mean 48 max 96 / cpu mean 47 max 96 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-3] profile over 99 ticks (us)  TICK mean=10.9 max=57.3 over_period=0/99
+[smc_node-3]   hist(tick) <=50.0:98 <=100.0:1 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-3]   phases dynamics(n=99 mean=4.9 max=30.5) jdotqdot(n=99 mean=0.8 max=10.5) pinv(n=99 mean=1.6 max=9.2) lambda(n=99 mean=0.2 max=2.5) law(n=99 mean=1.7 max=2.9) finalize(n=99 mean=0.4 max=0.9) 
+[smc_node-3]   unattributed=1.3 us/tick  trace 100/6000[0m
+[smc_node-3] [0m[INFO] [1793253560.781052700] [pat_arm_smc_left]: pat_arm_smc[left] reference: trajectory | 691 trajectory ticks, 0 node refs held past the window | windows rejected 0, truncated 0[0m
+[smc_node-3] [0m[INFO] [1793253560.781071232] [pat_arm_smc_left]: pat_arm_smc[left] publish us  torque(n=100 mean=16.6 max=28.4)   ee_pose(n=100 mean=19.8 max=32.6) 
+[smc_node-3]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[smc_node-4] [0m[INFO] [1793253561.774229559] [pat_arm_smc_right]: pat_arm_smc[right] 99 ticks @ 10000 us | period jitter mean 39 max 134 us | callback wall mean 51 max 93 / cpu mean 49 max 86 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-4] profile over 99 ticks (us)  TICK mean=9.7 max=23.5 over_period=0/99
+[smc_node-4]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-4]   phases dynamics(n=99 mean=4.3 max=10.8) jdotqdot(n=99 mean=0.8 max=3.6) pinv(n=99 mean=1.5 max=3.0) lambda(n=99 mean=0.2 max=0.5) law(n=99 mean=1.6 max=3.9) finalize(n=99 mean=0.3 max=1.7) 
+[smc_node-4]   unattributed=1.0 us/tick  trace 100/6000[0m
+[smc_node-4] [0m[INFO] [1793253561.774277950] [pat_arm_smc_right]: pat_arm_smc[right] publish us  torque(n=100 mean=17.7 max=35.2)   ee_pose(n=100 mean=6.7 max=19.3) 
+[smc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793253561.776829916] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 8 max 167 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 142/1 rej, pos 142/0 rej, too_old 0, gaps 0, replays 285 (max 75 steps) | NIS yaw 0.45 pos 1.73[0m
+[smc_node-3] [0m[INFO] [1793253561.781053312] [pat_arm_smc_left]: pat_arm_smc[left] 99 ticks @ 10000 us | period jitter mean 45 max 195 us | callback wall mean 47 max 106 / cpu mean 46 max 105 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-3] profile over 99 ticks (us)  TICK mean=10.6 max=25.8 over_period=0/99
+[smc_node-3]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-3]   phases dynamics(n=99 mean=4.7 max=18.6) jdotqdot(n=99 mean=0.7 max=1.9) pinv(n=99 mean=1.5 max=3.8) lambda(n=99 mean=0.2 max=0.5) law(n=99 mean=1.8 max=13.7) finalize(n=99 mean=0.4 max=5.2) 
+[smc_node-3]   unattributed=1.3 us/tick  trace 100/6000[0m
+[smc_node-3] [0m[INFO] [1793253561.781089116] [pat_arm_smc_left]: pat_arm_smc[left] reference: trajectory | 791 trajectory ticks, 0 node refs held past the window | windows rejected 0, truncated 0[0m
+[smc_node-3] [0m[INFO] [1793253561.781107885] [pat_arm_smc_left]: pat_arm_smc[left] publish us  torque(n=100 mean=16.2 max=47.5)   ee_pose(n=100 mean=18.3 max=50.8) 
+[smc_node-3]   hist(publish_us) <=50.0:199 <=100.0:1 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[smc_node-4] [0m[INFO] [1793253562.774273917] [pat_arm_smc_right]: pat_arm_smc[right] 99 ticks @ 10000 us | period jitter mean 42 max 135 us | callback wall mean 53 max 124 / cpu mean 50 max 118 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-4] profile over 99 ticks (us)  TICK mean=10.0 max=43.7 over_period=0/99
+[smc_node-4]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-4]   phases dynamics(n=99 mean=4.4 max=20.6) jdotqdot(n=99 mean=0.8 max=8.3) pinv(n=99 mean=1.6 max=14.8) lambda(n=99 mean=0.2 max=0.4) law(n=99 mean=1.6 max=6.9) finalize(n=99 mean=0.3 max=0.9) 
+[smc_node-4]   unattributed=1.0 us/tick  trace 100/6000[0m
+[smc_node-4] [0m[INFO] [1793253562.774319549] [pat_arm_smc_right]: pat_arm_smc[right] publish us  torque(n=100 mean=17.9 max=45.6)   ee_pose(n=100 mean=7.5 max=23.5) 
+[smc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793253562.776835567] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 8 max 167 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 147/1 rej, pos 147/0 rej, too_old 0, gaps 0, replays 295 (max 75 steps) | NIS yaw 0.09 pos 0.24[0m
+[smc_node-3] [0m[INFO] [1793253562.781087386] [pat_arm_smc_left]: pat_arm_smc[left] 99 ticks @ 10000 us | period jitter mean 37 max 141 us | callback wall mean 48 max 131 / cpu mean 47 max 125 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-3] profile over 99 ticks (us)  TICK mean=10.5 max=21.0 over_period=0/99
+[smc_node-3]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-3]   phases dynamics(n=99 mean=4.6 max=9.9) jdotqdot(n=99 mean=0.7 max=1.5) pinv(n=99 mean=1.5 max=2.9) lambda(n=99 mean=0.2 max=2.5) law(n=99 mean=1.8 max=7.3) finalize(n=99 mean=0.4 max=2.6) 
+[smc_node-3]   unattributed=1.3 us/tick  trace 100/6000[0m
+[smc_node-3] [0m[INFO] [1793253562.781122423] [pat_arm_smc_left]: pat_arm_smc[left] reference: trajectory | 891 trajectory ticks, 0 node refs held past the window | windows rejected 0, truncated 0[0m
+[smc_node-3] [0m[INFO] [1793253562.781139800] [pat_arm_smc_left]: pat_arm_smc[left] publish us  torque(n=100 mean=15.6 max=50.9)   ee_pose(n=100 mean=19.1 max=49.7) 
+[smc_node-3]   hist(publish_us) <=50.0:199 <=100.0:1 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[smc_node-4] [0m[INFO] [1793253563.774419622] [pat_arm_smc_right]: pat_arm_smc[right] 99 ticks @ 10000 us | period jitter mean 50 max 135 us | callback wall mean 53 max 110 / cpu mean 51 max 105 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-4] profile over 99 ticks (us)  TICK mean=9.6 max=21.2 over_period=0/99
+[smc_node-4]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-4]   phases dynamics(n=99 mean=4.2 max=12.5) jdotqdot(n=99 mean=0.7 max=1.8) pinv(n=99 mean=1.5 max=2.5) lambda(n=99 mean=0.2 max=0.4) law(n=99 mean=1.6 max=2.8) finalize(n=99 mean=0.5 max=12.6) 
+[smc_node-4]   unattributed=0.9 us/tick  trace 100/6000[0m
+[smc_node-4] [0m[INFO] [1793253563.774475186] [pat_arm_smc_right]: pat_arm_smc[right] publish us  torque(n=100 mean=17.6 max=32.1)   ee_pose(n=100 mean=7.1 max=20.8) 
+[smc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793253563.776866864] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 8 max 167 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 152/1 rej, pos 152/0 rej, too_old 0, gaps 0, replays 305 (max 75 steps) | NIS yaw 0.34 pos 0.55[0m
+[smc_node-3] [0m[INFO] [1793253563.781011665] [pat_arm_smc_left]: pat_arm_smc[left] 99 ticks @ 10000 us | period jitter mean 37 max 139 us | callback wall mean 47 max 92 / cpu mean 46 max 86 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-3] profile over 99 ticks (us)  TICK mean=11.2 max=19.8 over_period=0/99
+[smc_node-3]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-3]   phases dynamics(n=99 mean=5.0 max=9.0) jdotqdot(n=99 mean=0.8 max=1.6) pinv(n=99 mean=1.6 max=5.4) lambda(n=99 mean=0.2 max=0.5) law(n=99 mean=1.9 max=6.3) finalize(n=99 mean=0.4 max=1.1) 
+[smc_node-3]   unattributed=1.4 us/tick  trace 100/6000[0m
+[smc_node-3] [0m[INFO] [1793253563.781038287] [pat_arm_smc_left]: pat_arm_smc[left] reference: trajectory | 991 trajectory ticks, 0 node refs held past the window | windows rejected 0, truncated 0[0m
+[smc_node-3] [0m[INFO] [1793253563.781048898] [pat_arm_smc_left]: pat_arm_smc[left] publish us  torque(n=100 mean=16.5 max=24.9)   ee_pose(n=100 mean=21.0 max=57.0) 
+[smc_node-3]   hist(publish_us) <=50.0:198 <=100.0:2 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[smc_node-4] [0m[INFO] [1793253564.774457357] [pat_arm_smc_right]: pat_arm_smc[right] 99 ticks @ 10000 us | period jitter mean 39 max 135 us | callback wall mean 54 max 134 / cpu mean 53 max 133 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-4] profile over 99 ticks (us)  TICK mean=11.1 max=36.9 over_period=0/99
+[smc_node-4]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-4]   phases dynamics(n=99 mean=5.0 max=16.5) jdotqdot(n=99 mean=0.9 max=5.1) pinv(n=99 mean=1.7 max=5.4) lambda(n=99 mean=0.2 max=0.9) law(n=99 mean=1.9 max=5.9) finalize(n=99 mean=0.4 max=1.3) 
+[smc_node-4]   unattributed=1.1 us/tick  trace 100/6000[0m
+[smc_node-4] [0m[INFO] [1793253564.774511719] [pat_arm_smc_right]: pat_arm_smc[right] publish us  torque(n=100 mean=20.5 max=55.4)   ee_pose(n=100 mean=7.1 max=26.5) 
+[smc_node-4]   hist(publish_us) <=50.0:197 <=100.0:3 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793253564.776904102] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 8 max 167 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 157/1 rej, pos 157/0 rej, too_old 0, gaps 0, replays 315 (max 75 steps) | NIS yaw 0.55 pos 0.28[0m
+[smc_node-3] [0m[INFO] [1793253564.781207787] [pat_arm_smc_left]: pat_arm_smc[left] 100 ticks @ 10000 us | period jitter mean 37 max 147 us | callback wall mean 53 max 137 / cpu mean 52 max 131 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-3] profile over 100 ticks (us)  TICK mean=13.0 max=63.8 over_period=0/100
+[smc_node-3]   hist(tick) <=50.0:99 <=100.0:1 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-3]   phases dynamics(n=100 mean=5.7 max=32.4) jdotqdot(n=100 mean=0.9 max=8.1) pinv(n=100 mean=2.0 max=16.0) lambda(n=100 mean=0.2 max=2.1) law(n=100 mean=2.0 max=11.6) finalize(n=100 mean=0.5 max=4.7) 
+[smc_node-3]   unattributed=1.6 us/tick  trace 1/6000[0m
+[smc_node-3] [0m[INFO] [1793253564.781251845] [pat_arm_smc_left]: pat_arm_smc[left] reference: trajectory | 1092 trajectory ticks, 0 node refs held past the window | windows rejected 0, truncated 0[0m
+[smc_node-3] [0m[INFO] [1793253564.781271323] [pat_arm_smc_left]: pat_arm_smc[left] publish us  torque(n=101 mean=16.7 max=65.7)   ee_pose(n=100 mean=20.5 max=39.2) 
+[smc_node-3]   hist(publish_us) <=50.0:199 <=100.0:2 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[smc_node-4] [0m[INFO] [1793253565.774487082] [pat_arm_smc_right]: pat_arm_smc[right] 99 ticks @ 10000 us | period jitter mean 35 max 137 us | callback wall mean 50 max 106 / cpu mean 48 max 102 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-4] profile over 99 ticks (us)  TICK mean=9.9 max=22.5 over_period=0/99
+[smc_node-4]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-4]   phases dynamics(n=99 mean=4.4 max=10.1) jdotqdot(n=99 mean=0.7 max=1.7) pinv(n=99 mean=1.6 max=4.9) lambda(n=99 mean=0.2 max=0.7) law(n=99 mean=1.6 max=3.7) finalize(n=99 mean=0.3 max=0.9) 
+[smc_node-4]   unattributed=1.0 us/tick  trace 100/6000[0m
+[smc_node-4] [0m[INFO] [1793253565.774541202] [pat_arm_smc_right]: pat_arm_smc[right] publish us  torque(n=100 mean=19.0 max=35.9)   ee_pose(n=100 mean=8.5 max=38.5) 
+[smc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793253565.776934573] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 8 max 167 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 162/1 rej, pos 162/0 rej, too_old 0, gaps 0, replays 325 (max 75 steps) | NIS yaw 1.65 pos 0.38[0m
+[smc_node-3] [0m[INFO] [1793253565.803294978] [pat_arm_smc_left]: pat_arm_smc[left] 101 ticks @ 10000 us | period jitter mean 45 max 143 us | callback wall mean 46 max 95 / cpu mean 45 max 94 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-3] profile over 101 ticks (us)  TICK mean=10.9 max=25.2 over_period=0/101
+[smc_node-3]   hist(tick) <=50.0:101 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-3]   phases dynamics(n=101 mean=4.8 max=12.1) jdotqdot(n=101 mean=0.9 max=5.3) pinv(n=101 mean=1.6 max=6.6) lambda(n=101 mean=0.2 max=0.4) law(n=101 mean=1.7 max=3.4) finalize(n=101 mean=0.4 max=0.7) 
+[smc_node-3]   unattributed=1.3 us/tick  trace 3/6000[0m
+[smc_node-3] [0m[INFO] [1793253565.803335624] [pat_arm_smc_left]: pat_arm_smc[left] reference: trajectory | 1194 trajectory ticks, 0 node refs held past the window | windows rejected 0, truncated 0[0m
+[smc_node-3] [0m[INFO] [1793253565.803354291] [pat_arm_smc_left]: pat_arm_smc[left] publish us  torque(n=102 mean=16.2 max=34.3)   ee_pose(n=100 mean=19.4 max=43.5) 
+[smc_node-3]   hist(publish_us) <=50.0:202 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[smc_node-4] [0m[INFO] [1793253566.774532773] [pat_arm_smc_right]: pat_arm_smc[right] 99 ticks @ 10000 us | period jitter mean 29 max 118 us | callback wall mean 55 max 106 / cpu mean 52 max 100 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-4] profile over 99 ticks (us)  TICK mean=8.9 max=19.3 over_period=0/99
+[smc_node-4]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-4]   phases dynamics(n=99 mean=4.0 max=9.5) jdotqdot(n=99 mean=0.7 max=1.5) pinv(n=99 mean=1.3 max=2.6) lambda(n=99 mean=0.2 max=0.4) law(n=99 mean=1.5 max=3.3) finalize(n=99 mean=0.3 max=0.8) 
+[smc_node-4]   unattributed=0.9 us/tick  trace 100/6000[0m
+[smc_node-4] [0m[INFO] [1793253566.774621022] [pat_arm_smc_right]: pat_arm_smc[right] publish us  torque(n=100 mean=16.8 max=33.1)   ee_pose(n=100 mean=6.0 max=11.9) 
+[smc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793253566.776965405] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 8 max 167 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 167/1 rej, pos 167/0 rej, too_old 0, gaps 0, replays 335 (max 75 steps) | NIS yaw 0.22 pos 0.57[0m
+[smc_node-3] [0m[INFO] [1793253566.781232219] [pat_arm_smc_left]: pat_arm_smc[left] 97 ticks @ 10000 us | period jitter mean 46 max 175 us | callback wall mean 46 max 95 / cpu mean 45 max 95 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-3] profile over 97 ticks (us)  TICK mean=11.7 max=66.0 over_period=0/97
+[smc_node-3]   hist(tick) <=50.0:96 <=100.0:1 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-3]   phases dynamics(n=97 mean=5.4 max=47.1) jdotqdot(n=97 mean=0.9 max=7.7) pinv(n=97 mean=1.6 max=5.4) lambda(n=97 mean=0.2 max=0.4) law(n=97 mean=1.8 max=3.1) finalize(n=97 mean=0.4 max=0.8) 
+[smc_node-3]   unattributed=1.4 us/tick  trace 1/6000[0m
+[smc_node-3] [0m[INFO] [1793253566.781273155] [pat_arm_smc_left]: pat_arm_smc[left] reference: trajectory | 1292 trajectory ticks, 0 node refs held past the window | windows rejected 0, truncated 0[0m
+[smc_node-3] [0m[INFO] [1793253566.781292486] [pat_arm_smc_left]: pat_arm_smc[left] publish us  torque(n=98 mean=16.4 max=25.9)   ee_pose(n=100 mean=16.0 max=46.0) 
+[smc_node-3]   hist(publish_us) <=50.0:198 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[smc_node-4] [0m[INFO] [1793253567.774551429] [pat_arm_smc_right]: pat_arm_smc[right] 99 ticks @ 10000 us | period jitter mean 39 max 139 us | callback wall mean 53 max 101 / cpu mean 51 max 95 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-4] profile over 99 ticks (us)  TICK mean=9.1 max=17.5 over_period=0/99
+[smc_node-4]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-4]   phases dynamics(n=99 mean=4.0 max=8.2) jdotqdot(n=99 mean=0.7 max=1.2) pinv(n=99 mean=1.4 max=4.9) lambda(n=99 mean=0.2 max=0.5) law(n=99 mean=1.5 max=6.5) finalize(n=99 mean=0.3 max=0.9) 
+[smc_node-4]   unattributed=0.9 us/tick  trace 100/6000[0m
+[smc_node-4] [0m[INFO] [1793253567.774606503] [pat_arm_smc_right]: pat_arm_smc[right] publish us  torque(n=101 mean=17.8 max=45.2)   ee_pose(n=100 mean=6.2 max=12.7) 
+[smc_node-4]   hist(publish_us) <=50.0:201 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793253567.776994886] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 8 max 167 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 172/1 rej, pos 172/0 rej, too_old 0, gaps 0, replays 345 (max 75 steps) | NIS yaw 0.06 pos 1.36[0m
+[smc_node-3] [0m[INFO] [1793253567.781145362] [pat_arm_smc_left]: pat_arm_smc[left] 98 ticks @ 10000 us | period jitter mean 53 max 223 us | callback wall mean 49 max 111 / cpu mean 47 max 105 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-3] profile over 98 ticks (us)  TICK mean=11.5 max=20.4 over_period=0/98
+[smc_node-3]   hist(tick) <=50.0:98 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-3]   phases dynamics(n=98 mean=5.2 max=9.7) jdotqdot(n=98 mean=0.8 max=1.8) pinv(n=98 mean=1.7 max=3.8) lambda(n=98 mean=0.2 max=0.6) law(n=98 mean=1.9 max=7.3) finalize(n=98 mean=0.4 max=0.9) 
+[smc_node-3]   unattributed=1.4 us/tick  trace 100/6000[0m
+[smc_node-3] [0m[INFO] [1793253567.781176523] [pat_arm_smc_left]: pat_arm_smc[left] reference: trajectory | 1391 trajectory ticks, 0 node refs held past the window | windows rejected 0, truncated 0[0m
+[smc_node-3] [0m[INFO] [1793253567.781189776] [pat_arm_smc_left]: pat_arm_smc[left] publish us  torque(n=100 mean=16.9 max=37.9)   ee_pose(n=100 mean=19.6 max=50.6) 
+[smc_node-3]   hist(publish_us) <=50.0:199 <=100.0:1 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[smc_node-4] [0m[INFO] [1793253568.774585426] [pat_arm_smc_right]: pat_arm_smc[right] 98 ticks @ 10000 us | period jitter mean 23 max 118 us | callback wall mean 50 max 92 / cpu mean 49 max 85 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-4] profile over 98 ticks (us)  TICK mean=8.4 max=16.4 over_period=0/98
+[smc_node-4]   hist(tick) <=50.0:98 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-4]   phases dynamics(n=98 mean=3.7 max=7.1) jdotqdot(n=98 mean=0.6 max=1.2) pinv(n=98 mean=1.3 max=3.5) lambda(n=98 mean=0.2 max=0.3) law(n=98 mean=1.4 max=2.8) finalize(n=98 mean=0.3 max=1.0) 
+[smc_node-4]   unattributed=0.8 us/tick  trace 100/6000[0m
+[smc_node-4] [0m[INFO] [1793253568.774640077] [pat_arm_smc_right]: pat_arm_smc[right] publish us  torque(n=100 mean=16.4 max=33.3)   ee_pose(n=100 mean=4.4 max=10.2) 
+[smc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793253568.777035094] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 8 max 167 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 177/1 rej, pos 177/0 rej, too_old 0, gaps 0, replays 355 (max 75 steps) | NIS yaw 3.74 pos 0.03[0m
+[smc_node-3] [0m[INFO] [1793253568.781331944] [pat_arm_smc_left]: pat_arm_smc[left] 99 ticks @ 10000 us | period jitter mean 36 max 167 us | callback wall mean 50 max 82 / cpu mean 47 max 81 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-3] profile over 99 ticks (us)  TICK mean=10.9 max=18.6 over_period=0/99
+[smc_node-3]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-3]   phases dynamics(n=99 mean=4.9 max=9.6) jdotqdot(n=99 mean=0.8 max=1.5) pinv(n=99 mean=1.6 max=2.6) lambda(n=99 mean=0.2 max=0.4) law(n=99 mean=1.8 max=3.2) finalize(n=99 mean=0.3 max=0.7) 
+[smc_node-3]   unattributed=1.4 us/tick  trace 1/6000[0m
+[smc_node-3] [0m[INFO] [1793253568.781373359] [pat_arm_smc_left]: pat_arm_smc[left] reference: trajectory | 1492 trajectory ticks, 0 node refs held past the window | windows rejected 0, truncated 0[0m
+[smc_node-3] [0m[INFO] [1793253568.781395814] [pat_arm_smc_left]: pat_arm_smc[left] publish us  torque(n=100 mean=16.9 max=55.0)   ee_pose(n=100 mean=19.9 max=48.3) 
+[smc_node-3]   hist(publish_us) <=50.0:199 <=100.0:1 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[smc_node-4] [0m[INFO] [1793253569.774638057] [pat_arm_smc_right]: pat_arm_smc[right] 99 ticks @ 10000 us | period jitter mean 34 max 184 us | callback wall mean 54 max 103 / cpu mean 53 max 98 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-4] profile over 99 ticks (us)  TICK mean=8.3 max=28.5 over_period=0/99
+[smc_node-4]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-4]   phases dynamics(n=99 mean=3.8 max=23.2) jdotqdot(n=99 mean=0.6 max=1.7) pinv(n=99 mean=1.2 max=3.4) lambda(n=99 mean=0.2 max=0.4) law(n=99 mean=1.3 max=3.6) finalize(n=99 mean=0.3 max=0.9) 
+[smc_node-4]   unattributed=0.9 us/tick  trace 1/6000[0m
+[smc_node-4] [0m[INFO] [1793253569.774692172] [pat_arm_smc_right]: pat_arm_smc[right] publish us  torque(n=100 mean=15.9 max=41.3)   ee_pose(n=100 mean=6.6 max=14.7) 
+[smc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793253569.777086629] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 7 max 167 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 182/1 rej, pos 182/0 rej, too_old 0, gaps 0, replays 365 (max 75 steps) | NIS yaw 0.37 pos 0.46[0m
+[smc_node-3] [0m[INFO] [1793253569.781334419] [pat_arm_smc_left]: pat_arm_smc[left] 99 ticks @ 10000 us | period jitter mean 31 max 153 us | callback wall mean 47 max 92 / cpu mean 46 max 89 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-3] profile over 99 ticks (us)  TICK mean=11.6 max=37.9 over_period=0/99
+[smc_node-3]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-3]   phases dynamics(n=99 mean=5.2 max=28.3) jdotqdot(n=99 mean=0.9 max=8.2) pinv(n=99 mean=1.7 max=10.9) lambda(n=99 mean=0.2 max=0.6) law(n=99 mean=1.8 max=4.9) finalize(n=99 mean=0.4 max=4.0) 
+[smc_node-3]   unattributed=1.4 us/tick  trace 1/6000[0m
+[smc_node-3] [0m[INFO] [1793253569.781383634] [pat_arm_smc_left]: pat_arm_smc[left] reference: trajectory | 1592 trajectory ticks, 0 node refs held past the window | windows rejected 0, truncated 0[0m
+[smc_node-3] [0m[INFO] [1793253569.781406492] [pat_arm_smc_left]: pat_arm_smc[left] publish us  torque(n=100 mean=15.8 max=33.6)   ee_pose(n=100 mean=20.9 max=56.3) 
+[smc_node-3]   hist(publish_us) <=50.0:198 <=100.0:2 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[smc_node-4] [0m[INFO] [1793253570.774660731] [pat_arm_smc_right]: pat_arm_smc[right] 99 ticks @ 10000 us | period jitter mean 37 max 133 us | callback wall mean 52 max 97 / cpu mean 50 max 90 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-4] profile over 99 ticks (us)  TICK mean=9.5 max=23.0 over_period=0/99
+[smc_node-4]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-4]   phases dynamics(n=99 mean=4.3 max=10.5) jdotqdot(n=99 mean=0.7 max=1.8) pinv(n=99 mean=1.5 max=3.1) lambda(n=99 mean=0.2 max=0.5) law(n=99 mean=1.6 max=4.2) finalize(n=99 mean=0.3 max=0.7) 
+[smc_node-4]   unattributed=1.0 us/tick  trace 1/6000[0m
+[smc_node-4] [0m[INFO] [1793253570.774717790] [pat_arm_smc_right]: pat_arm_smc[right] publish us  torque(n=100 mean=17.1 max=34.9)   ee_pose(n=100 mean=6.6 max=18.5) 
+[smc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793253570.777104262] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 8 max 167 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 187/1 rej, pos 187/0 rej, too_old 0, gaps 0, replays 375 (max 75 steps) | NIS yaw 0.05 pos 0.03[0m
+[smc_node-3] [0m[INFO] [1793253570.781371689] [pat_arm_smc_left]: pat_arm_smc[left] 99 ticks @ 10000 us | period jitter mean 37 max 140 us | callback wall mean 50 max 110 / cpu mean 49 max 108 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-3] profile over 99 ticks (us)  TICK mean=10.7 max=24.6 over_period=0/99
+[smc_node-3]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-3]   phases dynamics(n=99 mean=4.7 max=9.8) jdotqdot(n=99 mean=0.8 max=1.8) pinv(n=99 mean=1.5 max=3.0) lambda(n=99 mean=0.2 max=0.5) law(n=99 mean=1.8 max=6.7) finalize(n=99 mean=0.4 max=0.9) 
+[smc_node-3]   unattributed=1.3 us/tick  trace 1/6000[0m
+[smc_node-3] [0m[INFO] [1793253570.781412697] [pat_arm_smc_left]: pat_arm_smc[left] reference: trajectory | 1692 trajectory ticks, 0 node refs held past the window | windows rejected 0, truncated 0[0m
+[smc_node-3] [0m[INFO] [1793253570.781430918] [pat_arm_smc_left]: pat_arm_smc[left] publish us  torque(n=100 mean=16.9 max=33.6)   ee_pose(n=100 mean=16.1 max=37.3) 
+[smc_node-3]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[smc_node-4] [0m[INFO] [1793253571.774571747] [pat_arm_smc_right]: pat_arm_smc[right] 98 ticks @ 10000 us | period jitter mean 34 max 146 us | callback wall mean 57 max 158 / cpu mean 55 max 152 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-4] profile over 98 ticks (us)  TICK mean=9.6 max=24.3 over_period=0/98
+[smc_node-4]   hist(tick) <=50.0:98 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-4]   phases dynamics(n=98 mean=4.2 max=11.6) jdotqdot(n=98 mean=0.7 max=2.5) pinv(n=98 mean=1.4 max=3.0) lambda(n=98 mean=0.2 max=0.7) law(n=98 mean=1.7 max=5.6) finalize(n=98 mean=0.3 max=0.8) 
+[smc_node-4]   unattributed=1.0 us/tick  trace 100/6000[0m
+[smc_node-4] [0m[INFO] [1793253571.774619545] [pat_arm_smc_right]: pat_arm_smc[right] publish us  torque(n=99 mean=16.9 max=37.8)   ee_pose(n=100 mean=6.5 max=15.4) 
+[smc_node-4]   hist(publish_us) <=50.0:199 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793253571.777140294] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 8 max 167 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 192/1 rej, pos 192/0 rej, too_old 0, gaps 0, replays 385 (max 75 steps) | NIS yaw 0.65 pos 0.19[0m
+[smc_node-3] [0m[INFO] [1793253571.781393353] [pat_arm_smc_left]: pat_arm_smc[left] 99 ticks @ 10000 us | period jitter mean 48 max 166 us | callback wall mean 55 max 106 / cpu mean 54 max 105 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-3] profile over 99 ticks (us)  TICK mean=12.4 max=30.0 over_period=0/99
+[smc_node-3]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-3]   phases dynamics(n=99 mean=5.5 max=13.4) jdotqdot(n=99 mean=0.9 max=2.2) pinv(n=99 mean=1.7 max=4.1) lambda(n=99 mean=0.2 max=2.4) law(n=99 mean=2.1 max=6.4) finalize(n=99 mean=0.4 max=1.0) 
+[smc_node-3]   unattributed=1.6 us/tick  trace 1/6000[0m
+[smc_node-3] [0m[INFO] [1793253571.781429232] [pat_arm_smc_left]: pat_arm_smc[left] reference: trajectory | 1792 trajectory ticks, 0 node refs held past the window | windows rejected 0, truncated 0[0m
+[smc_node-3] [0m[INFO] [1793253571.781449148] [pat_arm_smc_left]: pat_arm_smc[left] publish us  torque(n=100 mean=19.1 max=64.6)   ee_pose(n=100 mean=18.5 max=51.1) 
+[smc_node-3]   hist(publish_us) <=50.0:198 <=100.0:2 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[smc_node-4] [0m[INFO] [1793253572.774723672] [pat_arm_smc_right]: pat_arm_smc[right] 100 ticks @ 10000 us | period jitter mean 42 max 131 us | callback wall mean 53 max 105 / cpu mean 51 max 100 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-4] profile over 100 ticks (us)  TICK mean=10.3 max=21.6 over_period=0/100
+[smc_node-4]   hist(tick) <=50.0:100 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-4]   phases dynamics(n=100 mean=4.7 max=10.1) jdotqdot(n=100 mean=0.8 max=1.8) pinv(n=100 mean=1.5 max=3.1) lambda(n=100 mean=0.2 max=0.8) law(n=100 mean=1.7 max=3.7) finalize(n=100 mean=0.3 max=1.1) 
+[smc_node-4]   unattributed=1.0 us/tick  trace 1/6000[0m
+[smc_node-4] [0m[INFO] [1793253572.774774315] [pat_arm_smc_right]: pat_arm_smc[right] publish us  torque(n=101 mean=18.1 max=38.6)   ee_pose(n=100 mean=7.1 max=32.4) 
+[smc_node-4]   hist(publish_us) <=50.0:201 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793253572.777177416] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 8 max 167 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 197/1 rej, pos 197/0 rej, too_old 0, gaps 0, replays 395 (max 75 steps) | NIS yaw 0.28 pos 1.85[0m
+[smc_node-3] [0m[INFO] [1793253572.781459306] [pat_arm_smc_left]: pat_arm_smc[left] 99 ticks @ 10000 us | period jitter mean 33 max 154 us | callback wall mean 50 max 95 / cpu mean 49 max 95 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-3] profile over 99 ticks (us)  TICK mean=11.7 max=52.9 over_period=0/99
+[smc_node-3]   hist(tick) <=50.0:98 <=100.0:1 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-3]   phases dynamics(n=99 mean=5.2 max=32.1) jdotqdot(n=99 mean=0.9 max=9.0) pinv(n=99 mean=1.7 max=12.4) lambda(n=99 mean=0.2 max=1.7) law(n=99 mean=1.8 max=15.2) finalize(n=99 mean=0.4 max=0.7) 
+[smc_node-3]   unattributed=1.4 us/tick  trace 1/6000[0m
+[smc_node-3] [0m[INFO] [1793253572.781514346] [pat_arm_smc_left]: pat_arm_smc[left] reference: trajectory | 1892 trajectory ticks, 0 node refs held past the window | windows rejected 0, truncated 0[0m
+[smc_node-3] [0m[INFO] [1793253572.781532577] [pat_arm_smc_left]: pat_arm_smc[left] publish us  torque(n=100 mean=16.5 max=31.2)   ee_pose(n=100 mean=19.6 max=36.8) 
+[smc_node-3]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[smc_node-4] [0m[INFO] [1793253573.774767340] [pat_arm_smc_right]: pat_arm_smc[right] 99 ticks @ 10000 us | period jitter mean 37 max 144 us | callback wall mean 47 max 87 / cpu mean 46 max 79 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-4] profile over 99 ticks (us)  TICK mean=9.7 max=20.5 over_period=0/99
+[smc_node-4]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-4]   phases dynamics(n=99 mean=4.3 max=10.1) jdotqdot(n=99 mean=0.7 max=1.7) pinv(n=99 mean=1.5 max=5.8) lambda(n=99 mean=0.2 max=2.4) law(n=99 mean=1.6 max=3.2) finalize(n=99 mean=0.3 max=0.7) 
+[smc_node-4]   unattributed=1.0 us/tick  trace 1/6000[0m
+[smc_node-4] [0m[INFO] [1793253573.774820149] [pat_arm_smc_right]: pat_arm_smc[right] publish us  torque(n=100 mean=18.3 max=36.6)   ee_pose(n=100 mean=12.6 max=45.5) 
+[smc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793253573.777242767] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 8 max 167 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 202/1 rej, pos 202/0 rej, too_old 0, gaps 0, replays 405 (max 75 steps) | NIS yaw 0.18 pos 0.05[0m
+[smc_node-3] [0m[INFO] [1793253573.781354860] [pat_arm_smc_left]: pat_arm_smc[left] 99 ticks @ 10000 us | period jitter mean 41 max 159 us | callback wall mean 49 max 87 / cpu mean 48 max 85 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-3] profile over 99 ticks (us)  TICK mean=11.4 max=47.1 over_period=0/99
+[smc_node-3]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-3]   phases dynamics(n=99 mean=5.0 max=12.7) jdotqdot(n=99 mean=0.8 max=7.7) pinv(n=99 mean=1.7 max=16.3) lambda(n=99 mean=0.2 max=1.4) law(n=99 mean=1.8 max=3.3) finalize(n=99 mean=0.4 max=0.8) 
+[smc_node-3]   unattributed=1.4 us/tick  trace 1/6000[0m
+[smc_node-3] [0m[INFO] [1793253573.781386723] [pat_arm_smc_left]: pat_arm_smc[left] reference: trajectory | 1992 trajectory ticks, 0 node refs held past the window | windows rejected 0, truncated 0[0m
+[smc_node-3] [0m[INFO] [1793253573.781397828] [pat_arm_smc_left]: pat_arm_smc[left] publish us  torque(n=100 mean=18.1 max=34.4)   ee_pose(n=100 mean=16.0 max=40.1) 
+[smc_node-3]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[smc_node-4] [0m[INFO] [1793253574.774799324] [pat_arm_smc_right]: pat_arm_smc[right] 99 ticks @ 10000 us | period jitter mean 37 max 130 us | callback wall mean 47 max 85 / cpu mean 46 max 79 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-4] profile over 99 ticks (us)  TICK mean=9.6 max=19.3 over_period=0/99
+[smc_node-4]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-4]   phases dynamics(n=99 mean=4.2 max=8.8) jdotqdot(n=99 mean=0.8 max=5.0) pinv(n=99 mean=1.5 max=2.6) lambda(n=99 mean=0.2 max=0.4) law(n=99 mean=1.6 max=3.1) finalize(n=99 mean=0.3 max=0.7) 
+[smc_node-4]   unattributed=1.0 us/tick  trace 1/6000[0m
+[smc_node-4] [0m[INFO] [1793253574.774856804] [pat_arm_smc_right]: pat_arm_smc[right] publish us  torque(n=100 mean=17.9 max=31.3)   ee_pose(n=100 mean=7.7 max=34.9) 
+[smc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793253574.777258524] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 8 max 167 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 207/1 rej, pos 207/0 rej, too_old 0, gaps 0, replays 415 (max 75 steps) | NIS yaw 0.24 pos 1.38[0m
+[smc_node-3] [0m[INFO] [1793253574.781550343] [pat_arm_smc_left]: pat_arm_smc[left] 99 ticks @ 10000 us | period jitter mean 37 max 140 us | callback wall mean 47 max 106 / cpu mean 46 max 105 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-3] profile over 99 ticks (us)  TICK mean=11.3 max=68.1 over_period=0/99
+[smc_node-3]   hist(tick) <=50.0:98 <=100.0:1 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-3]   phases dynamics(n=99 mean=5.3 max=54.3) jdotqdot(n=99 mean=0.8 max=7.6) pinv(n=99 mean=1.5 max=2.8) lambda(n=99 mean=0.2 max=0.5) law(n=99 mean=1.7 max=3.1) finalize(n=99 mean=0.4 max=0.8) 
+[smc_node-3]   unattributed=1.3 us/tick  trace 0/6000[0m
+[smc_node-3] [0m[INFO] [1793253574.781594859] [pat_arm_smc_left]: pat_arm_smc[left] reference: trajectory | 2092 trajectory ticks, 0 node refs held past the window | windows rejected 0, truncated 0[0m
+[smc_node-3] [0m[INFO] [1793253574.781613702] [pat_arm_smc_left]: pat_arm_smc[left] publish us  torque(n=100 mean=16.0 max=29.1)   ee_pose(n=100 mean=18.7 max=41.6) 
+[smc_node-3]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[smc_node-4] [0m[INFO] [1793253575.774716510] [pat_arm_smc_right]: pat_arm_smc[right] 99 ticks @ 10000 us | period jitter mean 42 max 128 us | callback wall mean 51 max 98 / cpu mean 50 max 97 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-4] profile over 99 ticks (us)  TICK mean=10.0 max=26.4 over_period=0/99
+[smc_node-4]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-4]   phases dynamics(n=99 mean=4.5 max=14.4) jdotqdot(n=99 mean=0.8 max=1.7) pinv(n=99 mean=1.5 max=3.5) lambda(n=99 mean=0.2 max=1.0) law(n=99 mean=1.7 max=4.2) finalize(n=99 mean=0.3 max=1.0) 
+[smc_node-4]   unattributed=1.0 us/tick  trace 1/6000[0m
+[smc_node-4] [0m[INFO] [1793253575.774751791] [pat_arm_smc_right]: pat_arm_smc[right] publish us  torque(n=100 mean=17.1 max=37.7)   ee_pose(n=100 mean=7.3 max=13.7) 
+[smc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793253575.777286792] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 8 max 167 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 212/1 rej, pos 212/0 rej, too_old 0, gaps 0, replays 425 (max 75 steps) | NIS yaw 0.41 pos 0.50[0m
+[smc_node-3] [0m[INFO] [1793253575.781423745] [pat_arm_smc_left]: pat_arm_smc[left] 99 ticks @ 10000 us | period jitter mean 45 max 137 us | callback wall mean 48 max 104 / cpu mean 47 max 98 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-3] profile over 99 ticks (us)  TICK mean=12.0 max=50.8 over_period=0/99
+[smc_node-3]   hist(tick) <=50.0:98 <=100.0:1 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-3]   phases dynamics(n=99 mean=5.6 max=35.8) jdotqdot(n=99 mean=0.9 max=7.6) pinv(n=99 mean=1.6 max=8.9) lambda(n=99 mean=0.2 max=2.1) law(n=99 mean=1.8 max=16.4) finalize(n=99 mean=0.5 max=8.5) 
+[smc_node-3]   unattributed=1.4 us/tick  trace 100/6000[0m
+[smc_node-3] [0m[INFO] [1793253575.781446739] [pat_arm_smc_left]: pat_arm_smc[left] reference: trajectory | 2192 trajectory ticks, 0 node refs held past the window | windows rejected 0, truncated 0[0m
+[smc_node-3] [0m[INFO] [1793253575.781454380] [pat_arm_smc_left]: pat_arm_smc[left] publish us  torque(n=100 mean=15.0 max=31.9)   ee_pose(n=100 mean=15.2 max=36.5) 
+[smc_node-3]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[smc_node-4] [0m[INFO] [1793253576.774872136] [pat_arm_smc_right]: pat_arm_smc[right] 99 ticks @ 10000 us | period jitter mean 39 max 217 us | callback wall mean 54 max 129 / cpu mean 52 max 128 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-4] profile over 99 ticks (us)  TICK mean=10.6 max=31.5 over_period=0/99
+[smc_node-4]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-4]   phases dynamics(n=99 mean=4.8 max=23.2) jdotqdot(n=99 mean=0.9 max=8.2) pinv(n=99 mean=1.5 max=3.9) lambda(n=99 mean=0.2 max=0.6) law(n=99 mean=1.8 max=5.6) finalize(n=99 mean=0.4 max=1.0) 
+[smc_node-4]   unattributed=1.1 us/tick  trace 1/6000[0m
+[smc_node-4] [0m[INFO] [1793253576.774956237] [pat_arm_smc_right]: pat_arm_smc[right] publish us  torque(n=100 mean=17.8 max=35.6)   ee_pose(n=100 mean=8.1 max=33.8) 
+[smc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793253576.777343373] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 8 max 167 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 217/1 rej, pos 217/0 rej, too_old 0, gaps 0, replays 435 (max 75 steps) | NIS yaw 0.03 pos 0.20[0m
+[smc_node-3] [0m[INFO] [1793253576.781568446] [pat_arm_smc_left]: pat_arm_smc[left] 99 ticks @ 10000 us | period jitter mean 47 max 156 us | callback wall mean 53 max 145 / cpu mean 52 max 139 us | deadline misses 0 (longest run 0) | skipped periods 0
+[smc_node-3] profile over 99 ticks (us)  TICK mean=12.3 max=48.4 over_period=0/99
+[smc_node-3]   hist(tick) <=50.0:99 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 
+[smc_node-3]   phases dynamics(n=99 mean=5.2 max=12.9) jdotqdot(n=99 mean=0.9 max=7.8) pinv(n=99 mean=2.0 max=18.7) lambda(n=99 mean=0.2 max=2.3) law(n=99 mean=2.0 max=16.7) finalize(n=99 mean=0.4 max=0.9) 
+[smc_node-3]   unattributed=1.5 us/tick  trace 100/6000[0m
+[smc_node-3] [0m[INFO] [1793253576.781607584] [pat_arm_smc_left]: pat_arm_smc[left] reference: trajectory | 2292 trajectory ticks, 0 node refs held past the window | windows rejected 0, truncated 0[0m
+[smc_node-3] [0m[INFO] [1793253576.781628061] [pat_arm_smc_left]: pat_arm_smc[left] publish us  torque(n=100 mean=17.3 max=65.0)   ee_pose(n=100 mean=15.4 max=39.5) 
+[smc_node-3]   hist(publish_us) <=50.0:199 <=100.0:1 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[WARNING] [launch]: user interrupted with ctrl-c (SIGINT)
+[simulation_node-1] [0m[INFO] [1793253576.866535232] [rclcpp]: signal_handler(SIGINT/SIGTERM)[0m
+[nav_node-2] [0m[INFO] [1793253576.866570161] [rclcpp]: signal_handler(SIGINT/SIGTERM)[0m
+[smc_node-4] [0m[INFO] [1793253576.866569094] [rclcpp]: signal_handler(SIGINT/SIGTERM)[0m
+[smc_node-3] [0m[INFO] [1793253576.866563617] [rclcpp]: signal_handler(SIGINT/SIGTERM)[0m
+[INFO] [smc_node-4]: sending signal 'SIGINT' to process[smc_node-4]
+[INFO] [smc_node-3]: sending signal 'SIGINT' to process[smc_node-3]
+[INFO] [nav_node-2]: sending signal 'SIGINT' to process[nav_node-2]
+[INFO] [simulation_node-1]: sending signal 'SIGINT' to process[simulation_node-1]
+[ERROR] [smc_node-4]: process has died [pid 32653, exit code -2, cmd '/ws/install/pat_arm_control/lib/pat_arm_control/smc_node --ros-args -r __node:=pat_arm_smc_right --params-file /ws/data/thesis_eval/live/pilot/trials/3b23ed34dc37b8d4.partial/arm_common.yaml --params-file /ws/data/thesis_eval/live/pilot/trials/3b23ed34dc37b8d4.partial/smc.yaml --params-file /tmp/launch_params_nnvowhif'].
+[simulation_node-1] [0m[INFO] [1793253576.871923874] [rclcpp]: signal_handler(SIGINT/SIGTERM)[0m
+[ERROR] [smc_node-3]: process has died [pid 32651, exit code -2, cmd '/ws/install/pat_arm_control/lib/pat_arm_control/smc_node --ros-args -r __node:=pat_arm_smc_left --params-file /ws/data/thesis_eval/live/pilot/trials/3b23ed34dc37b8d4.partial/arm_common.yaml --params-file /ws/data/thesis_eval/live/pilot/trials/3b23ed34dc37b8d4.partial/smc.yaml --params-file /tmp/launch_params_nar2dv30'].
+[ERROR] [nav_node-2]: process has died [pid 32649, exit code -2, cmd '/ws/install/pat_gnc/lib/pat_gnc/nav_node --ros-args -r __node:=pat_nav --params-file /ws/data/thesis_eval/live/pilot/trials/3b23ed34dc37b8d4.partial/nav_flight.yaml --params-file /tmp/launch_params_e083mqcr'].
+[INFO] [simulation_node-1]: process has finished cleanly [pid 32647]

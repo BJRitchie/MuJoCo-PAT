@@ -1,0 +1,830 @@
+[INFO] [launch]: All log files can be found below /home/dev/.ros/log/2026-10-29-06-27-17-530974-ben-XPS-15-9530-41734
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [simulation_node-1]: process started with pid [41735]
+[INFO] [nav_node-2]: process started with pid [41737]
+[INFO] [nmpc_node-3]: process started with pid [41739]
+[INFO] [nmpc_node-4]: process started with pid [41741]
+[nav_node-2] [0m[INFO] [1793255237.583911243] [pat_nav]: nav_node: worst replay of 256 steps measured at 474 us; worst wake (2 replays) 947 us against a budget of 1000 us (half of 1/nav_hz)[0m
+[nav_node-2] [0m[INFO] [1793255237.586516461] [pat_nav]: nav_node: navigator imu_ekf, thread 500 Hz, publishing /chaser/nav/odom at 100 Hz[0m
+[nmpc_node-3] [0m[INFO] [1793255237.595750403] [pat_arm_nmpc_left]: pat_arm_nmpc[left]: tracing every tick to /ws/data/thesis_eval/live/pilot/trials/b95a253fd96cb648.partial/trace_left.csv[0m
+[nmpc_node-3] [0m[INFO] [1793255237.595871404] [pat_arm_nmpc_left]: pat_arm_nmpc[left]: model N=6, owned=3, ee_site=ee_site_L, N=45 Ts=0.033 ctrl=100 Hz[0m
+[nmpc_node-4] [0m[INFO] [1793255237.602768362] [pat_arm_nmpc_right]: pat_arm_nmpc[right]: tracing every tick to /ws/data/thesis_eval/live/pilot/trials/b95a253fd96cb648.partial/trace_right.csv[0m
+[nmpc_node-4] [0m[INFO] [1793255237.602886443] [pat_arm_nmpc_right]: pat_arm_nmpc[right]: model N=6, owned=3, ee_site=ee_site_R, N=45 Ts=0.033 ctrl=100 Hz[0m
+[simulation_node-1] [0m[INFO] [1793255237.833623058] [pat_simulation]: MuJoCo loaded. dt=0.0020 s[0m
+[simulation_node-1] [0m[INFO] [1793255237.833832297] [pat_simulation]: Applied initial_arm_qpos override (6 joints)[0m
+[simulation_node-1] [33m[WARN] [1793255237.835227177] [pat_simulation]: sensors: IMPERFECT, seed 4 -- measurements are NOT ground truth, and the committed timing and constraint figures do not apply to this run:
+[simulation_node-1]   imu_accel_x: sigma=0.025 bias=0.015 walk=0.00012/sqrt(s)
+[simulation_node-1]   imu_accel_y: sigma=0.025 bias=-0.01 walk=0.00012/sqrt(s)
+[simulation_node-1]   imu_gyro_z: sigma=0.001 bias=5e-05 walk=6e-06/sqrt(s)
+[simulation_node-1]   nav_x: sigma=0.004 bias=0.001 delay=15 steps rate=5Hz
+[simulation_node-1]   nav_y: sigma=0.0002 delay=15 steps rate=5Hz
+[simulation_node-1]   star_yaw: sigma=0.0001 delay=10 steps rate=5Hz
+[simulation_node-1]   joint_pos.joint2_L: sigma=0.0005
+[simulation_node-1]   joint_pos.joint3_L: sigma=0.0005
+[simulation_node-1]   joint_pos.joint5_L: sigma=0.0005
+[simulation_node-1]   joint_pos.joint2_R: sigma=0.0005
+[simulation_node-1]   joint_pos.joint3_R: sigma=0.0005
+[simulation_node-1]   joint_pos.joint5_R: sigma=0.0005
+[simulation_node-1]   joint_vel.joint2_L: sigma=0.01
+[simulation_node-1]   joint_vel.joint3_L: sigma=0.01
+[simulation_node-1]   joint_vel.joint5_L: sigma=0.01
+[simulation_node-1]   joint_vel.joint2_R: sigma=0.01
+[simulation_node-1]   joint_vel.joint3_R: sigma=0.01
+[simulation_node-1]   joint_vel.joint5_R: sigma=0.01[0m
+[simulation_node-1] [0m[INFO] [1793255237.837355373] [pat_simulation]: publishing /sim_only/ground_truth (constraint forces + applied wrench) -- simulation diagnostics only[0m
+[nav_node-2] [0m[INFO] [1793255238.586627680] [pat_nav]: nav_node: nav thread at SCHED_FIFO 80[0m
+[nav_node-2] [0m[INFO] [1793255238.586667297] [pat_nav]: nav[imu_ekf] 499 wakes, work mean 4 max 53 us, overruns 0 | in imu 373 pose 74, ring drops 0/0 | yaw 3/0 rej, pos 2/0 rej, too_old 0, gaps 0, replays 5 (max 75 steps) | NIS yaw 0.51 pos 0.41[0m
+[nmpc_node-3] [0m[INFO] [1793255238.595893170] [pat_arm_nmpc_left]: pat_arm_nmpc[left]: control thread at SCHED_FIFO priority 80[0m
+[nmpc_node-3] [0m[INFO] [1793255238.595922507] [pat_arm_nmpc_left]: pat_arm_nmpc[left]: control thread pinned to CPUs 4 5 [0m
+[nmpc_node-3] [0m[INFO] [1793255238.595935724] [pat_arm_nmpc_left]: pat_arm_nmpc[left]: memory locked (mlockall)[0m
+[nmpc_node-3] [0m[INFO] [1793255238.595950507] [pat_arm_nmpc_left]: pat_arm_nmpc[left]: no ee_setpoint yet — holding start pose (-0.122, -0.419)[0m
+[nmpc_node-3] [33m[WARN] [1793255238.595964837] [pat_arm_nmpc_left]: pat_arm_nmpc[left]: waiting for joint_states and/or odom (25 ticks)[0m
+[nmpc_node-3] [0m[INFO] [1793255238.596286231] [pat_arm_nmpc_left]: pat_arm_nmpc[left] 74 ticks @ 10000 us | period jitter mean 44 max 155 us | callback wall mean 902 max 1272 / cpu mean 901 max 1270 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-3] profile over 74 ticks (us)  TICK mean=864.3 max=1224.3 over_period=0/74
+[nmpc_node-3]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:71 <=2500.0:3 <=5000.0:0 >5000:0 
+[nmpc_node-3]   phases dynamics(n=74 mean=2.0 max=3.4) jdotqdot(n=74 mean=1.6 max=2.6) pinv(n=74 mean=1.9 max=3.5) lambda(n=148 mean=2.3 max=16.2) qpsolve(n=74 mean=850.1 max=1210.5) 
+[nmpc_node-3]   unattributed=4.0 us/tick
+[nmpc_node-3]   qp_iter/tick mean=7.1 max=8.0 (cap 60/solve)  hpipm_us mean=833.6 max=1177.0  retries=0  trace 74/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-3] [0m[INFO] [1793255238.596324786] [pat_arm_nmpc_left]: pat_arm_nmpc[left] publish us  torque(n=74 mean=16.0 max=33.8)   ee_pose(n=74 mean=5.6 max=11.9) 
+[nmpc_node-3]   hist(publish_us) <=50.0:148 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nmpc_node-4] [0m[INFO] [1793255238.602908138] [pat_arm_nmpc_right]: pat_arm_nmpc[right]: control thread at SCHED_FIFO priority 80[0m
+[nmpc_node-4] [0m[INFO] [1793255238.602950703] [pat_arm_nmpc_right]: pat_arm_nmpc[right]: control thread pinned to CPUs 6 7 [0m
+[nmpc_node-4] [0m[INFO] [1793255238.602965250] [pat_arm_nmpc_right]: pat_arm_nmpc[right]: memory locked (mlockall)[0m
+[nmpc_node-4] [0m[INFO] [1793255238.602976648] [pat_arm_nmpc_right]: pat_arm_nmpc[right]: no ee_setpoint yet — holding start pose (-0.122, 0.418)[0m
+[nmpc_node-4] [33m[WARN] [1793255238.602992239] [pat_arm_nmpc_right]: pat_arm_nmpc[right]: waiting for joint_states and/or odom (25 ticks)[0m
+[nmpc_node-4] [0m[INFO] [1793255238.603315523] [pat_arm_nmpc_right]: pat_arm_nmpc[right] 74 ticks @ 10000 us | period jitter mean 55 max 172 us | callback wall mean 895 max 1173 / cpu mean 894 max 1172 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-4] profile over 74 ticks (us)  TICK mean=860.0 max=1111.7 over_period=0/74
+[nmpc_node-4]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:71 <=2500.0:3 <=5000.0:0 >5000:0 
+[nmpc_node-4]   phases dynamics(n=74 mean=2.1 max=5.3) jdotqdot(n=74 mean=1.7 max=3.5) pinv(n=74 mean=2.0 max=5.2) lambda(n=148 mean=2.6 max=13.5) qpsolve(n=74 mean=844.5 max=1076.1) 
+[nmpc_node-4]   unattributed=4.6 us/tick
+[nmpc_node-4]   qp_iter/tick mean=7.1 max=8.0 (cap 60/solve)  hpipm_us mean=827.9 max=1044.0  retries=0  trace 74/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-4] [0m[INFO] [1793255238.603360174] [pat_arm_nmpc_right]: pat_arm_nmpc[right] publish us  torque(n=74 mean=14.7 max=33.3)   ee_pose(n=74 mean=6.9 max=27.2) 
+[nmpc_node-4]   hist(publish_us) <=50.0:148 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793255239.586588005] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 4 max 67 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 8/0 rej, pos 7/0 rej, too_old 0, gaps 0, replays 15 (max 75 steps) | NIS yaw 0.88 pos 0.02[0m
+[nmpc_node-3] [0m[INFO] [1793255239.596094218] [pat_arm_nmpc_left]: pat_arm_nmpc[left] 99 ticks @ 10000 us | period jitter mean 46 max 147 us | callback wall mean 892 max 1045 / cpu mean 892 max 1045 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-3] profile over 99 ticks (us)  TICK mean=857.6 max=1004.9 over_period=0/99
+[nmpc_node-3]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:98 <=2500.0:1 <=5000.0:0 >5000:0 
+[nmpc_node-3]   phases dynamics(n=99 mean=2.0 max=3.2) jdotqdot(n=99 mean=1.6 max=4.0) pinv(n=99 mean=1.8 max=2.9) lambda(n=198 mean=2.1 max=6.4) qpsolve(n=99 mean=844.0 max=990.6) 
+[nmpc_node-3]   unattributed=3.9 us/tick
+[nmpc_node-3]   qp_iter/tick mean=7.1 max=8.0 (cap 60/solve)  hpipm_us mean=828.5 max=975.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-3] [0m[INFO] [1793255239.596130063] [pat_arm_nmpc_left]: pat_arm_nmpc[left] publish us  torque(n=100 mean=16.8 max=33.7)   ee_pose(n=100 mean=5.4 max=11.8) 
+[nmpc_node-3]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nmpc_node-4] [0m[INFO] [1793255239.603207672] [pat_arm_nmpc_right]: pat_arm_nmpc[right] 99 ticks @ 10000 us | period jitter mean 59 max 168 us | callback wall mean 896 max 1158 / cpu mean 895 max 1158 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-4] profile over 99 ticks (us)  TICK mean=860.8 max=1103.7 over_period=0/99
+[nmpc_node-4]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:97 <=2500.0:2 <=5000.0:0 >5000:0 
+[nmpc_node-4]   phases dynamics(n=99 mean=2.3 max=7.3) jdotqdot(n=99 mean=1.9 max=6.3) pinv(n=99 mean=2.2 max=6.3) lambda(n=198 mean=2.6 max=9.9) qpsolve(n=99 mean=844.9 max=1077.7) 
+[nmpc_node-4]   unattributed=4.5 us/tick
+[nmpc_node-4]   qp_iter/tick mean=7.1 max=8.0 (cap 60/solve)  hpipm_us mean=829.0 max=1042.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-4] [0m[INFO] [1793255239.603260932] [pat_arm_nmpc_right]: pat_arm_nmpc[right] publish us  torque(n=100 mean=15.8 max=30.0)   ee_pose(n=100 mean=7.0 max=33.8) 
+[nmpc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793255240.586516493] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 4 max 67 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 13/0 rej, pos 12/0 rej, too_old 0, gaps 0, replays 25 (max 75 steps) | NIS yaw 4.15 pos 0.00[0m
+[nmpc_node-3] [0m[INFO] [1793255240.596207187] [pat_arm_nmpc_left]: pat_arm_nmpc[left] 99 ticks @ 10000 us | period jitter mean 29 max 135 us | callback wall mean 894 max 1055 / cpu mean 893 max 1049 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-3] profile over 99 ticks (us)  TICK mean=860.3 max=1007.9 over_period=0/99
+[nmpc_node-3]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:98 <=2500.0:1 <=5000.0:0 >5000:0 
+[nmpc_node-3]   phases dynamics(n=99 mean=2.0 max=5.5) jdotqdot(n=99 mean=1.6 max=6.2) pinv(n=99 mean=1.9 max=2.8) lambda(n=198 mean=2.2 max=6.5) qpsolve(n=99 mean=846.8 max=992.6) 
+[nmpc_node-3]   unattributed=3.8 us/tick
+[nmpc_node-3]   qp_iter/tick mean=7.1 max=8.0 (cap 60/solve)  hpipm_us mean=831.2 max=974.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-3] [0m[INFO] [1793255240.596263446] [pat_arm_nmpc_left]: pat_arm_nmpc[left] publish us  torque(n=100 mean=16.4 max=29.6)   ee_pose(n=100 mean=5.9 max=33.1) 
+[nmpc_node-3]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nmpc_node-4] [0m[INFO] [1793255240.603209247] [pat_arm_nmpc_right]: pat_arm_nmpc[right] 99 ticks @ 10000 us | period jitter mean 65 max 192 us | callback wall mean 890 max 1041 / cpu mean 889 max 1040 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-4] profile over 99 ticks (us)  TICK mean=855.5 max=997.2 over_period=0/99
+[nmpc_node-4]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:99 <=2500.0:0 <=5000.0:0 >5000:0 
+[nmpc_node-4]   phases dynamics(n=99 mean=2.2 max=5.3) jdotqdot(n=99 mean=1.8 max=4.9) pinv(n=99 mean=2.3 max=6.5) lambda(n=198 mean=2.6 max=10.4) qpsolve(n=99 mean=839.3 max=977.9) 
+[nmpc_node-4]   unattributed=4.7 us/tick
+[nmpc_node-4]   qp_iter/tick mean=7.0 max=8.0 (cap 60/solve)  hpipm_us mean=823.7 max=955.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-4] [0m[INFO] [1793255240.603276807] [pat_arm_nmpc_right]: pat_arm_nmpc[right] publish us  torque(n=100 mean=16.1 max=26.6)   ee_pose(n=100 mean=6.9 max=20.8) 
+[nmpc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793255241.586464341] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 4 max 67 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 18/0 rej, pos 17/0 rej, too_old 0, gaps 0, replays 35 (max 75 steps) | NIS yaw 2.21 pos 0.31[0m
+[nmpc_node-3] [0m[INFO] [1793255241.596049693] [pat_arm_nmpc_left]: pat_arm_nmpc[left] 99 ticks @ 10000 us | period jitter mean 36 max 332 us | callback wall mean 890 max 1071 / cpu mean 889 max 1071 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-3] profile over 99 ticks (us)  TICK mean=856.2 max=1033.5 over_period=0/99
+[nmpc_node-3]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:97 <=2500.0:2 <=5000.0:0 >5000:0 
+[nmpc_node-3]   phases dynamics(n=99 mean=2.0 max=2.8) jdotqdot(n=99 mean=1.6 max=2.2) pinv(n=99 mean=1.9 max=2.9) lambda(n=198 mean=2.2 max=7.0) qpsolve(n=99 mean=842.5 max=1017.1) 
+[nmpc_node-3]   unattributed=3.7 us/tick
+[nmpc_node-3]   qp_iter/tick mean=7.1 max=8.0 (cap 60/solve)  hpipm_us mean=827.1 max=994.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-3] [0m[INFO] [1793255241.596136503] [pat_arm_nmpc_left]: pat_arm_nmpc[left] publish us  torque(n=100 mean=16.7 max=34.5)   ee_pose(n=100 mean=5.4 max=21.9) 
+[nmpc_node-3]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nmpc_node-4] [0m[INFO] [1793255241.603173971] [pat_arm_nmpc_right]: pat_arm_nmpc[right] 99 ticks @ 10000 us | period jitter mean 33 max 180 us | callback wall mean 903 max 1147 / cpu mean 902 max 1141 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-4] profile over 99 ticks (us)  TICK mean=867.0 max=1070.3 over_period=0/99
+[nmpc_node-4]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:95 <=2500.0:4 <=5000.0:0 >5000:0 
+[nmpc_node-4]   phases dynamics(n=99 mean=2.1 max=5.5) jdotqdot(n=99 mean=1.8 max=5.7) pinv(n=99 mean=2.2 max=7.3) lambda(n=198 mean=2.6 max=11.5) qpsolve(n=99 mean=851.0 max=1045.9) 
+[nmpc_node-4]   unattributed=4.6 us/tick
+[nmpc_node-4]   qp_iter/tick mean=7.1 max=8.0 (cap 60/solve)  hpipm_us mean=834.1 max=1018.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-4] [0m[INFO] [1793255241.603278415] [pat_arm_nmpc_right]: pat_arm_nmpc[right] publish us  torque(n=100 mean=16.0 max=34.3)   ee_pose(n=100 mean=6.7 max=16.0) 
+[nmpc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793255242.586480544] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 3 max 67 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 23/0 rej, pos 22/0 rej, too_old 0, gaps 0, replays 45 (max 75 steps) | NIS yaw 0.45 pos 0.15[0m
+[nmpc_node-3] [0m[INFO] [1793255242.596129984] [pat_arm_nmpc_left]: pat_arm_nmpc[left] 99 ticks @ 10000 us | period jitter mean 31 max 122 us | callback wall mean 884 max 1013 / cpu mean 884 max 1012 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-3] profile over 99 ticks (us)  TICK mean=850.9 max=972.8 over_period=0/99
+[nmpc_node-3]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:99 <=2500.0:0 <=5000.0:0 >5000:0 
+[nmpc_node-3]   phases dynamics(n=99 mean=2.0 max=3.1) jdotqdot(n=99 mean=1.6 max=2.5) pinv(n=99 mean=1.9 max=3.1) lambda(n=198 mean=2.3 max=8.8) qpsolve(n=99 mean=837.0 max=956.7) 
+[nmpc_node-3]   unattributed=3.8 us/tick
+[nmpc_node-3]   qp_iter/tick mean=7.0 max=8.0 (cap 60/solve)  hpipm_us mean=821.8 max=940.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-3] [0m[INFO] [1793255242.596199384] [pat_arm_nmpc_left]: pat_arm_nmpc[left] publish us  torque(n=100 mean=16.2 max=27.9)   ee_pose(n=100 mean=5.8 max=37.4) 
+[nmpc_node-3]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nmpc_node-4] [0m[INFO] [1793255242.603131558] [pat_arm_nmpc_right]: pat_arm_nmpc[right] 99 ticks @ 10000 us | period jitter mean 37 max 134 us | callback wall mean 892 max 1006 / cpu mean 892 max 1001 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-4] profile over 99 ticks (us)  TICK mean=859.3 max=963.3 over_period=0/99
+[nmpc_node-4]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:99 <=2500.0:0 <=5000.0:0 >5000:0 
+[nmpc_node-4]   phases dynamics(n=99 mean=2.3 max=6.7) jdotqdot(n=99 mean=1.7 max=5.8) pinv(n=99 mean=2.1 max=6.4) lambda(n=198 mean=2.6 max=10.4) qpsolve(n=99 mean=843.1 max=949.9) 
+[nmpc_node-4]   unattributed=4.8 us/tick
+[nmpc_node-4]   qp_iter/tick mean=7.1 max=8.0 (cap 60/solve)  hpipm_us mean=827.5 max=936.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-4] [0m[INFO] [1793255242.603175769] [pat_arm_nmpc_right]: pat_arm_nmpc[right] publish us  torque(n=100 mean=15.7 max=28.5)   ee_pose(n=100 mean=7.6 max=20.5) 
+[nmpc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793255243.586411753] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 4 max 67 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 28/0 rej, pos 27/0 rej, too_old 0, gaps 0, replays 55 (max 75 steps) | NIS yaw 0.01 pos 0.52[0m
+[nmpc_node-3] [0m[INFO] [1793255243.596103623] [pat_arm_nmpc_left]: pat_arm_nmpc[left] 99 ticks @ 10000 us | period jitter mean 38 max 151 us | callback wall mean 891 max 1049 / cpu mean 890 max 1049 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-3] profile over 99 ticks (us)  TICK mean=856.3 max=997.9 over_period=0/99
+[nmpc_node-3]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:99 <=2500.0:0 <=5000.0:0 >5000:0 
+[nmpc_node-3]   phases dynamics(n=99 mean=2.0 max=5.3) jdotqdot(n=99 mean=1.6 max=2.0) pinv(n=99 mean=2.0 max=5.3) lambda(n=198 mean=2.3 max=8.6) qpsolve(n=99 mean=842.4 max=983.1) 
+[nmpc_node-3]   unattributed=3.7 us/tick
+[nmpc_node-3]   qp_iter/tick mean=7.1 max=8.0 (cap 60/solve)  hpipm_us mean=826.8 max=959.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-3] [0m[INFO] [1793255243.596161025] [pat_arm_nmpc_left]: pat_arm_nmpc[left] publish us  torque(n=100 mean=16.4 max=29.6)   ee_pose(n=100 mean=6.5 max=33.8) 
+[nmpc_node-3]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nmpc_node-4] [0m[INFO] [1793255243.603093103] [pat_arm_nmpc_right]: pat_arm_nmpc[right] 99 ticks @ 10000 us | period jitter mean 59 max 158 us | callback wall mean 901 max 1087 / cpu mean 900 max 1083 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-4] profile over 99 ticks (us)  TICK mean=865.8 max=1012.7 over_period=0/99
+[nmpc_node-4]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:96 <=2500.0:3 <=5000.0:0 >5000:0 
+[nmpc_node-4]   phases dynamics(n=99 mean=2.2 max=6.4) jdotqdot(n=99 mean=1.7 max=6.2) pinv(n=99 mean=2.2 max=7.2) lambda(n=198 mean=2.7 max=10.1) qpsolve(n=99 mean=849.8 max=987.1) 
+[nmpc_node-4]   unattributed=4.5 us/tick
+[nmpc_node-4]   qp_iter/tick mean=7.1 max=8.0 (cap 60/solve)  hpipm_us mean=833.7 max=969.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-4] [0m[INFO] [1793255243.603144124] [pat_arm_nmpc_right]: pat_arm_nmpc[right] publish us  torque(n=100 mean=16.9 max=42.9)   ee_pose(n=100 mean=7.8 max=36.5) 
+[nmpc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793255244.586372498] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 3 max 109 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 33/0 rej, pos 32/0 rej, too_old 0, gaps 0, replays 65 (max 75 steps) | NIS yaw 1.11 pos 0.05[0m
+[nmpc_node-3] [0m[INFO] [1793255244.595949744] [pat_arm_nmpc_left]: pat_arm_nmpc[left] 99 ticks @ 10000 us | period jitter mean 27 max 136 us | callback wall mean 891 max 1078 / cpu mean 890 max 1078 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-3] profile over 99 ticks (us)  TICK mean=859.3 max=1045.1 over_period=0/99
+[nmpc_node-3]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:98 <=2500.0:1 <=5000.0:0 >5000:0 
+[nmpc_node-3]   phases dynamics(n=99 mean=2.0 max=2.8) jdotqdot(n=99 mean=1.6 max=2.2) pinv(n=99 mean=1.9 max=2.7) lambda(n=198 mean=2.2 max=8.5) qpsolve(n=99 mean=845.7 max=1030.3) 
+[nmpc_node-3]   unattributed=3.7 us/tick
+[nmpc_node-3]   qp_iter/tick mean=7.1 max=8.0 (cap 60/solve)  hpipm_us mean=830.3 max=1011.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-3] [0m[INFO] [1793255244.595980986] [pat_arm_nmpc_left]: pat_arm_nmpc[left] publish us  torque(n=100 mean=15.0 max=26.6)   ee_pose(n=100 mean=4.8 max=23.3) 
+[nmpc_node-3]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nmpc_node-4] [0m[INFO] [1793255244.603062480] [pat_arm_nmpc_right]: pat_arm_nmpc[right] 99 ticks @ 10000 us | period jitter mean 42 max 164 us | callback wall mean 894 max 1082 / cpu mean 893 max 1082 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-4] profile over 99 ticks (us)  TICK mean=859.3 max=1017.6 over_period=0/99
+[nmpc_node-4]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:98 <=2500.0:1 <=5000.0:0 >5000:0 
+[nmpc_node-4]   phases dynamics(n=99 mean=2.2 max=6.6) jdotqdot(n=99 mean=1.7 max=5.0) pinv(n=99 mean=2.2 max=5.3) lambda(n=198 mean=2.5 max=9.7) qpsolve(n=99 mean=843.6 max=998.5) 
+[nmpc_node-4]   unattributed=4.5 us/tick
+[nmpc_node-4]   qp_iter/tick mean=7.1 max=8.0 (cap 60/solve)  hpipm_us mean=827.8 max=975.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-4] [0m[INFO] [1793255244.603109247] [pat_arm_nmpc_right]: pat_arm_nmpc[right] publish us  torque(n=100 mean=16.0 max=37.6)   ee_pose(n=100 mean=7.4 max=48.0) 
+[nmpc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793255245.586337750] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 3 max 109 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 38/0 rej, pos 37/0 rej, too_old 0, gaps 0, replays 75 (max 75 steps) | NIS yaw 0.26 pos 1.08[0m
+[nmpc_node-3] [0m[INFO] [1793255245.596019826] [pat_arm_nmpc_left]: pat_arm_nmpc[left] 99 ticks @ 10000 us | period jitter mean 29 max 111 us | callback wall mean 891 max 1017 / cpu mean 891 max 1017 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-3] profile over 99 ticks (us)  TICK mean=858.5 max=983.4 over_period=0/99
+[nmpc_node-3]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:99 <=2500.0:0 <=5000.0:0 >5000:0 
+[nmpc_node-3]   phases dynamics(n=99 mean=2.0 max=6.3) jdotqdot(n=99 mean=1.7 max=8.1) pinv(n=99 mean=1.9 max=2.9) lambda(n=198 mean=2.3 max=10.4) qpsolve(n=99 mean=844.7 max=969.2) 
+[nmpc_node-3]   unattributed=3.7 us/tick
+[nmpc_node-3]   qp_iter/tick mean=7.1 max=8.0 (cap 60/solve)  hpipm_us mean=829.5 max=949.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-3] [0m[INFO] [1793255245.596075968] [pat_arm_nmpc_left]: pat_arm_nmpc[left] publish us  torque(n=100 mean=15.8 max=29.4)   ee_pose(n=100 mean=6.3 max=31.5) 
+[nmpc_node-3]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nmpc_node-4] [0m[INFO] [1793255245.603027998] [pat_arm_nmpc_right]: pat_arm_nmpc[right] 99 ticks @ 10000 us | period jitter mean 38 max 122 us | callback wall mean 911 max 1493 / cpu mean 910 max 1492 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-4] profile over 99 ticks (us)  TICK mean=876.8 max=1449.1 over_period=0/99
+[nmpc_node-4]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:95 <=2500.0:4 <=5000.0:0 >5000:0 
+[nmpc_node-4]   phases dynamics(n=99 mean=2.1 max=7.1) jdotqdot(n=99 mean=1.7 max=4.0) pinv(n=99 mean=2.2 max=5.3) lambda(n=198 mean=2.6 max=26.2) qpsolve(n=99 mean=861.0 max=1426.3) 
+[nmpc_node-4]   unattributed=4.6 us/tick
+[nmpc_node-4]   qp_iter/tick mean=7.2 max=8.0 (cap 60/solve)  hpipm_us mean=844.4 max=1400.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-4] [0m[INFO] [1793255245.603081845] [pat_arm_nmpc_right]: pat_arm_nmpc[right] publish us  torque(n=100 mean=15.7 max=55.0)   ee_pose(n=100 mean=6.5 max=20.8) 
+[nmpc_node-4]   hist(publish_us) <=50.0:199 <=100.0:1 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793255246.586306799] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 3 max 109 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 43/0 rej, pos 42/0 rej, too_old 0, gaps 0, replays 85 (max 75 steps) | NIS yaw 0.98 pos 1.73[0m
+[nmpc_node-3] [0m[INFO] [1793255246.595982600] [pat_arm_nmpc_left]: pat_arm_nmpc[left] 99 ticks @ 10000 us | period jitter mean 34 max 136 us | callback wall mean 899 max 1087 / cpu mean 899 max 1087 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-3] profile over 99 ticks (us)  TICK mean=866.6 max=1062.2 over_period=0/99
+[nmpc_node-3]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:95 <=2500.0:4 <=5000.0:0 >5000:0 
+[nmpc_node-3]   phases dynamics(n=99 mean=1.9 max=3.3) jdotqdot(n=99 mean=1.8 max=16.6) pinv(n=99 mean=1.9 max=3.5) lambda(n=198 mean=2.2 max=12.1) qpsolve(n=99 mean=852.9 max=1049.6) 
+[nmpc_node-3]   unattributed=3.8 us/tick
+[nmpc_node-3]   qp_iter/tick mean=7.1 max=8.0 (cap 60/solve)  hpipm_us mean=836.1 max=1033.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-3] [0m[INFO] [1793255246.596046809] [pat_arm_nmpc_left]: pat_arm_nmpc[left] publish us  torque(n=100 mean=14.8 max=27.8)   ee_pose(n=100 mean=5.7 max=22.0) 
+[nmpc_node-3]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nmpc_node-4] [0m[INFO] [1793255246.602996164] [pat_arm_nmpc_right]: pat_arm_nmpc[right] 99 ticks @ 10000 us | period jitter mean 51 max 132 us | callback wall mean 897 max 1090 / cpu mean 896 max 1089 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-4] profile over 99 ticks (us)  TICK mean=862.2 max=1033.6 over_period=0/99
+[nmpc_node-4]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:97 <=2500.0:2 <=5000.0:0 >5000:0 
+[nmpc_node-4]   phases dynamics(n=99 mean=2.3 max=7.8) jdotqdot(n=99 mean=1.8 max=5.1) pinv(n=99 mean=2.4 max=15.1) lambda(n=198 mean=2.5 max=9.9) qpsolve(n=99 mean=846.0 max=1009.2) 
+[nmpc_node-4]   unattributed=4.7 us/tick
+[nmpc_node-4]   qp_iter/tick mean=7.1 max=8.0 (cap 60/solve)  hpipm_us mean=829.9 max=977.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-4] [0m[INFO] [1793255246.603056036] [pat_arm_nmpc_right]: pat_arm_nmpc[right] publish us  torque(n=100 mean=15.5 max=29.1)   ee_pose(n=100 mean=9.1 max=22.2) 
+[nmpc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793255247.586213793] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 3 max 109 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 48/0 rej, pos 47/0 rej, too_old 0, gaps 0, replays 95 (max 75 steps) | NIS yaw 1.57 pos 1.52[0m
+[nmpc_node-3] [0m[INFO] [1793255247.595951688] [pat_arm_nmpc_left]: pat_arm_nmpc[left] 99 ticks @ 10000 us | period jitter mean 35 max 135 us | callback wall mean 911 max 1324 / cpu mean 910 max 1324 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-3] profile over 99 ticks (us)  TICK mean=877.1 max=1267.0 over_period=0/99
+[nmpc_node-3]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:92 <=2500.0:7 <=5000.0:0 >5000:0 
+[nmpc_node-3]   phases dynamics(n=99 mean=2.1 max=5.4) jdotqdot(n=99 mean=1.6 max=3.4) pinv(n=99 mean=1.9 max=4.0) lambda(n=198 mean=2.4 max=9.8) qpsolve(n=99 mean=863.0 max=1247.3) 
+[nmpc_node-3]   unattributed=3.8 us/tick
+[nmpc_node-3]   qp_iter/tick mean=7.1 max=8.0 (cap 60/solve)  hpipm_us mean=846.3 max=1223.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-3] [0m[INFO] [1793255247.596005479] [pat_arm_nmpc_left]: pat_arm_nmpc[left] publish us  torque(n=100 mean=15.5 max=27.5)   ee_pose(n=100 mean=5.8 max=13.5) 
+[nmpc_node-3]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nmpc_node-4] [0m[INFO] [1793255247.602948854] [pat_arm_nmpc_right]: pat_arm_nmpc[right] 99 ticks @ 10000 us | period jitter mean 40 max 140 us | callback wall mean 896 max 1038 / cpu mean 896 max 1038 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-4] profile over 99 ticks (us)  TICK mean=860.8 max=989.0 over_period=0/99
+[nmpc_node-4]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:99 <=2500.0:0 <=5000.0:0 >5000:0 
+[nmpc_node-4]   phases dynamics(n=99 mean=2.0 max=6.7) jdotqdot(n=99 mean=1.6 max=2.6) pinv(n=99 mean=1.9 max=3.7) lambda(n=198 mean=2.4 max=16.7) qpsolve(n=99 mean=846.2 max=964.2) 
+[nmpc_node-4]   unattributed=4.4 us/tick
+[nmpc_node-4]   qp_iter/tick mean=7.1 max=8.0 (cap 60/solve)  hpipm_us mean=830.4 max=946.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-4] [0m[INFO] [1793255247.602993313] [pat_arm_nmpc_right]: pat_arm_nmpc[right] publish us  torque(n=100 mean=15.4 max=28.7)   ee_pose(n=100 mean=6.7 max=41.6) 
+[nmpc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793255248.586200093] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 3 max 109 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 53/0 rej, pos 52/0 rej, too_old 0, gaps 0, replays 105 (max 75 steps) | NIS yaw 0.43 pos 0.05[0m
+[nmpc_node-3] [0m[INFO] [1793255248.595789824] [pat_arm_nmpc_left]: pat_arm_nmpc[left] 99 ticks @ 10000 us | period jitter mean 29 max 103 us | callback wall mean 897 max 1028 / cpu mean 896 max 1028 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-3] profile over 99 ticks (us)  TICK mean=865.0 max=990.9 over_period=0/99
+[nmpc_node-3]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:99 <=2500.0:0 <=5000.0:0 >5000:0 
+[nmpc_node-3]   phases dynamics(n=99 mean=2.0 max=2.4) jdotqdot(n=99 mean=1.6 max=6.0) pinv(n=99 mean=1.9 max=2.5) lambda(n=198 mean=2.2 max=6.3) qpsolve(n=99 mean=851.2 max=974.0) 
+[nmpc_node-3]   unattributed=3.8 us/tick
+[nmpc_node-3]   qp_iter/tick mean=7.2 max=8.0 (cap 60/solve)  hpipm_us mean=836.3 max=952.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-3] [0m[INFO] [1793255248.595829118] [pat_arm_nmpc_left]: pat_arm_nmpc[left] publish us  torque(n=100 mean=15.6 max=26.3)   ee_pose(n=100 mean=4.7 max=17.3) 
+[nmpc_node-3]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nmpc_node-4] [0m[INFO] [1793255248.602927695] [pat_arm_nmpc_right]: pat_arm_nmpc[right] 99 ticks @ 10000 us | period jitter mean 45 max 154 us | callback wall mean 907 max 1130 / cpu mean 906 max 1129 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-4] profile over 99 ticks (us)  TICK mean=873.6 max=1080.4 over_period=0/99
+[nmpc_node-4]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:94 <=2500.0:5 <=5000.0:0 >5000:0 
+[nmpc_node-4]   phases dynamics(n=99 mean=2.0 max=2.8) jdotqdot(n=99 mean=1.7 max=4.8) pinv(n=99 mean=2.0 max=5.3) lambda(n=198 mean=2.4 max=8.3) qpsolve(n=99 mean=858.6 max=1063.7) 
+[nmpc_node-4]   unattributed=4.5 us/tick
+[nmpc_node-4]   qp_iter/tick mean=7.2 max=8.0 (cap 60/solve)  hpipm_us mean=843.4 max=1042.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-4] [0m[INFO] [1793255248.602981170] [pat_arm_nmpc_right]: pat_arm_nmpc[right] publish us  torque(n=100 mean=16.4 max=30.1)   ee_pose(n=100 mean=6.6 max=15.8) 
+[nmpc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793255249.586139215] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 3 max 109 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 58/0 rej, pos 57/0 rej, too_old 0, gaps 0, replays 115 (max 75 steps) | NIS yaw 0.82 pos 0.33[0m
+[nmpc_node-3] [0m[INFO] [1793255249.595891433] [pat_arm_nmpc_left]: pat_arm_nmpc[left] 99 ticks @ 10000 us | period jitter mean 27 max 127 us | callback wall mean 937 max 1625 / cpu mean 936 max 1625 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-3] profile over 99 ticks (us)  TICK mean=901.6 max=1580.7 over_period=0/99
+[nmpc_node-3]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:90 <=2500.0:9 <=5000.0:0 >5000:0 
+[nmpc_node-3]   phases dynamics(n=99 mean=2.1 max=5.3) jdotqdot(n=99 mean=1.7 max=4.1) pinv(n=99 mean=2.0 max=5.1) lambda(n=198 mean=2.5 max=13.4) qpsolve(n=99 mean=886.6 max=1547.6) 
+[nmpc_node-3]   unattributed=4.2 us/tick
+[nmpc_node-3]   qp_iter/tick mean=7.1 max=8.0 (cap 60/solve)  hpipm_us mean=869.6 max=1525.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-3] [0m[INFO] [1793255249.595951895] [pat_arm_nmpc_left]: pat_arm_nmpc[left] publish us  torque(n=100 mean=15.1 max=28.4)   ee_pose(n=100 mean=7.1 max=18.3) 
+[nmpc_node-3]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nmpc_node-4] [0m[INFO] [1793255249.602910432] [pat_arm_nmpc_right]: pat_arm_nmpc[right] 99 ticks @ 10000 us | period jitter mean 42 max 205 us | callback wall mean 939 max 1740 / cpu mean 938 max 1739 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-4] profile over 99 ticks (us)  TICK mean=901.1 max=1654.4 over_period=0/99
+[nmpc_node-4]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:91 <=2500.0:8 <=5000.0:0 >5000:0 
+[nmpc_node-4]   phases dynamics(n=99 mean=2.3 max=6.5) jdotqdot(n=99 mean=1.9 max=6.1) pinv(n=99 mean=2.4 max=7.2) lambda(n=198 mean=2.8 max=15.0) qpsolve(n=99 mean=883.6 max=1607.5) 
+[nmpc_node-4]   unattributed=5.2 us/tick
+[nmpc_node-4]   qp_iter/tick mean=7.1 max=8.0 (cap 60/solve)  hpipm_us mean=865.9 max=1570.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-4] [0m[INFO] [1793255249.602961038] [pat_arm_nmpc_right]: pat_arm_nmpc[right] publish us  torque(n=100 mean=16.9 max=35.6)   ee_pose(n=100 mean=7.4 max=38.2) 
+[nmpc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793255250.586105849] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 3 max 109 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 63/0 rej, pos 62/0 rej, too_old 0, gaps 0, replays 125 (max 75 steps) | NIS yaw 0.12 pos 0.34[0m
+[nmpc_node-3] [0m[INFO] [1793255250.595861009] [pat_arm_nmpc_left]: pat_arm_nmpc[left] 99 ticks @ 10000 us | period jitter mean 49 max 157 us | callback wall mean 906 max 1040 / cpu mean 904 max 1039 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-3] profile over 99 ticks (us)  TICK mean=870.8 max=1003.6 over_period=0/99
+[nmpc_node-3]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:98 <=2500.0:1 <=5000.0:0 >5000:0 
+[nmpc_node-3]   phases dynamics(n=99 mean=2.1 max=3.9) jdotqdot(n=99 mean=1.6 max=2.9) pinv(n=99 mean=2.0 max=6.2) lambda(n=198 mean=2.3 max=9.2) qpsolve(n=99 mean=856.6 max=985.5) 
+[nmpc_node-3]   unattributed=3.9 us/tick
+[nmpc_node-3]   qp_iter/tick mean=7.2 max=8.0 (cap 60/solve)  hpipm_us mean=841.0 max=964.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-3] [0m[INFO] [1793255250.595921236] [pat_arm_nmpc_left]: pat_arm_nmpc[left] publish us  torque(n=100 mean=16.2 max=33.0)   ee_pose(n=100 mean=6.3 max=17.9) 
+[nmpc_node-3]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nmpc_node-4] [0m[INFO] [1793255250.602861557] [pat_arm_nmpc_right]: pat_arm_nmpc[right] 99 ticks @ 10000 us | period jitter mean 47 max 223 us | callback wall mean 893 max 1048 / cpu mean 892 max 1048 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-4] profile over 99 ticks (us)  TICK mean=857.6 max=1001.0 over_period=0/99
+[nmpc_node-4]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:98 <=2500.0:1 <=5000.0:0 >5000:0 
+[nmpc_node-4]   phases dynamics(n=99 mean=2.0 max=3.0) jdotqdot(n=99 mean=1.7 max=5.7) pinv(n=99 mean=2.1 max=6.1) lambda(n=198 mean=2.6 max=11.2) qpsolve(n=99 mean=842.1 max=981.7) 
+[nmpc_node-4]   unattributed=4.5 us/tick
+[nmpc_node-4]   qp_iter/tick mean=7.1 max=8.0 (cap 60/solve)  hpipm_us mean=826.3 max=960.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-4] [0m[INFO] [1793255250.602914187] [pat_arm_nmpc_right]: pat_arm_nmpc[right] publish us  torque(n=100 mean=17.3 max=34.4)   ee_pose(n=100 mean=7.6 max=52.2) 
+[nmpc_node-4]   hist(publish_us) <=50.0:199 <=100.0:1 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793255251.586103929] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 3 max 109 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 68/0 rej, pos 67/0 rej, too_old 0, gaps 0, replays 135 (max 75 steps) | NIS yaw 0.25 pos 0.50[0m
+[nmpc_node-3] [0m[INFO] [1793255251.595822659] [pat_arm_nmpc_left]: pat_arm_nmpc[left] 99 ticks @ 10000 us | period jitter mean 34 max 134 us | callback wall mean 898 max 1049 / cpu mean 897 max 1048 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-3] profile over 99 ticks (us)  TICK mean=866.2 max=1003.6 over_period=0/99
+[nmpc_node-3]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:98 <=2500.0:1 <=5000.0:0 >5000:0 
+[nmpc_node-3]   phases dynamics(n=99 mean=2.0 max=6.2) jdotqdot(n=99 mean=1.7 max=5.6) pinv(n=99 mean=1.9 max=3.3) lambda(n=198 mean=2.2 max=7.5) qpsolve(n=99 mean=852.4 max=984.6) 
+[nmpc_node-3]   unattributed=3.8 us/tick
+[nmpc_node-3]   qp_iter/tick mean=7.1 max=8.0 (cap 60/solve)  hpipm_us mean=836.4 max=966.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-3] [0m[INFO] [1793255251.595890145] [pat_arm_nmpc_left]: pat_arm_nmpc[left] publish us  torque(n=100 mean=15.5 max=25.2)   ee_pose(n=100 mean=6.4 max=15.8) 
+[nmpc_node-3]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nmpc_node-4] [0m[INFO] [1793255251.602703854] [pat_arm_nmpc_right]: pat_arm_nmpc[right] 99 ticks @ 10000 us | period jitter mean 39 max 137 us | callback wall mean 898 max 1046 / cpu mean 897 max 1045 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-4] profile over 99 ticks (us)  TICK mean=862.7 max=1001.6 over_period=0/99
+[nmpc_node-4]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:98 <=2500.0:1 <=5000.0:0 >5000:0 
+[nmpc_node-4]   phases dynamics(n=99 mean=2.1 max=5.4) jdotqdot(n=99 mean=1.6 max=2.3) pinv(n=99 mean=2.1 max=7.2) lambda(n=198 mean=2.5 max=9.6) qpsolve(n=99 mean=847.2 max=981.9) 
+[nmpc_node-4]   unattributed=4.5 us/tick
+[nmpc_node-4]   qp_iter/tick mean=7.1 max=8.0 (cap 60/solve)  hpipm_us mean=831.0 max=960.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-4] [0m[INFO] [1793255251.602756858] [pat_arm_nmpc_right]: pat_arm_nmpc[right] publish us  torque(n=100 mean=16.7 max=33.2)   ee_pose(n=100 mean=7.2 max=16.8) 
+[nmpc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793255252.586050962] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 4 max 109 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 73/0 rej, pos 72/0 rej, too_old 0, gaps 0, replays 145 (max 75 steps) | NIS yaw 0.03 pos 1.05[0m
+[nmpc_node-3] [0m[INFO] [1793255252.595777945] [pat_arm_nmpc_left]: pat_arm_nmpc[left] 99 ticks @ 10000 us | period jitter mean 38 max 121 us | callback wall mean 920 max 1242 / cpu mean 919 max 1242 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-3] profile over 99 ticks (us)  TICK mean=885.0 max=1187.8 over_period=0/99
+[nmpc_node-3]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:95 <=2500.0:4 <=5000.0:0 >5000:0 
+[nmpc_node-3]   phases dynamics(n=99 mean=2.0 max=3.9) jdotqdot(n=99 mean=1.7 max=6.1) pinv(n=99 mean=2.0 max=7.6) lambda(n=198 mean=2.3 max=10.0) qpsolve(n=99 mean=870.7 max=1157.7) 
+[nmpc_node-3]   unattributed=4.0 us/tick
+[nmpc_node-3]   qp_iter/tick mean=7.1 max=8.0 (cap 60/solve)  hpipm_us mean=853.7 max=1116.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-3] [0m[INFO] [1793255252.595845671] [pat_arm_nmpc_left]: pat_arm_nmpc[left] publish us  torque(n=100 mean=15.7 max=25.2)   ee_pose(n=100 mean=8.8 max=40.9) 
+[nmpc_node-3]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nmpc_node-4] [0m[INFO] [1793255252.602794832] [pat_arm_nmpc_right]: pat_arm_nmpc[right] 99 ticks @ 10000 us | period jitter mean 41 max 166 us | callback wall mean 911 max 1323 / cpu mean 910 max 1322 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-4] profile over 99 ticks (us)  TICK mean=875.6 max=1282.6 over_period=0/99
+[nmpc_node-4]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:96 <=2500.0:3 <=5000.0:0 >5000:0 
+[nmpc_node-4]   phases dynamics(n=99 mean=2.1 max=6.8) jdotqdot(n=99 mean=1.7 max=6.0) pinv(n=99 mean=2.2 max=5.3) lambda(n=198 mean=2.5 max=13.3) qpsolve(n=99 mean=859.9 max=1265.9) 
+[nmpc_node-4]   unattributed=4.7 us/tick
+[nmpc_node-4]   qp_iter/tick mean=7.1 max=8.0 (cap 60/solve)  hpipm_us mean=843.2 max=1253.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-4] [0m[INFO] [1793255252.602863246] [pat_arm_nmpc_right]: pat_arm_nmpc[right] publish us  torque(n=100 mean=16.1 max=32.3)   ee_pose(n=100 mean=8.5 max=41.3) 
+[nmpc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793255253.586015398] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 4 max 109 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 78/0 rej, pos 77/0 rej, too_old 0, gaps 0, replays 155 (max 75 steps) | NIS yaw 0.69 pos 0.19[0m
+[nmpc_node-3] [0m[INFO] [1793255253.595749515] [pat_arm_nmpc_left]: pat_arm_nmpc[left] 99 ticks @ 10000 us | period jitter mean 38 max 131 us | callback wall mean 916 max 1271 / cpu mean 915 max 1270 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-3] profile over 99 ticks (us)  TICK mean=881.1 max=1213.9 over_period=0/99
+[nmpc_node-3]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:97 <=2500.0:2 <=5000.0:0 >5000:0 
+[nmpc_node-3]   phases dynamics(n=99 mean=2.0 max=5.3) jdotqdot(n=99 mean=1.6 max=3.2) pinv(n=99 mean=2.0 max=5.2) lambda(n=198 mean=2.2 max=9.5) qpsolve(n=99 mean=867.1 max=1180.2) 
+[nmpc_node-3]   unattributed=3.9 us/tick
+[nmpc_node-3]   qp_iter/tick mean=7.1 max=8.0 (cap 60/solve)  hpipm_us mean=850.9 max=1146.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-3] [0m[INFO] [1793255253.595809338] [pat_arm_nmpc_left]: pat_arm_nmpc[left] publish us  torque(n=100 mean=16.1 max=32.1)   ee_pose(n=100 mean=8.1 max=40.6) 
+[nmpc_node-3]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nmpc_node-4] [0m[INFO] [1793255253.602756664] [pat_arm_nmpc_right]: pat_arm_nmpc[right] 99 ticks @ 10000 us | period jitter mean 51 max 162 us | callback wall mean 906 max 1171 / cpu mean 905 max 1171 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-4] profile over 99 ticks (us)  TICK mean=870.0 max=1147.0 over_period=0/99
+[nmpc_node-4]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:97 <=2500.0:2 <=5000.0:0 >5000:0 
+[nmpc_node-4]   phases dynamics(n=99 mean=2.1 max=8.0) jdotqdot(n=99 mean=1.7 max=2.8) pinv(n=99 mean=2.1 max=5.4) lambda(n=198 mean=2.5 max=9.4) qpsolve(n=99 mean=854.5 max=1139.4) 
+[nmpc_node-4]   unattributed=4.5 us/tick
+[nmpc_node-4]   qp_iter/tick mean=7.1 max=8.0 (cap 60/solve)  hpipm_us mean=838.1 max=1129.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-4] [0m[INFO] [1793255253.602813418] [pat_arm_nmpc_right]: pat_arm_nmpc[right] publish us  torque(n=100 mean=15.8 max=33.5)   ee_pose(n=100 mean=9.5 max=37.4) 
+[nmpc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793255254.586062528] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 4 max 109 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 83/0 rej, pos 82/0 rej, too_old 0, gaps 0, replays 165 (max 75 steps) | NIS yaw 0.64 pos 0.02[0m
+[nmpc_node-3] [0m[INFO] [1793255254.595663256] [pat_arm_nmpc_left]: pat_arm_nmpc[left] 99 ticks @ 10000 us | period jitter mean 37 max 116 us | callback wall mean 987 max 1823 / cpu mean 986 max 1822 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-3] profile over 99 ticks (us)  TICK mean=946.5 max=1721.1 over_period=0/99
+[nmpc_node-3]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:86 <=2500.0:13 <=5000.0:0 >5000:0 
+[nmpc_node-3]   phases dynamics(n=99 mean=2.4 max=8.8) jdotqdot(n=99 mean=2.0 max=5.4) pinv(n=99 mean=2.4 max=7.1) lambda(n=198 mean=2.7 max=15.2) qpsolve(n=99 mean=929.6 max=1679.5) 
+[nmpc_node-3]   unattributed=4.8 us/tick
+[nmpc_node-3]   qp_iter/tick mean=7.0 max=8.0 (cap 60/solve)  hpipm_us mean=910.2 max=1642.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-3] [0m[INFO] [1793255254.595732766] [pat_arm_nmpc_left]: pat_arm_nmpc[left] publish us  torque(n=100 mean=18.2 max=44.8)   ee_pose(n=100 mean=7.5 max=18.1) 
+[nmpc_node-3]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nmpc_node-4] [0m[INFO] [1793255254.602721418] [pat_arm_nmpc_right]: pat_arm_nmpc[right] 99 ticks @ 10000 us | period jitter mean 47 max 134 us | callback wall mean 950 max 1769 / cpu mean 949 max 1768 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-4] profile over 99 ticks (us)  TICK mean=910.5 max=1690.7 over_period=0/99
+[nmpc_node-4]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:87 <=2500.0:12 <=5000.0:0 >5000:0 
+[nmpc_node-4]   phases dynamics(n=99 mean=2.4 max=9.0) jdotqdot(n=99 mean=2.0 max=5.2) pinv(n=99 mean=2.6 max=7.0) lambda(n=198 mean=3.0 max=14.7) qpsolve(n=99 mean=891.9 max=1650.6) 
+[nmpc_node-4]   unattributed=5.6 us/tick
+[nmpc_node-4]   qp_iter/tick mean=7.1 max=8.0 (cap 60/solve)  hpipm_us mean=872.3 max=1612.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-4] [0m[INFO] [1793255254.602777268] [pat_arm_nmpc_right]: pat_arm_nmpc[right] publish us  torque(n=100 mean=17.5 max=37.6)   ee_pose(n=100 mean=6.6 max=23.7) 
+[nmpc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793255255.585952944] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 5 max 109 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 88/0 rej, pos 87/0 rej, too_old 0, gaps 0, replays 175 (max 75 steps) | NIS yaw 0.33 pos 0.53[0m
+[nmpc_node-3] [0m[INFO] [1793255255.595668208] [pat_arm_nmpc_left]: pat_arm_nmpc[left] 99 ticks @ 10000 us | period jitter mean 48 max 175 us | callback wall mean 918 max 1194 / cpu mean 917 max 1188 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-3] profile over 99 ticks (us)  TICK mean=882.0 max=1133.8 over_period=0/99
+[nmpc_node-3]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:94 <=2500.0:5 <=5000.0:0 >5000:0 
+[nmpc_node-3]   phases dynamics(n=99 mean=2.0 max=3.4) jdotqdot(n=99 mean=1.7 max=5.0) pinv(n=99 mean=2.0 max=7.1) lambda(n=198 mean=2.5 max=13.9) qpsolve(n=99 mean=867.1 max=1109.2) 
+[nmpc_node-3]   unattributed=4.3 us/tick
+[nmpc_node-3]   qp_iter/tick mean=7.0 max=8.0 (cap 60/solve)  hpipm_us mean=849.0 max=1079.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-3] [0m[INFO] [1793255255.595716698] [pat_arm_nmpc_left]: pat_arm_nmpc[left] publish us  torque(n=100 mean=16.2 max=32.0)   ee_pose(n=100 mean=6.9 max=35.9) 
+[nmpc_node-3]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nmpc_node-4] [0m[INFO] [1793255255.602692004] [pat_arm_nmpc_right]: pat_arm_nmpc[right] 99 ticks @ 10000 us | period jitter mean 31 max 133 us | callback wall mean 921 max 1298 / cpu mean 920 max 1298 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-4] profile over 99 ticks (us)  TICK mean=882.7 max=1263.9 over_period=0/99
+[nmpc_node-4]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:92 <=2500.0:7 <=5000.0:0 >5000:0 
+[nmpc_node-4]   phases dynamics(n=99 mean=2.2 max=6.4) jdotqdot(n=99 mean=1.8 max=3.0) pinv(n=99 mean=2.5 max=9.0) lambda(n=198 mean=2.6 max=9.8) qpsolve(n=99 mean=866.2 max=1248.8) 
+[nmpc_node-4]   unattributed=4.9 us/tick
+[nmpc_node-4]   qp_iter/tick mean=7.2 max=8.0 (cap 60/solve)  hpipm_us mean=848.1 max=1224.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-4] [0m[INFO] [1793255255.602759004] [pat_arm_nmpc_right]: pat_arm_nmpc[right] publish us  torque(n=100 mean=15.9 max=37.1)   ee_pose(n=100 mean=6.1 max=12.6) 
+[nmpc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793255256.585914692] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 3 max 109 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 93/0 rej, pos 92/0 rej, too_old 0, gaps 0, replays 185 (max 75 steps) | NIS yaw 2.25 pos 1.12[0m
+[nmpc_node-3] [0m[INFO] [1793255256.595620026] [pat_arm_nmpc_left]: pat_arm_nmpc[left] 99 ticks @ 10000 us | period jitter mean 41 max 134 us | callback wall mean 924 max 1116 / cpu mean 922 max 1116 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-3] profile over 99 ticks (us)  TICK mean=885.3 max=1052.9 over_period=0/99
+[nmpc_node-3]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:95 <=2500.0:4 <=5000.0:0 >5000:0 
+[nmpc_node-3]   phases dynamics(n=99 mean=2.1 max=5.4) jdotqdot(n=99 mean=1.7 max=5.1) pinv(n=99 mean=2.1 max=6.4) lambda(n=198 mean=2.4 max=8.1) qpsolve(n=99 mean=870.3 max=1029.9) 
+[nmpc_node-3]   unattributed=4.2 us/tick
+[nmpc_node-3]   qp_iter/tick mean=7.0 max=8.0 (cap 60/solve)  hpipm_us mean=852.2 max=1016.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-3] [0m[INFO] [1793255256.595686547] [pat_arm_nmpc_left]: pat_arm_nmpc[left] publish us  torque(n=100 mean=18.5 max=35.3)   ee_pose(n=100 mean=5.6 max=11.8) 
+[nmpc_node-3]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nmpc_node-4] [0m[INFO] [1793255256.602673852] [pat_arm_nmpc_right]: pat_arm_nmpc[right] 99 ticks @ 10000 us | period jitter mean 40 max 154 us | callback wall mean 918 max 1507 / cpu mean 918 max 1507 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-4] profile over 99 ticks (us)  TICK mean=879.5 max=1466.5 over_period=0/99
+[nmpc_node-4]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:92 <=2500.0:7 <=5000.0:0 >5000:0 
+[nmpc_node-4]   phases dynamics(n=99 mean=2.2 max=7.8) jdotqdot(n=99 mean=1.8 max=5.3) pinv(n=99 mean=2.4 max=8.0) lambda(n=198 mean=2.8 max=11.7) qpsolve(n=99 mean=862.5 max=1444.0) 
+[nmpc_node-4]   unattributed=5.1 us/tick
+[nmpc_node-4]   qp_iter/tick mean=7.0 max=8.0 (cap 60/solve)  hpipm_us mean=844.1 max=1421.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-4] [0m[INFO] [1793255256.602750421] [pat_arm_nmpc_right]: pat_arm_nmpc[right] publish us  torque(n=100 mean=15.9 max=43.4)   ee_pose(n=100 mean=6.9 max=19.8) 
+[nmpc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793255257.585873996] [pat_nav]: nav[imu_ekf] 499 wakes, work mean 4 max 109 us, overruns 0 | in imu 499 pose 100, ring drops 0/0 | yaw 98/0 rej, pos 97/0 rej, too_old 0, gaps 0, replays 195 (max 75 steps) | NIS yaw 0.08 pos 0.04[0m
+[nmpc_node-3] [0m[INFO] [1793255257.595475951] [pat_arm_nmpc_left]: pat_arm_nmpc[left] 99 ticks @ 10000 us | period jitter mean 42 max 152 us | callback wall mean 921 max 1218 / cpu mean 920 max 1218 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-3] profile over 99 ticks (us)  TICK mean=884.5 max=1164.9 over_period=0/99
+[nmpc_node-3]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:95 <=2500.0:4 <=5000.0:0 >5000:0 
+[nmpc_node-3]   phases dynamics(n=99 mean=2.0 max=3.3) jdotqdot(n=99 mean=1.6 max=2.7) pinv(n=99 mean=2.0 max=3.2) lambda(n=198 mean=2.3 max=7.2) qpsolve(n=99 mean=869.8 max=1132.6) 
+[nmpc_node-3]   unattributed=4.3 us/tick
+[nmpc_node-3]   qp_iter/tick mean=7.1 max=8.0 (cap 60/solve)  hpipm_us mean=852.0 max=1108.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-3] [0m[INFO] [1793255257.595509407] [pat_arm_nmpc_left]: pat_arm_nmpc[left] publish us  torque(n=100 mean=18.4 max=30.3)   ee_pose(n=100 mean=5.8 max=15.6) 
+[nmpc_node-3]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nmpc_node-4] [0m[INFO] [1793255257.602600192] [pat_arm_nmpc_right]: pat_arm_nmpc[right] 99 ticks @ 10000 us | period jitter mean 42 max 130 us | callback wall mean 915 max 1076 / cpu mean 915 max 1076 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-4] profile over 99 ticks (us)  TICK mean=875.9 max=1024.0 over_period=0/99
+[nmpc_node-4]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:95 <=2500.0:4 <=5000.0:0 >5000:0 
+[nmpc_node-4]   phases dynamics(n=99 mean=2.2 max=5.9) jdotqdot(n=99 mean=1.7 max=2.9) pinv(n=99 mean=2.4 max=10.3) lambda(n=198 mean=2.6 max=10.3) qpsolve(n=99 mean=859.2 max=1004.1) 
+[nmpc_node-4]   unattributed=5.1 us/tick
+[nmpc_node-4]   qp_iter/tick mean=7.1 max=8.0 (cap 60/solve)  hpipm_us mean=841.2 max=980.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-4] [0m[INFO] [1793255257.602645929] [pat_arm_nmpc_right]: pat_arm_nmpc[right] publish us  torque(n=100 mean=18.1 max=38.8)   ee_pose(n=100 mean=7.1 max=22.1) 
+[nmpc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793255258.585871749] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 3 max 109 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 103/0 rej, pos 102/0 rej, too_old 0, gaps 0, replays 205 (max 75 steps) | NIS yaw 0.47 pos 5.09[0m
+[nmpc_node-3] [0m[INFO] [1793255258.595565626] [pat_arm_nmpc_left]: pat_arm_nmpc[left] 99 ticks @ 10000 us | period jitter mean 39 max 126 us | callback wall mean 912 max 1132 / cpu mean 911 max 1131 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-3] profile over 99 ticks (us)  TICK mean=874.3 max=1088.5 over_period=0/99
+[nmpc_node-3]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:96 <=2500.0:3 <=5000.0:0 >5000:0 
+[nmpc_node-3]   phases dynamics(n=99 mean=2.0 max=3.9) jdotqdot(n=99 mean=1.7 max=5.9) pinv(n=99 mean=2.0 max=3.6) lambda(n=198 mean=2.4 max=21.9) qpsolve(n=99 mean=859.5 max=1070.1) 
+[nmpc_node-3]   unattributed=4.2 us/tick
+[nmpc_node-3]   qp_iter/tick mean=7.0 max=8.0 (cap 60/solve)  hpipm_us mean=842.4 max=1048.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-3] [0m[INFO] [1793255258.595622386] [pat_arm_nmpc_left]: pat_arm_nmpc[left] publish us  torque(n=100 mean=18.5 max=26.6)   ee_pose(n=100 mean=6.0 max=15.0) 
+[nmpc_node-3]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nmpc_node-4] [0m[INFO] [1793255258.602573122] [pat_arm_nmpc_right]: pat_arm_nmpc[right] 99 ticks @ 10000 us | period jitter mean 45 max 141 us | callback wall mean 921 max 1246 / cpu mean 920 max 1246 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-4] profile over 99 ticks (us)  TICK mean=882.8 max=1202.2 over_period=0/99
+[nmpc_node-4]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:92 <=2500.0:7 <=5000.0:0 >5000:0 
+[nmpc_node-4]   phases dynamics(n=99 mean=2.2 max=6.6) jdotqdot(n=99 mean=1.7 max=4.4) pinv(n=99 mean=2.2 max=5.2) lambda(n=198 mean=2.7 max=19.1) qpsolve(n=99 mean=866.3 max=1185.1) 
+[nmpc_node-4]   unattributed=5.0 us/tick
+[nmpc_node-4]   qp_iter/tick mean=7.1 max=8.0 (cap 60/solve)  hpipm_us mean=848.5 max=1168.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-4] [0m[INFO] [1793255258.602621149] [pat_arm_nmpc_right]: pat_arm_nmpc[right] publish us  torque(n=100 mean=18.7 max=40.7)   ee_pose(n=100 mean=6.3 max=14.8) 
+[nmpc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793255259.585857142] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 3 max 109 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 108/0 rej, pos 107/0 rej, too_old 0, gaps 0, replays 215 (max 75 steps) | NIS yaw 3.77 pos 2.15[0m
+[nmpc_node-3] [0m[INFO] [1793255259.595412043] [pat_arm_nmpc_left]: pat_arm_nmpc[left] 99 ticks @ 10000 us | period jitter mean 26 max 151 us | callback wall mean 1091 max 1812 / cpu mean 1089 max 1812 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-3] profile over 99 ticks (us)  TICK mean=1052.1 max=1752.9 over_period=0/99
+[nmpc_node-3]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:23 <=2500.0:76 <=5000.0:0 >5000:0 
+[nmpc_node-3]   phases dynamics(n=99 mean=2.1 max=3.9) jdotqdot(n=99 mean=1.6 max=3.4) pinv(n=99 mean=2.1 max=6.4) lambda(n=198 mean=2.4 max=9.5) qpsolve(n=99 mean=1034.9 max=1718.8) 
+[nmpc_node-3]   unattributed=6.5 us/tick
+[nmpc_node-3]   qp_iter/tick mean=8.6 max=9.0 (cap 60/solve)  hpipm_us mean=1017.1 max=1688.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-3] [0m[INFO] [1793255259.595451346] [pat_arm_nmpc_left]: pat_arm_nmpc[left] reference: trajectory | 89 trajectory ticks, 0 node refs held past the window | windows rejected 0, truncated 0[0m
+[nmpc_node-3] [0m[INFO] [1793255259.595459385] [pat_arm_nmpc_left]: pat_arm_nmpc[left] publish us  torque(n=100 mean=17.8 max=33.0)   ee_pose(n=100 mean=17.1 max=51.6) 
+[nmpc_node-3]   hist(publish_us) <=50.0:199 <=100.0:1 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nmpc_node-4] [0m[INFO] [1793255259.602539514] [pat_arm_nmpc_right]: pat_arm_nmpc[right] 99 ticks @ 10000 us | period jitter mean 53 max 153 us | callback wall mean 957 max 1441 / cpu mean 956 max 1440 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-4] profile over 99 ticks (us)  TICK mean=918.7 max=1402.2 over_period=0/99
+[nmpc_node-4]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:90 <=2500.0:9 <=5000.0:0 >5000:0 
+[nmpc_node-4]   phases dynamics(n=99 mean=2.2 max=7.0) jdotqdot(n=99 mean=1.8 max=4.4) pinv(n=99 mean=2.3 max=5.3) lambda(n=198 mean=2.9 max=26.0) qpsolve(n=99 mean=901.5 max=1380.4) 
+[nmpc_node-4]   unattributed=5.1 us/tick
+[nmpc_node-4]   qp_iter/tick mean=7.4 max=8.0 (cap 60/solve)  hpipm_us mean=882.8 max=1364.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-4] [0m[INFO] [1793255259.602592095] [pat_arm_nmpc_right]: pat_arm_nmpc[right] publish us  torque(n=100 mean=17.8 max=30.3)   ee_pose(n=100 mean=6.4 max=12.9) 
+[nmpc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793255260.585794565] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 4 max 109 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 113/0 rej, pos 112/0 rej, too_old 0, gaps 0, replays 225 (max 75 steps) | NIS yaw 0.09 pos 0.17[0m
+[nmpc_node-3] [0m[INFO] [1793255260.595505459] [pat_arm_nmpc_left]: pat_arm_nmpc[left] 99 ticks @ 10000 us | period jitter mean 47 max 149 us | callback wall mean 985 max 1218 / cpu mean 984 max 1218 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-3] profile over 99 ticks (us)  TICK mean=949.4 max=1175.7 over_period=0/99
+[nmpc_node-3]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:77 <=2500.0:22 <=5000.0:0 >5000:0 
+[nmpc_node-3]   phases dynamics(n=99 mean=2.0 max=3.2) jdotqdot(n=99 mean=1.6 max=3.3) pinv(n=99 mean=2.0 max=3.8) lambda(n=198 mean=2.3 max=7.5) qpsolve(n=99 mean=932.5 max=1156.9) 
+[nmpc_node-3]   unattributed=6.7 us/tick
+[nmpc_node-3]   qp_iter/tick mean=7.7 max=9.0 (cap 60/solve)  hpipm_us mean=915.6 max=1120.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-3] [0m[INFO] [1793255260.595566397] [pat_arm_nmpc_left]: pat_arm_nmpc[left] reference: trajectory | 189 trajectory ticks, 0 node refs held past the window | windows rejected 0, truncated 0[0m
+[nmpc_node-3] [0m[INFO] [1793255260.595599895] [pat_arm_nmpc_left]: pat_arm_nmpc[left] publish us  torque(n=100 mean=16.3 max=25.1)   ee_pose(n=100 mean=19.0 max=39.0) 
+[nmpc_node-3]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nmpc_node-4] [0m[INFO] [1793255260.602511223] [pat_arm_nmpc_right]: pat_arm_nmpc[right] 99 ticks @ 10000 us | period jitter mean 57 max 175 us | callback wall mean 993 max 1217 / cpu mean 992 max 1216 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-4] profile over 99 ticks (us)  TICK mean=955.2 max=1173.3 over_period=0/99
+[nmpc_node-4]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:79 <=2500.0:20 <=5000.0:0 >5000:0 
+[nmpc_node-4]   phases dynamics(n=99 mean=2.3 max=6.8) jdotqdot(n=99 mean=1.8 max=5.8) pinv(n=99 mean=2.2 max=5.2) lambda(n=198 mean=2.6 max=10.6) qpsolve(n=99 mean=938.9 max=1152.7) 
+[nmpc_node-4]   unattributed=4.9 us/tick
+[nmpc_node-4]   qp_iter/tick mean=7.8 max=8.0 (cap 60/solve)  hpipm_us mean=921.6 max=1135.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-4] [0m[INFO] [1793255260.602559497] [pat_arm_nmpc_right]: pat_arm_nmpc[right] publish us  torque(n=100 mean=18.5 max=119.7)   ee_pose(n=100 mean=7.0 max=22.3) 
+[nmpc_node-4]   hist(publish_us) <=50.0:199 <=100.0:0 <=250.0:1 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793255261.585745819] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 4 max 109 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 118/0 rej, pos 117/0 rej, too_old 0, gaps 0, replays 235 (max 75 steps) | NIS yaw 0.81 pos 1.38[0m
+[nmpc_node-3] [0m[INFO] [1793255261.595469932] [pat_arm_nmpc_left]: pat_arm_nmpc[left] 99 ticks @ 10000 us | period jitter mean 47 max 130 us | callback wall mean 1027 max 1202 / cpu mean 1026 max 1195 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-3] profile over 99 ticks (us)  TICK mean=991.8 max=1142.3 over_period=0/99
+[nmpc_node-3]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:62 <=2500.0:37 <=5000.0:0 >5000:0 
+[nmpc_node-3]   phases dynamics(n=99 mean=2.2 max=15.0) jdotqdot(n=99 mean=1.7 max=3.1) pinv(n=99 mean=2.0 max=4.1) lambda(n=198 mean=2.4 max=13.9) qpsolve(n=99 mean=974.4 max=1120.4) 
+[nmpc_node-3]   unattributed=6.7 us/tick
+[nmpc_node-3]   qp_iter/tick mean=8.0 max=8.0 (cap 60/solve)  hpipm_us mean=957.5 max=1100.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-3] [0m[INFO] [1793255261.595529039] [pat_arm_nmpc_left]: pat_arm_nmpc[left] reference: trajectory | 289 trajectory ticks, 0 node refs held past the window | windows rejected 0, truncated 0[0m
+[nmpc_node-3] [0m[INFO] [1793255261.595547872] [pat_arm_nmpc_left]: pat_arm_nmpc[left] publish us  torque(n=100 mean=16.9 max=29.2)   ee_pose(n=100 mean=18.0 max=47.3) 
+[nmpc_node-3]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nmpc_node-4] [0m[INFO] [1793255261.602485900] [pat_arm_nmpc_right]: pat_arm_nmpc[right] 99 ticks @ 10000 us | period jitter mean 53 max 157 us | callback wall mean 914 max 1178 / cpu mean 913 max 1177 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-4] profile over 99 ticks (us)  TICK mean=875.2 max=1138.8 over_period=0/99
+[nmpc_node-4]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:95 <=2500.0:4 <=5000.0:0 >5000:0 
+[nmpc_node-4]   phases dynamics(n=99 mean=2.4 max=6.7) jdotqdot(n=99 mean=1.8 max=6.0) pinv(n=99 mean=2.4 max=7.2) lambda(n=198 mean=2.8 max=14.2) qpsolve(n=99 mean=858.0 max=1121.9) 
+[nmpc_node-4]   unattributed=5.1 us/tick
+[nmpc_node-4]   qp_iter/tick mean=7.0 max=7.0 (cap 60/solve)  hpipm_us mean=839.9 max=1095.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-4] [0m[INFO] [1793255261.602562047] [pat_arm_nmpc_right]: pat_arm_nmpc[right] publish us  torque(n=100 mean=18.1 max=35.8)   ee_pose(n=100 mean=7.9 max=23.3) 
+[nmpc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793255262.585709368] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 4 max 109 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 123/0 rej, pos 122/0 rej, too_old 0, gaps 0, replays 245 (max 75 steps) | NIS yaw 0.94 pos 0.10[0m
+[nmpc_node-3] [0m[INFO] [1793255262.595427354] [pat_arm_nmpc_left]: pat_arm_nmpc[left] 99 ticks @ 10000 us | period jitter mean 44 max 216 us | callback wall mean 945 max 1686 / cpu mean 944 max 1686 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-3] profile over 99 ticks (us)  TICK mean=904.0 max=1603.7 over_period=0/99
+[nmpc_node-3]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:91 <=2500.0:8 <=5000.0:0 >5000:0 
+[nmpc_node-3]   phases dynamics(n=99 mean=2.1 max=5.4) jdotqdot(n=99 mean=1.8 max=6.5) pinv(n=99 mean=2.2 max=6.5) lambda(n=198 mean=2.7 max=14.1) qpsolve(n=99 mean=885.2 max=1559.5) 
+[nmpc_node-3]   unattributed=7.4 us/tick
+[nmpc_node-3]   qp_iter/tick mean=7.0 max=7.0 (cap 60/solve)  hpipm_us mean=867.3 max=1524.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-3] [0m[INFO] [1793255262.595487745] [pat_arm_nmpc_left]: pat_arm_nmpc[left] reference: trajectory | 389 trajectory ticks, 0 node refs held past the window | windows rejected 0, truncated 0[0m
+[nmpc_node-3] [0m[INFO] [1793255262.595508546] [pat_arm_nmpc_left]: pat_arm_nmpc[left] publish us  torque(n=100 mean=19.4 max=62.7)   ee_pose(n=100 mean=20.7 max=62.9) 
+[nmpc_node-3]   hist(publish_us) <=50.0:198 <=100.0:2 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nmpc_node-4] [0m[INFO] [1793255262.602438855] [pat_arm_nmpc_right]: pat_arm_nmpc[right] 99 ticks @ 10000 us | period jitter mean 54 max 150 us | callback wall mean 932 max 1636 / cpu mean 931 max 1635 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-4] profile over 99 ticks (us)  TICK mean=891.9 max=1566.7 over_period=0/99
+[nmpc_node-4]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:91 <=2500.0:8 <=5000.0:0 >5000:0 
+[nmpc_node-4]   phases dynamics(n=99 mean=2.4 max=6.8) jdotqdot(n=99 mean=1.9 max=5.2) pinv(n=99 mean=2.4 max=8.7) lambda(n=198 mean=2.8 max=16.1) qpsolve(n=99 mean=874.2 max=1526.1) 
+[nmpc_node-4]   unattributed=5.3 us/tick
+[nmpc_node-4]   qp_iter/tick mean=7.0 max=7.0 (cap 60/solve)  hpipm_us mean=854.8 max=1493.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-4] [0m[INFO] [1793255262.602485564] [pat_arm_nmpc_right]: pat_arm_nmpc[right] publish us  torque(n=100 mean=18.2 max=35.7)   ee_pose(n=100 mean=8.1 max=21.8) 
+[nmpc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793255263.585716074] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 3 max 109 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 128/0 rej, pos 127/0 rej, too_old 0, gaps 0, replays 255 (max 75 steps) | NIS yaw 0.05 pos 0.39[0m
+[nmpc_node-3] [0m[INFO] [1793255263.595388207] [pat_arm_nmpc_left]: pat_arm_nmpc[left] 99 ticks @ 10000 us | period jitter mean 42 max 132 us | callback wall mean 935 max 1366 / cpu mean 933 max 1367 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-3] profile over 99 ticks (us)  TICK mean=894.8 max=1307.1 over_period=0/99
+[nmpc_node-3]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:92 <=2500.0:7 <=5000.0:0 >5000:0 
+[nmpc_node-3]   phases dynamics(n=99 mean=2.1 max=4.2) jdotqdot(n=99 mean=1.7 max=6.0) pinv(n=99 mean=2.0 max=4.0) lambda(n=198 mean=2.4 max=9.1) qpsolve(n=99 mean=877.1 max=1269.0) 
+[nmpc_node-3]   unattributed=7.2 us/tick
+[nmpc_node-3]   qp_iter/tick mean=7.0 max=8.0 (cap 60/solve)  hpipm_us mean=860.1 max=1242.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-3] [0m[INFO] [1793255263.595460188] [pat_arm_nmpc_left]: pat_arm_nmpc[left] reference: trajectory | 489 trajectory ticks, 0 node refs held past the window | windows rejected 0, truncated 0[0m
+[nmpc_node-3] [0m[INFO] [1793255263.595479976] [pat_arm_nmpc_left]: pat_arm_nmpc[left] publish us  torque(n=100 mean=18.3 max=36.5)   ee_pose(n=100 mean=19.2 max=58.8) 
+[nmpc_node-3]   hist(publish_us) <=50.0:199 <=100.0:1 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nmpc_node-4] [0m[INFO] [1793255263.602284117] [pat_arm_nmpc_right]: pat_arm_nmpc[right] 99 ticks @ 10000 us | period jitter mean 35 max 120 us | callback wall mean 900 max 1135 / cpu mean 899 max 1129 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-4] profile over 99 ticks (us)  TICK mean=861.9 max=1053.6 over_period=0/99
+[nmpc_node-4]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:94 <=2500.0:5 <=5000.0:0 >5000:0 
+[nmpc_node-4]   phases dynamics(n=99 mean=2.0 max=3.9) jdotqdot(n=99 mean=1.8 max=7.7) pinv(n=99 mean=2.2 max=7.5) lambda(n=198 mean=2.5 max=17.8) qpsolve(n=99 mean=846.2 max=1033.7) 
+[nmpc_node-4]   unattributed=4.6 us/tick
+[nmpc_node-4]   qp_iter/tick mean=7.0 max=8.0 (cap 60/solve)  hpipm_us mean=829.1 max=1020.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-4] [0m[INFO] [1793255263.602319978] [pat_arm_nmpc_right]: pat_arm_nmpc[right] publish us  torque(n=100 mean=15.4 max=30.0)   ee_pose(n=100 mean=7.6 max=26.0) 
+[nmpc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793255264.585680889] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 3 max 109 us, overruns 0 | in imu 499 pose 100, ring drops 0/0 | yaw 133/0 rej, pos 132/0 rej, too_old 0, gaps 0, replays 265 (max 75 steps) | NIS yaw 1.36 pos 0.89[0m
+[nmpc_node-3] [0m[INFO] [1793255264.595343882] [pat_arm_nmpc_left]: pat_arm_nmpc[left] 99 ticks @ 10000 us | period jitter mean 46 max 167 us | callback wall mean 954 max 1179 / cpu mean 952 max 1173 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-3] profile over 99 ticks (us)  TICK mean=915.8 max=1136.4 over_period=0/99
+[nmpc_node-3]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:85 <=2500.0:14 <=5000.0:0 >5000:0 
+[nmpc_node-3]   phases dynamics(n=99 mean=2.1 max=5.0) jdotqdot(n=99 mean=1.7 max=6.0) pinv(n=99 mean=2.1 max=5.1) lambda(n=198 mean=2.4 max=7.8) qpsolve(n=99 mean=898.4 max=1117.5) 
+[nmpc_node-3]   unattributed=6.7 us/tick
+[nmpc_node-3]   qp_iter/tick mean=7.2 max=8.0 (cap 60/solve)  hpipm_us mean=881.6 max=1094.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-3] [0m[INFO] [1793255264.595397046] [pat_arm_nmpc_left]: pat_arm_nmpc[left] reference: trajectory | 589 trajectory ticks, 0 node refs held past the window | windows rejected 0, truncated 0[0m
+[nmpc_node-3] [0m[INFO] [1793255264.595414947] [pat_arm_nmpc_left]: pat_arm_nmpc[left] publish us  torque(n=100 mean=17.6 max=35.9)   ee_pose(n=100 mean=19.2 max=37.5) 
+[nmpc_node-3]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nmpc_node-4] [0m[INFO] [1793255264.602353567] [pat_arm_nmpc_right]: pat_arm_nmpc[right] 99 ticks @ 10000 us | period jitter mean 41 max 175 us | callback wall mean 968 max 1278 / cpu mean 967 max 1272 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-4] profile over 99 ticks (us)  TICK mean=930.3 max=1216.9 over_period=0/99
+[nmpc_node-4]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:87 <=2500.0:12 <=5000.0:0 >5000:0 
+[nmpc_node-4]   phases dynamics(n=99 mean=2.2 max=7.0) jdotqdot(n=99 mean=1.7 max=3.1) pinv(n=99 mean=2.1 max=7.0) lambda(n=198 mean=2.6 max=11.7) qpsolve(n=99 mean=914.5 max=1188.8) 
+[nmpc_node-4]   unattributed=4.6 us/tick
+[nmpc_node-4]   qp_iter/tick mean=7.6 max=8.0 (cap 60/solve)  hpipm_us mean=897.9 max=1157.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-4] [0m[INFO] [1793255264.602398171] [pat_arm_nmpc_right]: pat_arm_nmpc[right] publish us  torque(n=100 mean=17.2 max=38.9)   ee_pose(n=100 mean=8.1 max=22.1) 
+[nmpc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793255265.585636419] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 3 max 109 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 138/0 rej, pos 137/0 rej, too_old 0, gaps 0, replays 275 (max 75 steps) | NIS yaw 0.18 pos 0.23[0m
+[nmpc_node-3] [0m[INFO] [1793255265.595314485] [pat_arm_nmpc_left]: pat_arm_nmpc[left] 99 ticks @ 10000 us | period jitter mean 39 max 149 us | callback wall mean 937 max 1490 / cpu mean 935 max 1490 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-3] profile over 99 ticks (us)  TICK mean=896.2 max=1446.9 over_period=0/99
+[nmpc_node-3]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:88 <=2500.0:11 <=5000.0:0 >5000:0 
+[nmpc_node-3]   phases dynamics(n=99 mean=2.2 max=5.4) jdotqdot(n=99 mean=1.7 max=3.8) pinv(n=99 mean=2.1 max=4.3) lambda(n=198 mean=2.5 max=10.5) qpsolve(n=99 mean=878.3 max=1425.3) 
+[nmpc_node-3]   unattributed=7.0 us/tick
+[nmpc_node-3]   qp_iter/tick mean=7.0 max=7.0 (cap 60/solve)  hpipm_us mean=860.6 max=1403.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-3] [0m[INFO] [1793255265.595381298] [pat_arm_nmpc_left]: pat_arm_nmpc[left] reference: trajectory | 689 trajectory ticks, 0 node refs held past the window | windows rejected 0, truncated 0[0m
+[nmpc_node-3] [0m[INFO] [1793255265.595408354] [pat_arm_nmpc_left]: pat_arm_nmpc[left] publish us  torque(n=100 mean=19.0 max=31.0)   ee_pose(n=100 mean=17.7 max=47.7) 
+[nmpc_node-3]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nmpc_node-4] [0m[INFO] [1793255265.602211120] [pat_arm_nmpc_right]: pat_arm_nmpc[right] 99 ticks @ 10000 us | period jitter mean 34 max 178 us | callback wall mean 934 max 1302 / cpu mean 933 max 1301 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-4] profile over 99 ticks (us)  TICK mean=896.1 max=1243.8 over_period=0/99
+[nmpc_node-4]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:90 <=2500.0:9 <=5000.0:0 >5000:0 
+[nmpc_node-4]   phases dynamics(n=99 mean=2.2 max=7.5) jdotqdot(n=99 mean=1.8 max=5.1) pinv(n=99 mean=2.2 max=4.6) lambda(n=198 mean=2.7 max=8.8) qpsolve(n=99 mean=879.5 max=1213.8) 
+[nmpc_node-4]   unattributed=4.9 us/tick
+[nmpc_node-4]   qp_iter/tick mean=7.2 max=8.0 (cap 60/solve)  hpipm_us mean=861.8 max=1180.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-4] [0m[INFO] [1793255265.602240095] [pat_arm_nmpc_right]: pat_arm_nmpc[right] publish us  torque(n=100 mean=17.3 max=28.9)   ee_pose(n=100 mean=7.3 max=19.0) 
+[nmpc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793255266.585585115] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 2 max 109 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 143/0 rej, pos 142/0 rej, too_old 0, gaps 0, replays 285 (max 75 steps) | NIS yaw 1.11 pos 3.48[0m
+[nmpc_node-3] [0m[INFO] [1793255266.595292241] [pat_arm_nmpc_left]: pat_arm_nmpc[left] 99 ticks @ 10000 us | period jitter mean 33 max 139 us | callback wall mean 910 max 1233 / cpu mean 909 max 1232 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-3] profile over 99 ticks (us)  TICK mean=871.2 max=1177.9 over_period=0/99
+[nmpc_node-3]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:96 <=2500.0:3 <=5000.0:0 >5000:0 
+[nmpc_node-3]   phases dynamics(n=99 mean=2.2 max=6.5) jdotqdot(n=99 mean=1.7 max=3.1) pinv(n=99 mean=2.1 max=4.6) lambda(n=198 mean=2.4 max=9.1) qpsolve(n=99 mean=853.6 max=1158.9) 
+[nmpc_node-3]   unattributed=6.9 us/tick
+[nmpc_node-3]   qp_iter/tick mean=7.0 max=7.0 (cap 60/solve)  hpipm_us mean=836.3 max=1125.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-3] [0m[INFO] [1793255266.595355015] [pat_arm_nmpc_left]: pat_arm_nmpc[left] reference: trajectory | 789 trajectory ticks, 0 node refs held past the window | windows rejected 0, truncated 0[0m
+[nmpc_node-3] [0m[INFO] [1793255266.595374547] [pat_arm_nmpc_left]: pat_arm_nmpc[left] publish us  torque(n=100 mean=17.4 max=36.2)   ee_pose(n=100 mean=20.0 max=121.8) 
+[nmpc_node-3]   hist(publish_us) <=50.0:199 <=100.0:0 <=250.0:1 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nmpc_node-4] [0m[INFO] [1793255266.602293397] [pat_arm_nmpc_right]: pat_arm_nmpc[right] 99 ticks @ 10000 us | period jitter mean 63 max 164 us | callback wall mean 901 max 1066 / cpu mean 900 max 1061 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-4] profile over 99 ticks (us)  TICK mean=863.0 max=1016.1 over_period=0/99
+[nmpc_node-4]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:97 <=2500.0:2 <=5000.0:0 >5000:0 
+[nmpc_node-4]   phases dynamics(n=99 mean=2.1 max=5.2) jdotqdot(n=99 mean=1.7 max=5.3) pinv(n=99 mean=2.1 max=6.9) lambda(n=198 mean=2.7 max=10.7) qpsolve(n=99 mean=847.1 max=1002.6) 
+[nmpc_node-4]   unattributed=4.7 us/tick
+[nmpc_node-4]   qp_iter/tick mean=7.0 max=7.0 (cap 60/solve)  hpipm_us mean=830.7 max=985.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-4] [0m[INFO] [1793255266.602351856] [pat_arm_nmpc_right]: pat_arm_nmpc[right] publish us  torque(n=100 mean=17.8 max=39.0)   ee_pose(n=100 mean=8.0 max=44.4) 
+[nmpc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793255267.585541090] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 2 max 109 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 148/0 rej, pos 147/0 rej, too_old 0, gaps 0, replays 295 (max 75 steps) | NIS yaw 0.02 pos 0.39[0m
+[nmpc_node-3] [0m[INFO] [1793255267.595203758] [pat_arm_nmpc_left]: pat_arm_nmpc[left] 99 ticks @ 10000 us | period jitter mean 43 max 136 us | callback wall mean 914 max 1135 / cpu mean 913 max 1134 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-3] profile over 99 ticks (us)  TICK mean=873.3 max=1079.3 over_period=0/99
+[nmpc_node-3]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:94 <=2500.0:5 <=5000.0:0 >5000:0 
+[nmpc_node-3]   phases dynamics(n=99 mean=2.2 max=10.6) jdotqdot(n=99 mean=1.6 max=2.7) pinv(n=99 mean=2.1 max=6.3) lambda(n=198 mean=2.4 max=8.5) qpsolve(n=99 mean=856.0 max=1056.9) 
+[nmpc_node-3]   unattributed=6.6 us/tick
+[nmpc_node-3]   qp_iter/tick mean=7.0 max=7.0 (cap 60/solve)  hpipm_us mean=839.2 max=1029.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-3] [0m[INFO] [1793255267.595259147] [pat_arm_nmpc_left]: pat_arm_nmpc[left] reference: trajectory | 889 trajectory ticks, 0 node refs held past the window | windows rejected 0, truncated 0[0m
+[nmpc_node-3] [0m[INFO] [1793255267.595278034] [pat_arm_nmpc_left]: pat_arm_nmpc[left] publish us  torque(n=100 mean=19.1 max=32.8)   ee_pose(n=100 mean=18.9 max=71.0) 
+[nmpc_node-3]   hist(publish_us) <=50.0:199 <=100.0:1 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nmpc_node-4] [0m[INFO] [1793255267.602136975] [pat_arm_nmpc_right]: pat_arm_nmpc[right] 99 ticks @ 10000 us | period jitter mean 38 max 128 us | callback wall mean 944 max 1129 / cpu mean 944 max 1128 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-4] profile over 99 ticks (us)  TICK mean=905.6 max=1081.2 over_period=0/99
+[nmpc_node-4]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:91 <=2500.0:8 <=5000.0:0 >5000:0 
+[nmpc_node-4]   phases dynamics(n=99 mean=2.1 max=4.7) jdotqdot(n=99 mean=1.8 max=6.9) pinv(n=99 mean=2.1 max=6.1) lambda(n=198 mean=2.6 max=9.5) qpsolve(n=99 mean=889.6 max=1071.2) 
+[nmpc_node-4]   unattributed=4.7 us/tick
+[nmpc_node-4]   qp_iter/tick mean=7.4 max=8.0 (cap 60/solve)  hpipm_us mean=873.0 max=1049.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-4] [0m[INFO] [1793255267.602165960] [pat_arm_nmpc_right]: pat_arm_nmpc[right] publish us  torque(n=100 mean=17.8 max=32.3)   ee_pose(n=100 mean=7.4 max=23.0) 
+[nmpc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793255268.585513583] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 2 max 109 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 153/0 rej, pos 152/0 rej, too_old 0, gaps 0, replays 305 (max 75 steps) | NIS yaw 0.08 pos 1.24[0m
+[nmpc_node-3] [0m[INFO] [1793255268.595084227] [pat_arm_nmpc_left]: pat_arm_nmpc[left] 99 ticks @ 10000 us | period jitter mean 46 max 179 us | callback wall mean 924 max 1170 / cpu mean 923 max 1170 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-3] profile over 99 ticks (us)  TICK mean=884.2 max=1131.1 over_period=0/99
+[nmpc_node-3]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:91 <=2500.0:8 <=5000.0:0 >5000:0 
+[nmpc_node-3]   phases dynamics(n=99 mean=2.1 max=2.9) jdotqdot(n=99 mean=1.7 max=2.3) pinv(n=99 mean=2.0 max=2.9) lambda(n=198 mean=2.4 max=12.8) qpsolve(n=99 mean=866.8 max=1114.9) 
+[nmpc_node-3]   unattributed=6.8 us/tick
+[nmpc_node-3]   qp_iter/tick mean=7.0 max=7.0 (cap 60/solve)  hpipm_us mean=849.6 max=1101.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-3] [0m[INFO] [1793255268.595119719] [pat_arm_nmpc_left]: pat_arm_nmpc[left] reference: trajectory | 989 trajectory ticks, 0 node refs held past the window | windows rejected 0, truncated 0[0m
+[nmpc_node-3] [0m[INFO] [1793255268.595127814] [pat_arm_nmpc_left]: pat_arm_nmpc[left] publish us  torque(n=100 mean=18.2 max=41.4)   ee_pose(n=100 mean=18.3 max=48.4) 
+[nmpc_node-3]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nmpc_node-4] [0m[INFO] [1793255268.602223319] [pat_arm_nmpc_right]: pat_arm_nmpc[right] 99 ticks @ 10000 us | period jitter mean 50 max 127 us | callback wall mean 1009 max 1345 / cpu mean 1008 max 1345 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-4] profile over 99 ticks (us)  TICK mean=971.7 max=1309.3 over_period=0/99
+[nmpc_node-4]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:78 <=2500.0:21 <=5000.0:0 >5000:0 
+[nmpc_node-4]   phases dynamics(n=99 mean=2.2 max=7.3) jdotqdot(n=99 mean=1.8 max=5.0) pinv(n=99 mean=2.2 max=8.6) lambda(n=198 mean=2.9 max=19.5) qpsolve(n=99 mean=955.0 max=1296.0) 
+[nmpc_node-4]   unattributed=4.7 us/tick
+[nmpc_node-4]   qp_iter/tick mean=8.0 max=8.0 (cap 60/solve)  hpipm_us mean=938.2 max=1278.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-4] [0m[INFO] [1793255268.602271626] [pat_arm_nmpc_right]: pat_arm_nmpc[right] publish us  torque(n=100 mean=17.0 max=27.3)   ee_pose(n=100 mean=7.4 max=22.7) 
+[nmpc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793255269.585484289] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 2 max 109 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 158/0 rej, pos 157/0 rej, too_old 0, gaps 0, replays 315 (max 75 steps) | NIS yaw 2.84 pos 3.07[0m
+[nmpc_node-3] [0m[INFO] [1793255269.595185731] [pat_arm_nmpc_left]: pat_arm_nmpc[left] 99 ticks @ 10000 us | period jitter mean 23 max 89 us | callback wall mean 919 max 1116 / cpu mean 918 max 1116 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-3] profile over 99 ticks (us)  TICK mean=881.1 max=1063.8 over_period=0/99
+[nmpc_node-3]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:94 <=2500.0:5 <=5000.0:0 >5000:0 
+[nmpc_node-3]   phases dynamics(n=99 mean=2.1 max=4.2) jdotqdot(n=99 mean=1.7 max=2.8) pinv(n=99 mean=2.0 max=3.2) lambda(n=198 mean=2.4 max=10.5) qpsolve(n=99 mean=863.9 max=1040.6) 
+[nmpc_node-3]   unattributed=6.7 us/tick
+[nmpc_node-3]   qp_iter/tick mean=7.1 max=8.0 (cap 60/solve)  hpipm_us mean=847.0 max=1011.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-3] [0m[INFO] [1793255269.595240633] [pat_arm_nmpc_left]: pat_arm_nmpc[left] reference: trajectory | 1089 trajectory ticks, 0 node refs held past the window | windows rejected 0, truncated 0[0m
+[nmpc_node-3] [0m[INFO] [1793255269.595258835] [pat_arm_nmpc_left]: pat_arm_nmpc[left] publish us  torque(n=100 mean=18.4 max=32.4)   ee_pose(n=100 mean=19.0 max=50.4) 
+[nmpc_node-3]   hist(publish_us) <=50.0:199 <=100.0:1 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nmpc_node-4] [0m[INFO] [1793255269.602194474] [pat_arm_nmpc_right]: pat_arm_nmpc[right] 99 ticks @ 10000 us | period jitter mean 45 max 139 us | callback wall mean 958 max 1104 / cpu mean 958 max 1103 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-4] profile over 99 ticks (us)  TICK mean=922.8 max=1054.2 over_period=0/99
+[nmpc_node-4]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:89 <=2500.0:10 <=5000.0:0 >5000:0 
+[nmpc_node-4]   phases dynamics(n=99 mean=2.2 max=6.7) jdotqdot(n=99 mean=1.8 max=5.9) pinv(n=99 mean=2.2 max=5.3) lambda(n=198 mean=2.6 max=9.0) qpsolve(n=99 mean=906.7 max=1027.8) 
+[nmpc_node-4]   unattributed=4.7 us/tick
+[nmpc_node-4]   qp_iter/tick mean=7.6 max=8.0 (cap 60/solve)  hpipm_us mean=890.1 max=1010.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-4] [0m[INFO] [1793255269.602252156] [pat_arm_nmpc_right]: pat_arm_nmpc[right] publish us  torque(n=100 mean=17.1 max=30.3)   ee_pose(n=100 mean=7.3 max=40.7) 
+[nmpc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793255270.585479384] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 2 max 109 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 163/0 rej, pos 162/0 rej, too_old 0, gaps 0, replays 325 (max 75 steps) | NIS yaw 1.20 pos 0.02[0m
+[nmpc_node-3] [0m[INFO] [1793255270.595158439] [pat_arm_nmpc_left]: pat_arm_nmpc[left] 99 ticks @ 10000 us | period jitter mean 36 max 140 us | callback wall mean 941 max 1268 / cpu mean 939 max 1265 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-3] profile over 99 ticks (us)  TICK mean=898.9 max=1181.6 over_period=0/99
+[nmpc_node-3]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:88 <=2500.0:11 <=5000.0:0 >5000:0 
+[nmpc_node-3]   phases dynamics(n=99 mean=2.2 max=6.9) jdotqdot(n=99 mean=1.7 max=6.0) pinv(n=99 mean=2.1 max=5.3) lambda(n=198 mean=2.5 max=10.6) qpsolve(n=99 mean=880.5 max=1141.3) 
+[nmpc_node-3]   unattributed=7.4 us/tick
+[nmpc_node-3]   qp_iter/tick mean=7.2 max=8.0 (cap 60/solve)  hpipm_us mean=863.2 max=1110.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-3] [0m[INFO] [1793255270.595232927] [pat_arm_nmpc_left]: pat_arm_nmpc[left] reference: trajectory | 1189 trajectory ticks, 0 node refs held past the window | windows rejected 0, truncated 0[0m
+[nmpc_node-3] [0m[INFO] [1793255270.595253090] [pat_arm_nmpc_left]: pat_arm_nmpc[left] publish us  torque(n=100 mean=18.3 max=32.7)   ee_pose(n=100 mean=19.7 max=47.1) 
+[nmpc_node-3]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nmpc_node-4] [0m[INFO] [1793255270.602181307] [pat_arm_nmpc_right]: pat_arm_nmpc[right] 99 ticks @ 10000 us | period jitter mean 44 max 136 us | callback wall mean 910 max 1519 / cpu mean 909 max 1519 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-4] profile over 99 ticks (us)  TICK mean=872.7 max=1452.1 over_period=0/99
+[nmpc_node-4]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:94 <=2500.0:5 <=5000.0:0 >5000:0 
+[nmpc_node-4]   phases dynamics(n=99 mean=2.2 max=5.7) jdotqdot(n=99 mean=1.7 max=4.5) pinv(n=99 mean=2.2 max=5.7) lambda(n=198 mean=2.6 max=12.7) qpsolve(n=99 mean=856.4 max=1411.7) 
+[nmpc_node-4]   unattributed=4.8 us/tick
+[nmpc_node-4]   qp_iter/tick mean=7.0 max=8.0 (cap 60/solve)  hpipm_us mean=839.6 max=1376.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-4] [0m[INFO] [1793255270.602248074] [pat_arm_nmpc_right]: pat_arm_nmpc[right] publish us  torque(n=100 mean=17.2 max=37.5)   ee_pose(n=100 mean=8.0 max=22.4) 
+[nmpc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793255271.585427042] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 3 max 109 us, overruns 0 | in imu 501 pose 100, ring drops 0/0 | yaw 168/0 rej, pos 167/0 rej, too_old 0, gaps 0, replays 335 (max 75 steps) | NIS yaw 0.14 pos 0.58[0m
+[nmpc_node-3] [0m[INFO] [1793255271.595143991] [pat_arm_nmpc_left]: pat_arm_nmpc[left] 99 ticks @ 10000 us | period jitter mean 28 max 116 us | callback wall mean 1046 max 1850 / cpu mean 1044 max 1848 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-3] profile over 99 ticks (us)  TICK mean=1001.4 max=1750.2 over_period=0/99
+[nmpc_node-3]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:60 <=2500.0:39 <=5000.0:0 >5000:0 
+[nmpc_node-3]   phases dynamics(n=99 mean=2.3 max=8.0) jdotqdot(n=99 mean=2.0 max=10.4) pinv(n=99 mean=2.4 max=8.2) lambda(n=198 mean=2.8 max=24.1) qpsolve(n=99 mean=980.4 max=1670.9) 
+[nmpc_node-3]   unattributed=8.5 us/tick
+[nmpc_node-3]   qp_iter/tick mean=7.6 max=8.0 (cap 60/solve)  hpipm_us mean=958.2 max=1582.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-3] [0m[INFO] [1793255271.595216043] [pat_arm_nmpc_left]: pat_arm_nmpc[left] reference: trajectory | 1289 trajectory ticks, 0 node refs held past the window | windows rejected 0, truncated 0[0m
+[nmpc_node-3] [0m[INFO] [1793255271.595240938] [pat_arm_nmpc_left]: pat_arm_nmpc[left] publish us  torque(n=100 mean=18.4 max=39.5)   ee_pose(n=100 mean=22.6 max=59.0) 
+[nmpc_node-3]   hist(publish_us) <=50.0:198 <=100.0:2 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nmpc_node-4] [0m[INFO] [1793255271.602149322] [pat_arm_nmpc_right]: pat_arm_nmpc[right] 99 ticks @ 10000 us | period jitter mean 35 max 157 us | callback wall mean 989 max 1553 / cpu mean 988 max 1552 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-4] profile over 99 ticks (us)  TICK mean=945.2 max=1478.4 over_period=0/99
+[nmpc_node-4]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:79 <=2500.0:20 <=5000.0:0 >5000:0 
+[nmpc_node-4]   phases dynamics(n=99 mean=2.6 max=6.3) jdotqdot(n=99 mean=2.3 max=7.5) pinv(n=99 mean=2.8 max=7.2) lambda(n=198 mean=3.2 max=13.3) qpsolve(n=99 mean=925.1 max=1437.3) 
+[nmpc_node-4]   unattributed=6.1 us/tick
+[nmpc_node-4]   qp_iter/tick mean=7.1 max=8.0 (cap 60/solve)  hpipm_us mean=903.2 max=1380.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-4] [0m[INFO] [1793255271.602222388] [pat_arm_nmpc_right]: pat_arm_nmpc[right] publish us  torque(n=100 mean=19.8 max=36.5)   ee_pose(n=100 mean=8.8 max=28.7) 
+[nmpc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793255272.585417187] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 3 max 109 us, overruns 0 | in imu 499 pose 100, ring drops 0/0 | yaw 173/0 rej, pos 172/0 rej, too_old 0, gaps 0, replays 345 (max 75 steps) | NIS yaw 2.06 pos 0.17[0m
+[nmpc_node-3] [0m[INFO] [1793255272.595020647] [pat_arm_nmpc_left]: pat_arm_nmpc[left] 99 ticks @ 10000 us | period jitter mean 46 max 181 us | callback wall mean 981 max 1441 / cpu mean 979 max 1441 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-3] profile over 99 ticks (us)  TICK mean=935.1 max=1365.1 over_period=0/99
+[nmpc_node-3]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:80 <=2500.0:19 <=5000.0:0 >5000:0 
+[nmpc_node-3]   phases dynamics(n=99 mean=2.4 max=24.2) jdotqdot(n=99 mean=1.7 max=6.3) pinv(n=99 mean=2.2 max=18.2) lambda(n=198 mean=2.5 max=11.6) qpsolve(n=99 mean=916.0 max=1286.7) 
+[nmpc_node-3]   unattributed=7.6 us/tick
+[nmpc_node-3]   qp_iter/tick mean=7.3 max=8.0 (cap 60/solve)  hpipm_us mean=897.1 max=1258.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-3] [0m[INFO] [1793255272.595075177] [pat_arm_nmpc_left]: pat_arm_nmpc[left] reference: trajectory | 1389 trajectory ticks, 0 node refs held past the window | windows rejected 0, truncated 0[0m
+[nmpc_node-3] [0m[INFO] [1793255272.595087250] [pat_arm_nmpc_left]: pat_arm_nmpc[left] publish us  torque(n=100 mean=18.9 max=40.2)   ee_pose(n=100 mean=18.9 max=57.6) 
+[nmpc_node-3]   hist(publish_us) <=50.0:199 <=100.0:1 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nmpc_node-4] [0m[INFO] [1793255272.602122297] [pat_arm_nmpc_right]: pat_arm_nmpc[right] 99 ticks @ 10000 us | period jitter mean 46 max 140 us | callback wall mean 989 max 1831 / cpu mean 988 max 1831 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-4] profile over 99 ticks (us)  TICK mean=946.8 max=1751.0 over_period=0/99
+[nmpc_node-4]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:75 <=2500.0:24 <=5000.0:0 >5000:0 
+[nmpc_node-4]   phases dynamics(n=99 mean=2.3 max=7.3) jdotqdot(n=99 mean=1.9 max=6.5) pinv(n=99 mean=2.4 max=6.6) lambda(n=198 mean=2.8 max=16.2) qpsolve(n=99 mean=929.3 max=1715.6) 
+[nmpc_node-4]   unattributed=5.3 us/tick
+[nmpc_node-4]   qp_iter/tick mean=7.5 max=8.0 (cap 60/solve)  hpipm_us mean=910.3 max=1681.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-4] [0m[INFO] [1793255272.602178738] [pat_arm_nmpc_right]: pat_arm_nmpc[right] publish us  torque(n=100 mean=18.1 max=44.6)   ee_pose(n=100 mean=7.6 max=25.3) 
+[nmpc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793255273.585437514] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 3 max 109 us, overruns 0 | in imu 499 pose 100, ring drops 0/0 | yaw 178/0 rej, pos 177/0 rej, too_old 0, gaps 0, replays 355 (max 75 steps) | NIS yaw 0.40 pos 0.72[0m
+[nmpc_node-3] [0m[INFO] [1793255273.594926968] [pat_arm_nmpc_left]: pat_arm_nmpc[left] 99 ticks @ 10000 us | period jitter mean 41 max 143 us | callback wall mean 959 max 1762 / cpu mean 957 max 1762 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-3] profile over 99 ticks (us)  TICK mean=914.6 max=1677.3 over_period=0/99
+[nmpc_node-3]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:91 <=2500.0:8 <=5000.0:0 >5000:0 
+[nmpc_node-3]   phases dynamics(n=99 mean=2.2 max=6.6) jdotqdot(n=99 mean=1.9 max=7.1) pinv(n=99 mean=2.3 max=7.6) lambda(n=198 mean=2.6 max=15.1) qpsolve(n=99 mean=894.9 max=1622.5) 
+[nmpc_node-3]   unattributed=8.0 us/tick
+[nmpc_node-3]   qp_iter/tick mean=7.0 max=8.0 (cap 60/solve)  hpipm_us mean=874.7 max=1583.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-3] [0m[INFO] [1793255273.594969333] [pat_arm_nmpc_left]: pat_arm_nmpc[left] reference: trajectory | 1489 trajectory ticks, 0 node refs held past the window | windows rejected 0, truncated 0[0m
+[nmpc_node-3] [0m[INFO] [1793255273.594978340] [pat_arm_nmpc_left]: pat_arm_nmpc[left] publish us  torque(n=100 mean=19.0 max=59.8)   ee_pose(n=100 mean=21.2 max=73.9) 
+[nmpc_node-3]   hist(publish_us) <=50.0:197 <=100.0:3 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nmpc_node-4] [0m[INFO] [1793255273.602079086] [pat_arm_nmpc_right]: pat_arm_nmpc[right] 99 ticks @ 10000 us | period jitter mean 57 max 194 us | callback wall mean 1016 max 2140 / cpu mean 1015 max 2139 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-4] profile over 99 ticks (us)  TICK mean=971.4 max=2008.5 over_period=0/99
+[nmpc_node-4]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:77 <=2500.0:22 <=5000.0:0 >5000:0 
+[nmpc_node-4]   phases dynamics(n=99 mean=2.5 max=6.7) jdotqdot(n=99 mean=2.1 max=8.6) pinv(n=99 mean=2.7 max=8.9) lambda(n=198 mean=3.1 max=15.9) qpsolve(n=99 mean=952.0 max=1957.8) 
+[nmpc_node-4]   unattributed=5.9 us/tick
+[nmpc_node-4]   qp_iter/tick mean=7.2 max=8.0 (cap 60/solve)  hpipm_us mean=931.3 max=1907.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-4] [0m[INFO] [1793255273.602133969] [pat_arm_nmpc_right]: pat_arm_nmpc[right] publish us  torque(n=100 mean=19.3 max=70.0)   ee_pose(n=100 mean=8.8 max=40.2) 
+[nmpc_node-4]   hist(publish_us) <=50.0:199 <=100.0:1 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793255274.585297253] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 3 max 109 us, overruns 0 | in imu 501 pose 100, ring drops 0/0 | yaw 183/0 rej, pos 182/0 rej, too_old 0, gaps 0, replays 365 (max 75 steps) | NIS yaw 0.80 pos 0.40[0m
+[nmpc_node-3] [0m[INFO] [1793255274.594889722] [pat_arm_nmpc_left]: pat_arm_nmpc[left] 99 ticks @ 10000 us | period jitter mean 30 max 123 us | callback wall mean 931 max 1533 / cpu mean 929 max 1533 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-3] profile over 99 ticks (us)  TICK mean=888.3 max=1469.1 over_period=0/99
+[nmpc_node-3]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:93 <=2500.0:6 <=5000.0:0 >5000:0 
+[nmpc_node-3]   phases dynamics(n=99 mean=2.2 max=8.7) jdotqdot(n=99 mean=1.7 max=3.5) pinv(n=99 mean=2.1 max=6.3) lambda(n=198 mean=2.5 max=16.4) qpsolve(n=99 mean=869.8 max=1422.9) 
+[nmpc_node-3]   unattributed=7.4 us/tick
+[nmpc_node-3]   qp_iter/tick mean=7.0 max=7.0 (cap 60/solve)  hpipm_us mean=851.1 max=1382.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-3] [0m[INFO] [1793255274.594926375] [pat_arm_nmpc_left]: pat_arm_nmpc[left] reference: trajectory | 1589 trajectory ticks, 0 node refs held past the window | windows rejected 0, truncated 0[0m
+[nmpc_node-3] [0m[INFO] [1793255274.594934928] [pat_arm_nmpc_left]: pat_arm_nmpc[left] publish us  torque(n=100 mean=18.2 max=39.1)   ee_pose(n=100 mean=20.7 max=46.3) 
+[nmpc_node-3]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nmpc_node-4] [0m[INFO] [1793255274.602051041] [pat_arm_nmpc_right]: pat_arm_nmpc[right] 99 ticks @ 10000 us | period jitter mean 57 max 212 us | callback wall mean 952 max 1311 / cpu mean 951 max 1310 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-4] profile over 99 ticks (us)  TICK mean=908.7 max=1218.7 over_period=0/99
+[nmpc_node-4]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:83 <=2500.0:16 <=5000.0:0 >5000:0 
+[nmpc_node-4]   phases dynamics(n=99 mean=2.3 max=6.7) jdotqdot(n=99 mean=1.9 max=7.0) pinv(n=99 mean=2.4 max=6.9) lambda(n=198 mean=2.9 max=12.5) qpsolve(n=99 mean=891.0 max=1194.4) 
+[nmpc_node-4]   unattributed=5.3 us/tick
+[nmpc_node-4]   qp_iter/tick mean=7.0 max=7.0 (cap 60/solve)  hpipm_us mean=871.7 max=1164.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-4] [0m[INFO] [1793255274.602105412] [pat_arm_nmpc_right]: pat_arm_nmpc[right] publish us  torque(n=100 mean=18.2 max=37.6)   ee_pose(n=100 mean=8.5 max=21.8) 
+[nmpc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793255275.585265133] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 2 max 109 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 188/0 rej, pos 187/0 rej, too_old 0, gaps 0, replays 375 (max 75 steps) | NIS yaw 0.63 pos 1.23[0m
+[nmpc_node-3] [0m[INFO] [1793255275.594983382] [pat_arm_nmpc_left]: pat_arm_nmpc[left] 99 ticks @ 10000 us | period jitter mean 35 max 132 us | callback wall mean 916 max 1112 / cpu mean 914 max 1110 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-3] profile over 99 ticks (us)  TICK mean=875.0 max=1052.5 over_period=0/99
+[nmpc_node-3]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:97 <=2500.0:2 <=5000.0:0 >5000:0 
+[nmpc_node-3]   phases dynamics(n=99 mean=2.1 max=3.4) jdotqdot(n=99 mean=1.7 max=6.2) pinv(n=99 mean=2.0 max=3.8) lambda(n=198 mean=2.4 max=8.1) qpsolve(n=99 mean=857.6 max=1021.2) 
+[nmpc_node-3]   unattributed=6.8 us/tick
+[nmpc_node-3]   qp_iter/tick mean=7.0 max=7.0 (cap 60/solve)  hpipm_us mean=839.9 max=989.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-3] [0m[INFO] [1793255275.595060889] [pat_arm_nmpc_left]: pat_arm_nmpc[left] reference: trajectory | 1689 trajectory ticks, 0 node refs held past the window | windows rejected 0, truncated 0[0m
+[nmpc_node-3] [0m[INFO] [1793255275.595081620] [pat_arm_nmpc_left]: pat_arm_nmpc[left] publish us  torque(n=100 mean=18.6 max=36.9)   ee_pose(n=100 mean=19.4 max=69.4) 
+[nmpc_node-3]   hist(publish_us) <=50.0:199 <=100.0:1 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nmpc_node-4] [0m[INFO] [1793255275.602013811] [pat_arm_nmpc_right]: pat_arm_nmpc[right] 99 ticks @ 10000 us | period jitter mean 41 max 149 us | callback wall mean 985 max 1727 / cpu mean 984 max 1726 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-4] profile over 99 ticks (us)  TICK mean=944.5 max=1630.0 over_period=0/99
+[nmpc_node-4]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:77 <=2500.0:22 <=5000.0:0 >5000:0 
+[nmpc_node-4]   phases dynamics(n=99 mean=2.4 max=7.6) jdotqdot(n=99 mean=2.0 max=6.4) pinv(n=99 mean=2.4 max=8.8) lambda(n=198 mean=2.8 max=14.5) qpsolve(n=99 mean=926.6 max=1586.4) 
+[nmpc_node-4]   unattributed=5.5 us/tick
+[nmpc_node-4]   qp_iter/tick mean=7.5 max=8.0 (cap 60/solve)  hpipm_us mean=908.1 max=1544.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-4] [0m[INFO] [1793255275.602065984] [pat_arm_nmpc_right]: pat_arm_nmpc[right] publish us  torque(n=100 mean=18.3 max=49.3)   ee_pose(n=100 mean=7.9 max=21.1) 
+[nmpc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793255276.585275051] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 3 max 109 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 193/0 rej, pos 192/0 rej, too_old 0, gaps 0, replays 385 (max 75 steps) | NIS yaw 0.08 pos 0.08[0m
+[nmpc_node-3] [0m[INFO] [1793255276.594825290] [pat_arm_nmpc_left]: pat_arm_nmpc[left] 99 ticks @ 10000 us | period jitter mean 38 max 159 us | callback wall mean 967 max 1396 / cpu mean 966 max 1391 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-3] profile over 99 ticks (us)  TICK mean=920.6 max=1299.3 over_period=0/99
+[nmpc_node-3]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:82 <=2500.0:17 <=5000.0:0 >5000:0 
+[nmpc_node-3]   phases dynamics(n=99 mean=2.3 max=5.9) jdotqdot(n=99 mean=1.9 max=6.0) pinv(n=99 mean=2.5 max=6.7) lambda(n=198 mean=2.7 max=14.8) qpsolve(n=99 mean=900.0 max=1258.8) 
+[nmpc_node-3]   unattributed=8.5 us/tick
+[nmpc_node-3]   qp_iter/tick mean=7.0 max=7.0 (cap 60/solve)  hpipm_us mean=877.5 max=1219.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-3] [0m[INFO] [1793255276.594874563] [pat_arm_nmpc_left]: pat_arm_nmpc[left] reference: trajectory | 1789 trajectory ticks, 0 node refs held past the window | windows rejected 0, truncated 0[0m
+[nmpc_node-3] [0m[INFO] [1793255276.594883291] [pat_arm_nmpc_left]: pat_arm_nmpc[left] publish us  torque(n=100 mean=18.9 max=53.3)   ee_pose(n=100 mean=20.6 max=56.8) 
+[nmpc_node-3]   hist(publish_us) <=50.0:198 <=100.0:2 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nmpc_node-4] [0m[INFO] [1793255276.601954855] [pat_arm_nmpc_right]: pat_arm_nmpc[right] 99 ticks @ 10000 us | period jitter mean 53 max 175 us | callback wall mean 1087 max 1663 / cpu mean 1086 max 1663 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-4] profile over 99 ticks (us)  TICK mean=1043.1 max=1600.7 over_period=0/99
+[nmpc_node-4]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:40 <=2500.0:59 <=5000.0:0 >5000:0 
+[nmpc_node-4]   phases dynamics(n=99 mean=2.4 max=7.5) jdotqdot(n=99 mean=2.0 max=4.3) pinv(n=99 mean=2.6 max=7.0) lambda(n=198 mean=3.1 max=13.7) qpsolve(n=99 mean=1024.1 max=1569.4) 
+[nmpc_node-4]   unattributed=6.0 us/tick
+[nmpc_node-4]   qp_iter/tick mean=8.0 max=8.0 (cap 60/solve)  hpipm_us mean=1002.4 max=1538.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-4] [0m[INFO] [1793255276.602015284] [pat_arm_nmpc_right]: pat_arm_nmpc[right] publish us  torque(n=100 mean=19.3 max=37.8)   ee_pose(n=100 mean=9.7 max=65.5) 
+[nmpc_node-4]   hist(publish_us) <=50.0:199 <=100.0:1 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793255277.585236609] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 3 max 109 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 198/0 rej, pos 197/0 rej, too_old 0, gaps 0, replays 395 (max 75 steps) | NIS yaw 0.03 pos 0.44[0m
+[nmpc_node-3] [0m[INFO] [1793255277.594784246] [pat_arm_nmpc_left]: pat_arm_nmpc[left] 99 ticks @ 10000 us | period jitter mean 47 max 197 us | callback wall mean 988 max 2007 / cpu mean 986 max 2007 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-3] profile over 99 ticks (us)  TICK mean=940.3 max=1944.4 over_period=0/99
+[nmpc_node-3]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:78 <=2500.0:21 <=5000.0:0 >5000:0 
+[nmpc_node-3]   phases dynamics(n=99 mean=2.7 max=9.9) jdotqdot(n=99 mean=2.1 max=5.0) pinv(n=99 mean=2.6 max=6.8) lambda(n=198 mean=3.0 max=16.4) qpsolve(n=99 mean=918.1 max=1909.6) 
+[nmpc_node-3]   unattributed=8.7 us/tick
+[nmpc_node-3]   qp_iter/tick mean=7.0 max=8.0 (cap 60/solve)  hpipm_us mean=895.7 max=1871.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-3] [0m[INFO] [1793255277.594819384] [pat_arm_nmpc_left]: pat_arm_nmpc[left] reference: trajectory | 1889 trajectory ticks, 0 node refs held past the window | windows rejected 0, truncated 0[0m
+[nmpc_node-3] [0m[INFO] [1793255277.594831386] [pat_arm_nmpc_left]: pat_arm_nmpc[left] publish us  torque(n=100 mean=20.5 max=47.9)   ee_pose(n=100 mean=19.5 max=55.9) 
+[nmpc_node-3]   hist(publish_us) <=50.0:199 <=100.0:1 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nmpc_node-4] [0m[INFO] [1793255277.601937146] [pat_arm_nmpc_right]: pat_arm_nmpc[right] 99 ticks @ 10000 us | period jitter mean 44 max 149 us | callback wall mean 1101 max 2186 / cpu mean 1099 max 2186 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-4] profile over 99 ticks (us)  TICK mean=1054.4 max=2106.2 over_period=0/99
+[nmpc_node-4]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:49 <=2500.0:50 <=5000.0:0 >5000:0 
+[nmpc_node-4]   phases dynamics(n=99 mean=2.4 max=6.0) jdotqdot(n=99 mean=2.1 max=5.9) pinv(n=99 mean=2.6 max=8.2) lambda(n=198 mean=3.1 max=18.0) qpsolve(n=99 mean=1035.4 max=2058.4) 
+[nmpc_node-4]   unattributed=5.8 us/tick
+[nmpc_node-4]   qp_iter/tick mean=8.0 max=8.0 (cap 60/solve)  hpipm_us mean=1014.6 max=2018.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-4] [0m[INFO] [1793255277.601985007] [pat_arm_nmpc_right]: pat_arm_nmpc[right] publish us  torque(n=100 mean=20.4 max=48.2)   ee_pose(n=100 mean=9.1 max=48.8) 
+[nmpc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793255278.585167899] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 2 max 109 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 203/0 rej, pos 202/0 rej, too_old 0, gaps 0, replays 405 (max 75 steps) | NIS yaw 2.23 pos 2.07[0m
+[nmpc_node-3] [0m[INFO] [1793255278.594885211] [pat_arm_nmpc_left]: pat_arm_nmpc[left] 99 ticks @ 10000 us | period jitter mean 38 max 182 us | callback wall mean 935 max 1159 / cpu mean 932 max 1159 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-3] profile over 99 ticks (us)  TICK mean=893.9 max=1105.8 over_period=0/99
+[nmpc_node-3]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:92 <=2500.0:7 <=5000.0:0 >5000:0 
+[nmpc_node-3]   phases dynamics(n=99 mean=2.1 max=4.8) jdotqdot(n=99 mean=1.8 max=8.6) pinv(n=99 mean=2.1 max=5.1) lambda(n=198 mean=2.5 max=8.7) qpsolve(n=99 mean=875.9 max=1079.5) 
+[nmpc_node-3]   unattributed=7.0 us/tick
+[nmpc_node-3]   qp_iter/tick mean=7.2 max=8.0 (cap 60/solve)  hpipm_us mean=857.5 max=1045.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-3] [0m[INFO] [1793255278.594953489] [pat_arm_nmpc_left]: pat_arm_nmpc[left] reference: trajectory | 1989 trajectory ticks, 0 node refs held past the window | windows rejected 0, truncated 0[0m
+[nmpc_node-3] [0m[INFO] [1793255278.594973104] [pat_arm_nmpc_left]: pat_arm_nmpc[left] publish us  torque(n=100 mean=18.9 max=37.3)   ee_pose(n=100 mean=18.4 max=58.7) 
+[nmpc_node-3]   hist(publish_us) <=50.0:198 <=100.0:2 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nmpc_node-4] [0m[INFO] [1793255278.601888746] [pat_arm_nmpc_right]: pat_arm_nmpc[right] 99 ticks @ 10000 us | period jitter mean 44 max 142 us | callback wall mean 967 max 1449 / cpu mean 966 max 1448 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-4] profile over 99 ticks (us)  TICK mean=929.4 max=1397.7 over_period=0/99
+[nmpc_node-4]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:86 <=2500.0:13 <=5000.0:0 >5000:0 
+[nmpc_node-4]   phases dynamics(n=99 mean=2.2 max=6.2) jdotqdot(n=99 mean=1.8 max=6.0) pinv(n=99 mean=2.3 max=9.2) lambda(n=198 mean=2.7 max=18.7) qpsolve(n=99 mean=912.4 max=1371.1) 
+[nmpc_node-4]   unattributed=5.2 us/tick
+[nmpc_node-4]   qp_iter/tick mean=7.4 max=8.0 (cap 60/solve)  hpipm_us mean=894.8 max=1341.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-4] [0m[INFO] [1793255278.601934529] [pat_arm_nmpc_right]: pat_arm_nmpc[right] publish us  torque(n=100 mean=17.6 max=37.1)   ee_pose(n=100 mean=8.5 max=29.7) 
+[nmpc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793255279.585128274] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 2 max 109 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 208/0 rej, pos 207/0 rej, too_old 0, gaps 0, replays 415 (max 75 steps) | NIS yaw 0.45 pos 0.25[0m
+[nmpc_node-3] [0m[INFO] [1793255279.594842783] [pat_arm_nmpc_left]: pat_arm_nmpc[left] 99 ticks @ 10000 us | period jitter mean 31 max 127 us | callback wall mean 991 max 1297 / cpu mean 989 max 1292 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-3] profile over 99 ticks (us)  TICK mean=948.0 max=1228.8 over_period=0/99
+[nmpc_node-3]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:80 <=2500.0:19 <=5000.0:0 >5000:0 
+[nmpc_node-3]   phases dynamics(n=99 mean=2.4 max=16.3) jdotqdot(n=99 mean=1.8 max=4.4) pinv(n=99 mean=2.3 max=6.9) lambda(n=198 mean=2.5 max=11.1) qpsolve(n=99 mean=929.2 max=1196.5) 
+[nmpc_node-3]   unattributed=7.3 us/tick
+[nmpc_node-3]   qp_iter/tick mean=7.5 max=8.0 (cap 60/solve)  hpipm_us mean=910.9 max=1167.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-3] [0m[INFO] [1793255279.594899524] [pat_arm_nmpc_left]: pat_arm_nmpc[left] reference: trajectory | 2089 trajectory ticks, 0 node refs held past the window | windows rejected 0, truncated 0[0m
+[nmpc_node-3] [0m[INFO] [1793255279.594917457] [pat_arm_nmpc_left]: pat_arm_nmpc[left] publish us  torque(n=100 mean=18.5 max=40.4)   ee_pose(n=100 mean=20.9 max=67.4) 
+[nmpc_node-3]   hist(publish_us) <=50.0:199 <=100.0:1 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nmpc_node-4] [0m[INFO] [1793255279.601891985] [pat_arm_nmpc_right]: pat_arm_nmpc[right] 99 ticks @ 10000 us | period jitter mean 46 max 174 us | callback wall mean 1012 max 1592 / cpu mean 1011 max 1592 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-4] profile over 99 ticks (us)  TICK mean=972.3 max=1543.7 over_period=0/99
+[nmpc_node-4]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:80 <=2500.0:19 <=5000.0:0 >5000:0 
+[nmpc_node-4]   phases dynamics(n=99 mean=2.3 max=5.6) jdotqdot(n=99 mean=1.8 max=3.4) pinv(n=99 mean=2.3 max=5.4) lambda(n=198 mean=2.9 max=15.3) qpsolve(n=99 mean=954.8 max=1519.6) 
+[nmpc_node-4]   unattributed=5.3 us/tick
+[nmpc_node-4]   qp_iter/tick mean=7.6 max=8.0 (cap 60/solve)  hpipm_us mean=935.7 max=1498.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-4] [0m[INFO] [1793255279.601940748] [pat_arm_nmpc_right]: pat_arm_nmpc[right] publish us  torque(n=100 mean=18.8 max=50.7)   ee_pose(n=100 mean=7.8 max=19.1) 
+[nmpc_node-4]   hist(publish_us) <=50.0:199 <=100.0:1 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793255280.585109615] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 2 max 109 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 213/0 rej, pos 212/0 rej, too_old 0, gaps 0, replays 425 (max 75 steps) | NIS yaw 1.47 pos 2.91[0m
+[nmpc_node-3] [0m[INFO] [1793255280.594818030] [pat_arm_nmpc_left]: pat_arm_nmpc[left] 99 ticks @ 10000 us | period jitter mean 45 max 225 us | callback wall mean 933 max 1084 / cpu mean 932 max 1076 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-3] profile over 99 ticks (us)  TICK mean=896.2 max=1039.8 over_period=0/99
+[nmpc_node-3]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:91 <=2500.0:8 <=5000.0:0 >5000:0 
+[nmpc_node-3]   phases dynamics(n=99 mean=2.0 max=3.1) jdotqdot(n=99 mean=1.7 max=4.4) pinv(n=99 mean=2.0 max=3.8) lambda(n=198 mean=2.4 max=9.1) qpsolve(n=99 mean=878.6 max=1017.4) 
+[nmpc_node-3]   unattributed=7.0 us/tick
+[nmpc_node-3]   qp_iter/tick mean=7.2 max=8.0 (cap 60/solve)  hpipm_us mean=861.6 max=996.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-3] [0m[INFO] [1793255280.594905996] [pat_arm_nmpc_left]: pat_arm_nmpc[left] reference: trajectory | 2189 trajectory ticks, 0 node refs held past the window | windows rejected 0, truncated 0[0m
+[nmpc_node-3] [0m[INFO] [1793255280.594927057] [pat_arm_nmpc_left]: pat_arm_nmpc[left] publish us  torque(n=100 mean=18.1 max=34.4)   ee_pose(n=100 mean=19.5 max=48.1) 
+[nmpc_node-3]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nmpc_node-4] [0m[INFO] [1793255280.601816314] [pat_arm_nmpc_right]: pat_arm_nmpc[right] 99 ticks @ 10000 us | period jitter mean 49 max 132 us | callback wall mean 996 max 1313 / cpu mean 995 max 1312 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-4] profile over 99 ticks (us)  TICK mean=959.2 max=1259.1 over_period=0/99
+[nmpc_node-4]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:75 <=2500.0:24 <=5000.0:0 >5000:0 
+[nmpc_node-4]   phases dynamics(n=99 mean=2.2 max=5.7) jdotqdot(n=99 mean=1.7 max=4.9) pinv(n=99 mean=2.1 max=3.9) lambda(n=198 mean=2.6 max=10.4) qpsolve(n=99 mean=943.4 max=1238.3) 
+[nmpc_node-4]   unattributed=4.6 us/tick
+[nmpc_node-4]   qp_iter/tick mean=7.8 max=8.0 (cap 60/solve)  hpipm_us mean=926.3 max=1215.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-4] [0m[INFO] [1793255280.601867001] [pat_arm_nmpc_right]: pat_arm_nmpc[right] publish us  torque(n=100 mean=18.3 max=31.9)   ee_pose(n=100 mean=8.3 max=76.7) 
+[nmpc_node-4]   hist(publish_us) <=50.0:199 <=100.0:1 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nav_node-2] [0m[INFO] [1793255281.585078699] [pat_nav]: nav[imu_ekf] 500 wakes, work mean 2 max 109 us, overruns 0 | in imu 500 pose 100, ring drops 0/0 | yaw 218/0 rej, pos 217/0 rej, too_old 0, gaps 0, replays 435 (max 75 steps) | NIS yaw 0.23 pos 0.47[0m
+[nmpc_node-3] [0m[INFO] [1793255281.594659057] [pat_arm_nmpc_left]: pat_arm_nmpc[left] 99 ticks @ 10000 us | period jitter mean 38 max 133 us | callback wall mean 907 max 1049 / cpu mean 906 max 1049 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-3] profile over 99 ticks (us)  TICK mean=867.9 max=982.0 over_period=0/99
+[nmpc_node-3]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:99 <=2500.0:0 <=5000.0:0 >5000:0 
+[nmpc_node-3]   phases dynamics(n=99 mean=2.1 max=3.4) jdotqdot(n=99 mean=1.7 max=2.8) pinv(n=99 mean=2.1 max=5.3) lambda(n=198 mean=2.4 max=9.7) qpsolve(n=99 mean=850.3 max=954.4) 
+[nmpc_node-3]   unattributed=7.1 us/tick
+[nmpc_node-3]   qp_iter/tick mean=7.0 max=7.0 (cap 60/solve)  hpipm_us mean=833.1 max=928.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-3] [0m[INFO] [1793255281.594701621] [pat_arm_nmpc_left]: pat_arm_nmpc[left] reference: trajectory | 2289 trajectory ticks, 0 node refs held past the window | windows rejected 0, truncated 0[0m
+[nmpc_node-3] [0m[INFO] [1793255281.594709697] [pat_arm_nmpc_left]: pat_arm_nmpc[left] publish us  torque(n=100 mean=18.6 max=43.8)   ee_pose(n=100 mean=18.5 max=46.8) 
+[nmpc_node-3]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[nmpc_node-4] [0m[INFO] [1793255281.601787076] [pat_arm_nmpc_right]: pat_arm_nmpc[right] 99 ticks @ 10000 us | period jitter mean 54 max 187 us | callback wall mean 946 max 1305 / cpu mean 945 max 1305 us | deadline misses 0 (longest run 0) | skipped periods 0
+[nmpc_node-4] profile over 99 ticks (us)  TICK mean=908.5 max=1266.8 over_period=0/99
+[nmpc_node-4]   hist(tick) <=50.0:0 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:88 <=2500.0:11 <=5000.0:0 >5000:0 
+[nmpc_node-4]   phases dynamics(n=99 mean=2.6 max=18.6) jdotqdot(n=99 mean=1.8 max=12.2) pinv(n=99 mean=2.4 max=18.7) lambda(n=198 mean=2.7 max=10.5) qpsolve(n=99 mean=891.6 max=1237.9) 
+[nmpc_node-4]   unattributed=4.7 us/tick
+[nmpc_node-4]   qp_iter/tick mean=7.2 max=8.0 (cap 60/solve)  hpipm_us mean=874.3 max=1220.0  retries=0  trace 100/6000  | peak slack: box=0.0 torque=0.0[0m
+[nmpc_node-4] [0m[INFO] [1793255281.601856387] [pat_arm_nmpc_right]: pat_arm_nmpc[right] publish us  torque(n=100 mean=18.5 max=38.9)   ee_pose(n=100 mean=8.7 max=44.1) 
+[nmpc_node-4]   hist(publish_us) <=50.0:200 <=100.0:0 <=250.0:0 <=500.0:0 <=1000.0:0 <=2500.0:0 <=5000.0:0 >5000:0 [0m
+[WARNING] [launch]: user interrupted with ctrl-c (SIGINT)
+[INFO] [nmpc_node-4]: sending signal 'SIGINT' to process[nmpc_node-4]
+[INFO] [nmpc_node-3]: sending signal 'SIGINT' to process[nmpc_node-3]
+[INFO] [nav_node-2]: sending signal 'SIGINT' to process[nav_node-2]
+[INFO] [simulation_node-1]: sending signal 'SIGINT' to process[simulation_node-1]
+[nmpc_node-3] [0m[INFO] [1793255281.676579168] [rclcpp]: signal_handler(SIGINT/SIGTERM)[0m
+[nav_node-2] [0m[INFO] [1793255281.676582138] [rclcpp]: signal_handler(SIGINT/SIGTERM)[0m
+[nmpc_node-4] [0m[INFO] [1793255281.676738162] [rclcpp]: signal_handler(SIGINT/SIGTERM)[0m
+[simulation_node-1] [0m[INFO] [1793255281.676742520] [rclcpp]: signal_handler(SIGINT/SIGTERM)[0m
+[simulation_node-1] [0m[INFO] [1793255281.681434340] [rclcpp]: signal_handler(SIGINT/SIGTERM)[0m
+[ERROR] [nmpc_node-4]: process has died [pid 41741, exit code -2, cmd '/ws/install/pat_arm_control/lib/pat_arm_control/nmpc_node --ros-args -r __node:=pat_arm_nmpc_right --params-file /ws/data/thesis_eval/live/pilot/trials/b95a253fd96cb648.partial/arm_common.yaml --params-file /ws/data/thesis_eval/live/pilot/trials/b95a253fd96cb648.partial/nmpc.yaml --params-file /tmp/launch_params_sa741sfs'].
+[ERROR] [nav_node-2]: process has died [pid 41737, exit code -2, cmd '/ws/install/pat_gnc/lib/pat_gnc/nav_node --ros-args -r __node:=pat_nav --params-file /ws/data/thesis_eval/live/pilot/trials/b95a253fd96cb648.partial/nav_flight.yaml --params-file /tmp/launch_params_tnbtthvz'].
+[ERROR] [nmpc_node-3]: process has died [pid 41739, exit code -2, cmd '/ws/install/pat_arm_control/lib/pat_arm_control/nmpc_node --ros-args -r __node:=pat_arm_nmpc_left --params-file /ws/data/thesis_eval/live/pilot/trials/b95a253fd96cb648.partial/arm_common.yaml --params-file /ws/data/thesis_eval/live/pilot/trials/b95a253fd96cb648.partial/nmpc.yaml --params-file /tmp/launch_params_77gzoi31'].
+[INFO] [simulation_node-1]: process has finished cleanly [pid 41735]

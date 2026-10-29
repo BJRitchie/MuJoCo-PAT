@@ -934,44 +934,65 @@ EST_SHADE = {"raw": "0.65", "ekf": "0.1"}
 def fig_estimator() -> None:
     """What each state source gives the arm, on the flight sensors.
 
-    The top panel is the base x estimate's error against time for one seed: raw
-    jumps with every 2 Hz fix and lags it by 0.5 s, the EKF is smooth and on time
-    but drifts slowly. Below: each source's own error, what it costs each
-    controller's tracking, and what the joint filter buys, which is a smoother
-    command."""
+    The top panels are the base state itself against time for one seed (x and y
+    on the left, yaw on the right, each measured from where the base started):
+    the plant's truth, the raw sensors (the last 5 Hz fix, 0.15 s old, held) and
+    the EKF. Below: each source's own error, what it costs each controller's
+    tracking, and what the joint filter buys, which is a smoother command."""
     df = C.summary("estimator")
     if df is None:
         return skip("estimator", "no estimator study")
     df = df.assign(src=df["cell"].str.split("_").str[1])
     d = df[df["scenario"] == SCORE_SHAPE]
-    fig = plt.figure(figsize=(FULL, 4.6))
-    gs = fig.add_gridspec(2, 3, height_ratios=[1.0, 1.15], hspace=0.42, wspace=0.42)
-    ax_t = fig.add_subplot(gs[0, :])
-    ax_e, ax_r, ax_u = (fig.add_subplot(gs[1, i]) for i in range(3))
+    fig = plt.figure(figsize=(FULL, 5.4))
+    outer = fig.add_gridspec(2, 1, height_ratios=[1.25, 1.15], hspace=0.38)
+    top = outer[0].subgridspec(2, 3, hspace=0.12, wspace=0.42)
+    bottom = outer[1].subgridspec(1, 3, wspace=0.42)
+    ax_x = fig.add_subplot(top[0, :2])
+    ax_y = fig.add_subplot(top[1, :2], sharex=ax_x)
+    ax_w = fig.add_subplot(top[:, 2], sharex=ax_x)
+    ax_e, ax_r, ax_u = (fig.add_subplot(bottom[0, i]) for i in range(3))
 
+    # The estimate each source handed over is the truth plus its recorded error;
+    # the truth comes from the EKF run (both runs see the same plant to well
+    # under the plot's resolution, and each estimate is drawn against its own).
     safe = False
-    labels = {"raw": "raw: last 5 Hz fix (0.15 s old, held)",
-              "ekf": "EKF: 500 Hz IMU, corrected at each fix"}
+    styles = {"raw": dict(color=EST_SHADE["raw"], lw=0.8,
+                          label="raw: last 5 Hz fix (0.15 s old, held)"),
+              "ekf": dict(color=EST_SHADE["ekf"], lw=1.0,
+                          label="EKF: 500 Hz IMU, corrected at each fix")}
+    truth_drawn = False
     for src in ("raw", "ekf"):
         s = C.series("estimator", f"{SCORE_SHAPE}_{src}_sqp_s1")
         if s is None:
             continue
-        e = s["est_x"].to_numpy() * 1e3
-        ax_t.plot(s["t_s"], e, color=EST_SHADE[src], lw=0.7 if src == "raw" else 1.1,
-                  label=labels[src])
-        if src == "raw":
-            # A dot where each new fix arrives: the raw estimate changes only then
-            # (between fixes it moves only with the base under the held value).
-            new = np.flatnonzero(np.abs(np.diff(e)) > 0.5) + 1
-            ax_t.plot(s["t_s"].to_numpy()[new], e[new], ls="none", marker="o", ms=2.2,
-                      color=EST_SHADE[src], label="new fix arrives")
-        safe |= mark_safe_series(ax_t, s, s["t_s"], e)
-    ax_t.set_xlabel("time [s]")
-    ax_t.set_ylabel("base x error [mm]")
-    ax_t.set_title(f"error in the base state given to {C.LABEL['sqp']} "
+        t = s["t_s"].to_numpy()
+        x0, y0 = s["base_x"].iloc[0], s["base_y"].iloc[0]
+        yaw = np.unwrap(s["base_yaw"].to_numpy())
+        yaw0 = yaw[0]
+        tx, ty, tw = (s["base_x"] - x0) * 1e3, (s["base_y"] - y0) * 1e3, (yaw - yaw0) * 1e3
+        ex = tx + s["est_x"] * 1e3
+        ey = ty + s["est_y"] * 1e3
+        ew = tw + np.remainder(s["est_yaw"].to_numpy() + np.pi, 2 * np.pi) * 1e3 - np.pi * 1e3
+        if not truth_drawn:
+            for ax, v in ((ax_x, tx), (ax_y, ty), (ax_w, tw)):
+                ax.plot(t, v, color="#C0392B", ls="--", lw=1.0, label="truth", zorder=3)
+            truth_drawn = True
+        for ax, v in ((ax_x, ex), (ax_y, ey), (ax_w, ew)):
+            ax.plot(t, v, **styles[src])
+            safe |= mark_safe_series(ax, s, t, v)
+    ax_x.set_ylabel("base x [mm]")
+    ax_y.set_ylabel("base y [mm]")
+    ax_w.set_ylabel("base yaw [mrad]")
+    ax_x.tick_params(labelbottom=False)
+    for ax in (ax_y, ax_w):
+        ax.set_xlabel("time [s]")
+    ax_w.set_xticks([0, 5, 10, 15, 20])
+    ax_x.set_title(f"base state given to {C.LABEL['sqp']}, from its start "
                    f"({SCORE_SHAPE}, one seed)", loc="left")
-    ax_t.legend(loc="lower center", bbox_to_anchor=(0.5, 1.12), ncol=3, fontsize=6,
-                frameon=False)
+    handles, _ = ax_x.get_legend_handles_labels()
+    ax_x.legend(handles=handles, loc="lower center", bbox_to_anchor=(0.75, 1.18), ncol=3,
+                fontsize=6, frameon=False)
 
     metrics = [("est_pos_rms_mm", "pos.\nmm"), ("est_yaw_rms_mrad", "yaw\nmrad"),
                ("est_vel_rms_mm_s", "vel.\nmm/s"), ("est_wz_rms_mrad_s", "rate\nmrad/s")]

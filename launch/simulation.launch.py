@@ -2,8 +2,10 @@
 
 `sensor_profile:=/path/to/overlay.yaml` loads a sensor configuration on top of
 simulation.yaml, overriding only what it names -- e.g. pat_simulation's
-config/sensors_flight.yaml for flight-representative sensing. Empty (the
-default) leaves simulation.yaml's perfect sensors.
+config/sensors_flight.yaml for flight-representative sensing. Several overlays may
+be given, comma-separated, and apply in that order (flight sensing plus the arm
+encoders: sensors_flight.yaml,sensors_flight_encoders.yaml). Empty (the default)
+leaves simulation.yaml's perfect sensors.
 
 `visualise:=false` runs headless.
 """
@@ -21,9 +23,9 @@ def _sim_node(context):
     # Later entries override earlier ones, so the profile goes after the base
     # file and before the launch-level overrides.
     params = [sim_cfg]
-    profile = LaunchConfiguration("sensor_profile").perform(context)
-    if profile:
-        params.append(profile)
+    # One overlay, or several separated by commas, applied in that order.
+    profiles = LaunchConfiguration("sensor_profile").perform(context)
+    params.extend(p for p in profiles.split(",") if p)
     params.append({"model_path": model_xml,
                    "visualise": LaunchConfiguration("visualise"),
                    "use_sim_time": LaunchConfiguration("use_sim_time")})

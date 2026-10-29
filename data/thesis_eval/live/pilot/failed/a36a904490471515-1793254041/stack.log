@@ -1,0 +1,47 @@
+[INFO] [launch]: All log files can be found below /home/dev/.ros/log/2026-10-29-06-07-20-807888-ben-XPS-15-9530-35176
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [simulation_node-1]: process started with pid [35177]
+[INFO] [nav_node-2]: process started with pid [35179]
+[INFO] [ompc_node-3]: process started with pid [35181]
+[INFO] [ompc_node-4]: process started with pid [35183]
+[nav_node-2] [0m[INFO] [1793254040.861272606] [pat_nav]: nav_node: worst replay of 256 steps measured at 715 us; worst wake (2 replays) 1431 us against a budget of 1000 us (half of 1/nav_hz)[0m
+[nav_node-2] terminate called after throwing an instance of 'std::runtime_error'
+[nav_node-2]   what():  nav_node: the worst-case wake does not fit -- lower imu_ekf.history_len, lower nav_hz, or move the thread to a faster core
+[ompc_node-3] [0m[INFO] [1793254040.867780751] [pat_arm_ompc_left]: pat_arm_ompc[left]: tracing every tick to /ws/data/thesis_eval/live/pilot/trials/a36a904490471515.partial/trace_left.csv[0m
+[ompc_node-3] [0m[INFO] [1793254040.867925161] [pat_arm_ompc_left]: pat_arm_ompc[left]: model N=6, owned=3, ee_site=ee_site_L, Ts=1.400 ctrl=100 Hz[0m
+[ompc_node-4] [0m[INFO] [1793254040.868326819] [pat_arm_ompc_right]: pat_arm_ompc[right]: tracing every tick to /ws/data/thesis_eval/live/pilot/trials/a36a904490471515.partial/trace_right.csv[0m
+[ompc_node-4] [0m[INFO] [1793254040.868413786] [pat_arm_ompc_right]: pat_arm_ompc[right]: model N=6, owned=3, ee_site=ee_site_R, Ts=1.400 ctrl=100 Hz[0m
+[ERROR] [nav_node-2]: process has died [pid 35179, exit code -6, cmd '/ws/install/pat_gnc/lib/pat_gnc/nav_node --ros-args -r __node:=pat_nav --params-file /ws/data/thesis_eval/live/pilot/trials/a36a904490471515.partial/nav_flight.yaml --params-file /tmp/launch_params_vcjtnc0b'].
+[simulation_node-1] [0m[INFO] [1793254041.080113556] [pat_simulation]: MuJoCo loaded. dt=0.0020 s[0m
+[simulation_node-1] [0m[INFO] [1793254041.080452843] [pat_simulation]: Applied initial_arm_qpos override (6 joints)[0m
+[simulation_node-1] [33m[WARN] [1793254041.081806743] [pat_simulation]: sensors: IMPERFECT, seed 1 -- measurements are NOT ground truth, and the committed timing and constraint figures do not apply to this run:
+[simulation_node-1]   imu_accel_x: sigma=0.025 bias=0.015 walk=0.00012/sqrt(s)
+[simulation_node-1]   imu_accel_y: sigma=0.025 bias=-0.01 walk=0.00012/sqrt(s)
+[simulation_node-1]   imu_gyro_z: sigma=0.001 bias=5e-05 walk=6e-06/sqrt(s)
+[simulation_node-1]   nav_x: sigma=0.004 bias=0.001 delay=15 steps rate=5Hz
+[simulation_node-1]   nav_y: sigma=0.0002 delay=15 steps rate=5Hz
+[simulation_node-1]   star_yaw: sigma=0.0001 delay=10 steps rate=5Hz
+[simulation_node-1]   joint_pos.joint2_L: sigma=0.0005
+[simulation_node-1]   joint_pos.joint3_L: sigma=0.0005
+[simulation_node-1]   joint_pos.joint5_L: sigma=0.0005
+[simulation_node-1]   joint_pos.joint2_R: sigma=0.0005
+[simulation_node-1]   joint_pos.joint3_R: sigma=0.0005
+[simulation_node-1]   joint_pos.joint5_R: sigma=0.0005
+[simulation_node-1]   joint_vel.joint2_L: sigma=0.01
+[simulation_node-1]   joint_vel.joint3_L: sigma=0.01
+[simulation_node-1]   joint_vel.joint5_L: sigma=0.01
+[simulation_node-1]   joint_vel.joint2_R: sigma=0.01
+[simulation_node-1]   joint_vel.joint3_R: sigma=0.01
+[simulation_node-1]   joint_vel.joint5_R: sigma=0.01[0m
+[simulation_node-1] [0m[INFO] [1793254041.083533424] [pat_simulation]: publishing /sim_only/ground_truth (constraint forces + applied wrench) -- simulation diagnostics only[0m
+[WARNING] [launch]: user interrupted with ctrl-c (SIGINT)
+[INFO] [ompc_node-4]: sending signal 'SIGINT' to process[ompc_node-4]
+[INFO] [ompc_node-3]: sending signal 'SIGINT' to process[ompc_node-3]
+[INFO] [simulation_node-1]: sending signal 'SIGINT' to process[simulation_node-1]
+[ompc_node-4] [0m[INFO] [1793254041.165397297] [rclcpp]: signal_handler(SIGINT/SIGTERM)[0m
+[simulation_node-1] [0m[INFO] [1793254041.165413297] [rclcpp]: signal_handler(SIGINT/SIGTERM)[0m
+[ompc_node-3] [0m[INFO] [1793254041.165426514] [rclcpp]: signal_handler(SIGINT/SIGTERM)[0m
+[simulation_node-1] [0m[INFO] [1793254041.168028365] [rclcpp]: signal_handler(SIGINT/SIGTERM)[0m
+[ERROR] [ompc_node-4]: process has died [pid 35183, exit code -2, cmd '/ws/install/pat_arm_control/lib/pat_arm_control/ompc_node --ros-args -r __node:=pat_arm_ompc_right --params-file /ws/data/thesis_eval/live/pilot/trials/a36a904490471515.partial/arm_common.yaml --params-file /ws/data/thesis_eval/live/pilot/trials/a36a904490471515.partial/ompc.yaml --params-file /tmp/launch_params_hg97iuku'].
+[ERROR] [ompc_node-3]: process has died [pid 35181, exit code -2, cmd '/ws/install/pat_arm_control/lib/pat_arm_control/ompc_node --ros-args -r __node:=pat_arm_ompc_left --params-file /ws/data/thesis_eval/live/pilot/trials/a36a904490471515.partial/arm_common.yaml --params-file /ws/data/thesis_eval/live/pilot/trials/a36a904490471515.partial/ompc.yaml --params-file /tmp/launch_params_ee213n2p'].
+[INFO] [simulation_node-1]: process has finished cleanly [pid 35177]

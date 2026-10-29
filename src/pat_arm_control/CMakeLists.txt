@@ -188,6 +188,7 @@ add_library(pat_arm_control_bench STATIC
     src/bench/contact_scenario.cpp
     src/bench/metrics.cpp
     src/bench/run_summary.cpp
+    src/bench/series_io.cpp
     src/bench/state_source.cpp)
 target_include_directories(pat_arm_control_bench PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src/bench)
@@ -244,6 +245,15 @@ target_compile_definitions(contact_bench PRIVATE
     PAT_CONTACT_BENCH_SCENE="${CMAKE_INSTALL_PREFIX}/share/pat_simulation/models/environment/air_bearing_table.xml")
 install(TARGETS contact_bench RUNTIME DESTINATION lib/${PROJECT_NAME})
 
+# ─── series_summary: score a recorded run with the bench's own metrics ────
+# Reads a per-tick series CSV (the bench's, or the live recorder's) and appends
+# one summary row through summarise(), so a live figure and a bench figure are
+# computed by the same code.
+add_executable(series_summary src/bench/series_summary.cpp)
+pat_arm_control_arch_flags(series_summary)
+target_link_libraries(series_summary pat_arm_control_bench)
+install(TARGETS series_summary RUNTIME DESTINATION lib/${PROJECT_NAME})
+
 # ─── Tests ───────────────────────────────────────────────────────────────
 # The model-fidelity tests load the generated MJCF straight out of the build
 # tree (they run before install), so the path is compiled in rather than
@@ -272,6 +282,7 @@ if(BUILD_TESTING)
         test/test_smc.cpp
         test/test_bench_metrics.cpp
         test/test_run_summary.cpp
+        test/test_series_io.cpp
         test/test_state_source.cpp
         test/test_momentum_observer.cpp
         test/test_joint_kalman_filter.cpp
@@ -291,7 +302,8 @@ if(BUILD_TESTING)
         PAT_NMPC_TEST_COMMON="${CMAKE_CURRENT_SOURCE_DIR}/config/arm_common.yaml"
         PAT_NMPC_TEST_PARAMS="${CMAKE_CURRENT_SOURCE_DIR}/config/nmpc.yaml"
         PAT_OMPC_TEST_PARAMS="${CMAKE_CURRENT_SOURCE_DIR}/config/ompc.yaml"
-        PAT_SMC_TEST_PARAMS="${CMAKE_CURRENT_SOURCE_DIR}/config/smc.yaml")
+        PAT_SMC_TEST_PARAMS="${CMAKE_CURRENT_SOURCE_DIR}/config/smc.yaml"
+        PAT_SIM_ENCODER_PROFILE="${CMAKE_CURRENT_SOURCE_DIR}/../pat_simulation/config/sensors_flight_encoders.yaml")
 endif()
 
 install(TARGETS pat_arm_control_lib

@@ -1,0 +1,69 @@
+{
+ "spec": {
+  "tag": "smc",
+  "law": "smc",
+  "tuned_args": [
+   "--set",
+   "smc.lam=[0.75,0.75,0.75]",
+   "--set",
+   "smc.alpha=[5.6,5.6,5.6]",
+   "--set",
+   "smc.epsilon=5",
+   "--set",
+   "smc.tau_bound=0.0035",
+   "--set",
+   "smc.k2=0.01"
+  ],
+  "shape": "circle",
+  "speed": 1.0,
+  "repeat": 5,
+  "duration": 20.0,
+  "nav_warmup": 15.0,
+  "damping": 0.0,
+  "partner": "hold",
+  "state": "ekf"
+ },
+ "hash": "5e984ccd01debdc4",
+ "health": {
+  "deadline_misses": 0,
+  "skipped_periods": 0,
+  "nav_overruns": 0,
+  "rows": 2000,
+  "rows_expected": 2000,
+  "rows_short": 0,
+  "trace_lines": 4374,
+  "torque_msgs": 2492,
+  "rt_threads": {
+   "nav": [
+    {
+     "policy": "FIFO",
+     "priority": 80,
+     "cpus": "2-3"
+    }
+   ],
+   "left": [
+    {
+     "policy": "FIFO",
+     "priority": 80,
+     "cpus": "4-5"
+    }
+   ],
+   "right": [
+    {
+     "policy": "FIFO",
+     "priority": 80,
+     "cpus": "6-7"
+    }
+   ]
+  }
+ },
+ "machine": {
+  "hostname": "ben-XPS-15-9530",
+  "cpu_governor": "performance",
+  "on_mains": true,
+  "usb_pd_watts": 120,
+  "python": "3.10.12",
+  "date": "2026-10-29T06:39:20+00:00"
+ },
+ "finished": "2026-10-29T06:39:20+0000"
+}

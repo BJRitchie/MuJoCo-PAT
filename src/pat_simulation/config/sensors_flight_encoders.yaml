@@ -1,0 +1,31 @@
+# The arm joint encoders of the flight-sensing evaluation: a second overlay, loaded
+# after sensors_flight.yaml (sensor_profile:=<a>,<b> on simulation.launch.py).
+#
+# sensors_flight.yaml gives the base its flight sensors; the arm's encoders stay
+# perfect there. The offline bench (contact_bench, --state-source ekf|raw) has
+# always given the arm controllers noisy encoders, from NoiseProfile in
+# src/pat_arm_control/src/bench/state_source.h: 5e-4 rad on each joint position
+# and 1e-2 rad/s on each joint velocity, white, new every control tick, no bias,
+# no delay. Those are assumptions, not datasheet values. This file puts the same
+# figures into the live simulator, so a live run and a bench run hand the
+# controllers the same measurements. test_state_source.cpp checks the two agree.
+#
+# Read only by the live stack, never by the bench, which is why the thesis cache
+# (tools/thesis_eval/run_study.py) does not hash it.
+pat_simulation:
+  ros__parameters:
+    sensors:
+      joint_pos:
+        joint2_L: {scale_error: 0.0, bias: 0.0, bias_walk_std: 0.0, noise_std: 5.0e-4, quantisation: 0.0, rate_hz: 0.0, dropout_prob: 0.0, delay_s: 0.0}
+        joint3_L: {scale_error: 0.0, bias: 0.0, bias_walk_std: 0.0, noise_std: 5.0e-4, quantisation: 0.0, rate_hz: 0.0, dropout_prob: 0.0, delay_s: 0.0}
+        joint5_L: {scale_error: 0.0, bias: 0.0, bias_walk_std: 0.0, noise_std: 5.0e-4, quantisation: 0.0, rate_hz: 0.0, dropout_prob: 0.0, delay_s: 0.0}
+        joint2_R: {scale_error: 0.0, bias: 0.0, bias_walk_std: 0.0, noise_std: 5.0e-4, quantisation: 0.0, rate_hz: 0.0, dropout_prob: 0.0, delay_s: 0.0}
+        joint3_R: {scale_error: 0.0, bias: 0.0, bias_walk_std: 0.0, noise_std: 5.0e-4, quantisation: 0.0, rate_hz: 0.0, dropout_prob: 0.0, delay_s: 0.0}
+        joint5_R: {scale_error: 0.0, bias: 0.0, bias_walk_std: 0.0, noise_std: 5.0e-4, quantisation: 0.0, rate_hz: 0.0, dropout_prob: 0.0, delay_s: 0.0}
+      joint_vel:
+        joint2_L: {scale_error: 0.0, bias: 0.0, bias_walk_std: 0.0, noise_std: 1.0e-2, quantisation: 0.0, rate_hz: 0.0, dropout_prob: 0.0, delay_s: 0.0}
+        joint3_L: {scale_error: 0.0, bias: 0.0, bias_walk_std: 0.0, noise_std: 1.0e-2, quantisation: 0.0, rate_hz: 0.0, dropout_prob: 0.0, delay_s: 0.0}
+        joint5_L: {scale_error: 0.0, bias: 0.0, bias_walk_std: 0.0, noise_std: 1.0e-2, quantisation: 0.0, rate_hz: 0.0, dropout_prob: 0.0, delay_s: 0.0}
+        joint2_R: {scale_error: 0.0, bias: 0.0, bias_walk_std: 0.0, noise_std: 1.0e-2, quantisation: 0.0, rate_hz: 0.0, dropout_prob: 0.0, delay_s: 0.0}
+        joint3_R: {scale_error: 0.0, bias: 0.0, bias_walk_std: 0.0, noise_std: 1.0e-2, quantisation: 0.0, rate_hz: 0.0, dropout_prob: 0.0, delay_s: 0.0}
+        joint5_R: {scale_error: 0.0, bias: 0.0, bias_walk_std: 0.0, noise_std: 1.0e-2, quantisation: 0.0, rate_hz: 0.0, dropout_prob: 0.0, delay_s: 0.0}

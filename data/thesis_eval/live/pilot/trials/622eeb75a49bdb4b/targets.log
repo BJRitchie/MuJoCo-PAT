@@ -1,0 +1,10 @@
+[INFO] [launch]: All log files can be found below /home/dev/.ros/log/2026-10-29-06-26-42-299743-ben-XPS-15-9530-41547
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [ee_target_publisher_node-1]: process started with pid [41548]
+[ee_target_publisher_node-1] [0m[INFO] [1793255202.357874726] [ee_target_publisher]: ee_target_publisher: pattern=rectangle for 1 arm(s), 2.0 s window every 10 ms at 20 Hz[0m
+[ee_target_publisher_node-1] [0m[INFO] [1793255202.361540255] [ee_target_publisher]: ee_target_publisher[left]: home EE pose (-0.124, -0.418) — rectangle, lap 8.0 s after a 3.0 s approach[0m
+[WARNING] [launch]: user interrupted with ctrl-c (SIGINT)
+[INFO] [ee_target_publisher_node-1]: sending signal 'SIGINT' to process[ee_target_publisher_node-1]
+[ee_target_publisher_node-1] [0m[INFO] [1793255225.225859579] [rclcpp]: signal_handler(SIGINT/SIGTERM)[0m
+[ee_target_publisher_node-1] [0m[INFO] [1793255225.227306254] [rclcpp]: signal_handler(SIGINT/SIGTERM)[0m
+[INFO] [ee_target_publisher_node-1]: process has finished cleanly [pid 41548]

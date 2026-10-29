@@ -77,6 +77,10 @@ ContactScenario::ContactScenario(const Config& cfg) : cfg_(cfg) {
     cwd_ = m_->jnt_dofadr[jointId(m_, "chaser_yaw")];
     tx_  = m_->jnt_qposadr[jointId(m_, "target_x")];
     ty_  = m_->jnt_qposadr[jointId(m_, "target_y")];
+    chaser_body_ = m_->jnt_bodyid[jointId(m_, "chaser_x")];
+    jacp_.resize(static_cast<std::size_t>(3 * m_->nv));
+    jacr_.resize(static_cast<std::size_t>(3 * m_->nv));
+    mv_.resize(static_cast<std::size_t>(m_->nv));
 
     // Damping is a model constant, so it is set once here rather than on every
     // reset. A negative value keeps whatever the MJCF ships; zero is frictionless.
@@ -224,6 +228,53 @@ std::array<double, 3> ContactScenario::baseVelocity() const {
 
 std::array<double, 3> ContactScenario::basePose() const {
     return {{d_->qpos[cx_], d_->qpos[cy_], d_->qpos[cw_]}};
+}
+
+void ContactScenario::chaserMomentum(PlanarMomentum& system, PlanarMomentum& bus) const {
+    const int b = chaser_body_;
+    // subtree_linvel is the subtree's centre-of-mass velocity and
+    // subtree_angmom its angular momentum about that centre of mass.
+    mj_subtreeVel(m_, d_);
+    const double m_sys = m_->body_subtreemass[b];
+    system.px = m_sys * d_->subtree_linvel[3 * b];
+    system.py = m_sys * d_->subtree_linvel[3 * b + 1];
+    system.lz = d_->subtree_angmom[3 * b + 2];
+
+    // The bus body alone: its own centre-of-mass velocity and spin, moved to
+    // the chaser's centre of mass.
+    mj_jacBodyCom(m_, d_, jacp_.data(), jacr_.data(), b);
+    double vx = 0.0, vy = 0.0, wz = 0.0;
+    for (int i = 0; i < m_->nv; ++i) {
+        vx += jacp_[static_cast<std::size_t>(i)] * d_->qvel[i];
+        vy += jacp_[static_cast<std::size_t>(m_->nv + i)] * d_->qvel[i];
+        wz += jacr_[static_cast<std::size_t>(2 * m_->nv + i)] * d_->qvel[i];
+    }
+    const double m_bus = m_->body_mass[b];
+    // World-frame Izz from the principal inertia: sum of I_k * R(2,k)^2, with
+    // ximat the row-major rotation of the inertial frame.
+    double izz = 0.0;
+    for (int k = 0; k < 3; ++k) {
+        const double r2k = d_->ximat[9 * b + 6 + k];
+        izz += m_->body_inertia[3 * b + k] * r2k * r2k;
+    }
+    const double rx = d_->xipos[3 * b]     - d_->subtree_com[3 * b];
+    const double ry = d_->xipos[3 * b + 1] - d_->subtree_com[3 * b + 1];
+    bus.px = m_bus * vx;
+    bus.py = m_bus * vy;
+    bus.lz = izz * wz + m_bus * (rx * vy - ry * vx);
+}
+
+double ContactScenario::chaserKineticEnergy() const {
+    // M is block-diagonal between the chaser and the target (separate trees),
+    // so summing over the chaser's DOFs alone leaves the target out exactly.
+    mj_mulM(m_, d_, mv_.data(), d_->qvel);
+    double ke = 0.0;
+    for (int i = 0; i < m_->nv; ++i) {
+        if (m_->body_rootid[m_->dof_bodyid[i]] == chaser_body_) {
+            ke += d_->qvel[i] * mv_[static_cast<std::size_t>(i)];
+        }
+    }
+    return 0.5 * ke;
 }
 
 void ContactScenario::readControllerState(double anchor_x, double anchor_y,

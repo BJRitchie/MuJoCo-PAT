@@ -1,0 +1,78 @@
+/**:
+  ros__parameters:
+    ompc:
+      Ts: 1.4
+      Q:
+      - 1600000.0
+      - 1600000.0
+      - 100000.0
+      R:
+      - 1.0
+      - 1.0
+      - 1.0
+      damping: 0.0001
+      Hg_damping: 0.0001
+    rt_priority: 80
+    lock_memory: true
+pat_arm_ompc_left:
+  ros__parameters:
+    arm_side: left
+    ee_site_name: ee_site_L
+    joint_names:
+    - joint2_L
+    - joint3_L
+    - joint5_L
+    owned_joints:
+    - joint2_L
+    - joint3_L
+    - joint5_L
+    limits:
+      q_min:
+      - 0.05
+      - -2.917
+      - -1.17
+      q_max:
+      - 3.09
+      - -0.05
+      - 1.17
+      qd_max:
+      - 2.0
+      - 2.0
+      - 1.5
+    rt_cpus:
+    - 4
+    - 5
+    rt_cpus_observer:
+    - 8
+    - 9
+pat_arm_ompc_right:
+  ros__parameters:
+    arm_side: right
+    ee_site_name: ee_site_R
+    joint_names:
+    - joint2_R
+    - joint3_R
+    - joint5_R
+    owned_joints:
+    - joint2_R
+    - joint3_R
+    - joint5_R
+    limits:
+      q_min:
+      - 0.05
+      - -2.917
+      - -1.17
+      q_max:
+      - 3.09
+      - -0.05
+      - 1.17
+      qd_max:
+      - 2.0
+      - 2.0
+      - 1.5
+    rt_cpus:
+    - 6
+    - 7
+    rt_cpus_observer:
+    - 10
+    - 11

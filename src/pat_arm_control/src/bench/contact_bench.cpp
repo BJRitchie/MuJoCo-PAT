@@ -1398,6 +1398,17 @@ Trial runTrial(const Options& o, double gain_override) {
         scene.applyArmTorque(tau_full.segment(6, n_joints));
         scene.refreshDerived();
 
+        // The chaser's momentum at the instant (c0) recorded: the refresh
+        // leaves the state alone and brings the kinematics up to date.
+        {
+            ContactScenario::PlanarMomentum sys, bus;
+            scene.chaserMomentum(sys, bus);
+            auto& S = t.series;
+            S.mom_px.push_back(sys.px); S.mom_py.push_back(sys.py); S.mom_lz.push_back(sys.lz);
+            S.bus_px.push_back(bus.px); S.bus_py.push_back(bus.py); S.bus_lz.push_back(bus.lz);
+            S.ke.push_back(scene.chaserKineticEnergy());
+        }
+
         // (d) Step the observer. fullDynamics evaluates the CONTROLLER's model
         //     at this state -- the model with no contact in it, which is why
         //     the contact shows up as a disturbance at all.

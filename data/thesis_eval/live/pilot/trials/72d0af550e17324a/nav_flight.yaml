@@ -1,0 +1,35 @@
+pat_nav:
+  ros__parameters:
+    navigator: imu_ekf
+    nav_hz: 500.0
+    publish_hz: 100.0
+    output_topic: /chaser/nav/odom
+    imu_hz: 500.0
+    rt_priority_nav: 80
+    lock_memory: true
+    imu_ekf.gyro_noise_std: 0.001
+    imu_ekf.accel_noise_std: 0.025
+    imu_ekf.gyro_bias_walk: 6.0e-06
+    imu_ekf.accel_bias_walk: 0.00012
+    imu_ekf.yaw_meas_std: 0.0001
+    imu_ekf.pos_meas_std: 0.004
+    imu_ekf.vel_meas_std: 0.01
+    imu_ekf.init_pos_std: 0.02
+    imu_ekf.init_yaw_std: 0.01
+    imu_ekf.init_vel_std: 0.05
+    imu_ekf.init_gyro_bias_std: 0.0001
+    imu_ekf.init_accel_bias_std: 0.03
+    imu_ekf.latency_yaw: 0.1
+    imu_ekf.latency_pos: 0.15
+    imu_ekf.latency_vel: 0.0
+    imu_ekf.use_twist: false
+    imu_ekf.skip_repeated: true
+    imu_ekf.use_position: true
+    imu_ekf.history_len: 256
+    imu_ekf.max_imu_gap: 0.1
+    imu_ekf.gate_yaw: 10.83
+    imu_ekf.gate_pos: 13.82
+    imu_ekf.gate_vel: 13.82
+    rt_cpus_nav:
+    - 2
+    - 3
