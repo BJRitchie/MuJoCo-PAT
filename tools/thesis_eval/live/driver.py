@@ -96,6 +96,7 @@ def detect_core_map():
 CORE_MAP = detect_core_map()
 CORES = CORE_MAPS[CORE_MAP]
 RT_PRIORITY = 80
+NAV_HISTORY_LEN = 128           # see write_params; the installed file says 256
 STRAY = r"simulation_node|nav_node|nmpc_node|ompc_node|smc_node|ee_target_publisher|recorder\.py"
 SETTLE_S = 4.0                  # stack start-up before the warm-up clock starts
 STOP_S = 20.0                   # how long the stack gets to exit on SIGINT
@@ -305,6 +306,14 @@ def write_params(spec, work):
     p["rt_priority_nav"] = RT_PRIORITY
     p["lock_memory"] = True
     p["rt_cpus_nav"] = CORES["nav"]
+    # nav_node times a replay of its WHOLE history at startup, on its main thread
+    # (pinned to CORES["rest"], not the nav core), and refuses to start if twice
+    # that exceeds half its 2 ms period. The history only has to outlast the
+    # longest latency, 0.15 s = 75 steps at 500 Hz (77 with nav_node's margin), so
+    # 128 changes nothing the filter computes -- no measurement reaches back that
+    # far -- and halves the cost the check measures. Only this trial's copy changes;
+    # the bench and its cache read the installed file.
+    p["imu_ekf.history_len"] = NAV_HISTORY_LEN
     nav_yaml = os.path.join(work, "nav_flight.yaml")
     yaml.safe_dump(nav, open(nav_yaml, "w"), sort_keys=False)
 

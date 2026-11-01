@@ -115,6 +115,13 @@ class ParamsTest(unittest.TestCase):
         self.assertEqual(common["model_tau_max"], [0.5] * 6)
         self.assertEqual(files["tau_limit"], 0.5)
 
+    def test_nav_history_still_covers_the_longest_latency(self):
+        files = driver.write_params(driver.make_spec(args()), self.work)
+        p = driver.load_yaml(files["nav"])["pat_nav"]["ros__parameters"]
+        need = max(p["imu_ekf.latency_pos"], p["imu_ekf.latency_yaw"]) * p["imu_hz"] + 2
+        self.assertGreaterEqual(p["imu_ekf.history_len"], need)
+        self.assertLess(p["imu_ekf.history_len"], 256)
+
     def test_damping_reaches_the_plant(self):
         driver.write_params(driver.make_spec(args(damping=5.0)), self.work)
         self.assertEqual(self.plant()["chaser_damping"], [5.0] * 3)
