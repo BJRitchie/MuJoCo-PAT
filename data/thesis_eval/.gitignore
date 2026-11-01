@@ -4,3 +4,17 @@
 # quotes, with what produced them.
 **/cells/
 **/series/
+
+# Live trials (live/driver.py): ~1.7 MB each, hundreds per run. Git keeps each
+# trial's parameter files, report.json and summary.csv, and the run's collected
+# summary.csv (live/collect.py); the per-tick records and logs stay on the
+# machine that ran them, like the offline series/. The pilot predates this and
+# is tracked whole.
+live/*/trials/*/series.csv
+live/*/trials/*/series.csv.ticks.json
+live/*/trials/*/trace_*.csv
+live/*/trials/*/stack.log
+live/*/failed/
+live/*/.lock
+live/*.log
+!live/pilot/**

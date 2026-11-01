@@ -212,8 +212,72 @@ def tab_tuned() -> None:
     print("  wrote tables/tab_tuned.tex")
 
 
+def _pm(m: float, h: float) -> str:
+    """mean $\pm$ 95% half-width, the half-width dropped when there is none."""
+    if m is None or (isinstance(m, float) and math.isnan(m)):
+        return "--"
+    return fmt(m) if not h else f"{fmt(m)}\,$\pm$\,{fmt(h, 2)}"
+
+
+def tab_live() -> None:
+    """The live stack against its offline twin and the exact-state bench, per
+    controller and shape, at the nominal setting on the EKF; then the live
+    timing, worst tick first."""
+    if C.VARIANT != "tuned":
+        return                          # the live stack runs tuned.json only
+    live = C.live_summary()
+    if live is None:
+        return
+    twin = C.live_twin()
+    exact = C.summary("nominal")
+    lv = C.at_nominal(live[live["source"] == "ekf"])
+    tw = C.at_nominal(twin[twin["source"] == "ekf"]) if twin is not None else None
+    lines = [r"\begin{tabular}{lrrrrrrr}", r"\toprule",
+             r" & \multicolumn{3}{c}{circle RMSE [mm]} & \multicolumn{3}{c}{rectangle RMSE [mm]}"
+             r" & \\",
+             r"\cmidrule(lr){2-4}\cmidrule(lr){5-7}",
+             r" & exact & twin & live & exact & twin & live & live trials \\", r"\midrule"]
+    for c in C.CTRL:
+        cells = []
+        for shape in ("circle", "rectangle"):
+            e = exact[(exact["scenario"] == shape) & (exact["tag"] == c)]["rmse_mm"] \
+                if exact is not None else []
+            cells.append(fmt(float(e.iloc[0])) if len(e) else "--")
+            t = tw[(tw["shape"] == shape) & (tw["tag"] == c)]["rmse_mm"] if tw is not None else []
+            cells.append(_pm(*C.ci95(t)) if len(t) else "--")
+            d = lv[(lv["shape"] == shape) & (lv["tag"] == c)]
+            cells.append(_pm(*C.ci95(d["rmse_mm"])) + (r"$^\times$" if
+                         len(d) and d["safe_ticks"].max() > 0 else ""))
+        n = len(lv[lv["tag"] == c])
+        lines.append(f"{C.LABEL[c]} & " + " & ".join(cells) + f" & {n} \\\\")
+    lines += [r"\bottomrule", r"\end{tabular}"]
+    write("tab_live_accuracy", lines)
+
+    # Timing over EVERY live trial of the controller, all cells: the worst tick
+    # is the maximum over all of them, not a mean of per-trial maxima.
+    lines = [r"\begin{tabular}{lrrrrrr}", r"\toprule",
+             r" & \multicolumn{3}{c}{control tick [\textmu s]} & & & \\",
+             r"\cmidrule(lr){2-4}",
+             r" & mean & p99 & worst & headroom (worst) & missed deadlines & trials \\",
+             r"\midrule"]
+    rows = []
+    for c in C.CTRL:
+        d = live[live["tag"] == c]
+        if d.empty:
+            continue
+        worst = d["tick_us_max"].max()
+        rows.append((C.LABEL[c], [d["tick_us_mean"].mean(), d["tick_us_p99"].mean(), worst,
+                                  C.PERIOD_US / worst, d["deadline_misses"].fillna(0).sum()],
+                     len(d)))
+    body = block([(label, v) for label, v, _ in rows], [True, True, True, False, True])
+    # The trial count is context, not a result: appended unbolded.
+    lines += [b[:-len(r" \\")] + f" & {n} \\\\" for b, (_, _, n) in zip(body, rows)]
+    lines += [r"\bottomrule", r"\end{tabular}"]
+    write("tab_live_timing", lines)
+
+
 TABLES: List[Callable[[], None]] = [tab_nominal, tab_step, tab_timing, tab_sensitivity,
-                                    tab_observer, tab_tuned]
+                                    tab_observer, tab_tuned, tab_live]
 
 if __name__ == "__main__":
     import argparse

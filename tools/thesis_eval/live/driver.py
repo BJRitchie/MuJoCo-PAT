@@ -760,6 +760,11 @@ def describe(spec):
     return " ".join(out)
 
 
+def live_studies_names():
+    import live_studies
+    return list(live_studies.STUDIES)
+
+
 def queue_variations(a):
     """The scenario variations a queue runs: every cell of the named live studies, or
     (no --study) --shapes at --speed, as before."""

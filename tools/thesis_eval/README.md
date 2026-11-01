@@ -203,6 +203,41 @@ study on its own. Partner `mirror` / `same`, the steps, the joint disturbance an
 The CPU map is picked per machine (`CORE_MAPS` in `driver.py`; `LIVE_CORE_MAP`
 overrides it).
 
+### Live results: collect, twin, plot
+
+When a live queue has finished:
+
+```bash
+# in the container
+python3 tools/thesis_eval/live/collect.py --out data/thesis_eval/live/main
+python3 tools/thesis_eval/run_study.py run live_twin --jobs 12     # ~10 min
+# on the host
+~/.venvs/thesis_eval/bin/python tools/thesis_eval/figures.py live_nominal \
+    live_robustness live_estimator live_timing live_trace
+~/.venvs/thesis_eval/bin/python tools/thesis_eval/tables.py
+```
+
+`collect.py` writes the run's `summary.csv`, one row per trial, with the knobs that
+name its cell and its health. `live_twin` is the offline twin of every live cell:
+the same scenario, state source, sensors and 15 s estimator warm-up on the bench,
+10 seeds, so the gap between a live cell and its twin is what the real stack adds
+(threads, DDS, the 100 Hz estimate hand-over) and nothing else. The scoring window
+matches: 5 s in, as the bench starts it after the approach and ramp.
+
+| Figure | What |
+|---|---|
+| `fig17_live_nominal` | per controller, circle and rectangle: RMSE and torque change per tick, offline exact, offline twin and live |
+| `fig18_live_robustness` | speed, link mass, base damping and torque limit, live points over the twin's curves |
+| `fig19_live_estimator` | raw sensors, EKF, EKF + joint KF: RMSE, torque change, base position error, live and twin |
+| `fig20_live_timing` | every live control tick, with the worst marked, and each trial's worst and p99 tick; missed deadlines in the legend |
+| `fig21_live_trace` | one live rectangle per controller: error against time, and the path |
+
+`tab_live_accuracy` and `tab_live_timing` hold the same numbers; the timing table's
+worst tick is the maximum over every trial. Git keeps each trial's report and
+summary and the collected summary; the per-tick records stay on the machine that
+ran them (`data/thesis_eval/.gitignore`), so `live_timing`'s histogram and
+`live_trace` need that machine.
+
 ## 2. Make the figures and tables (on the host)
 
 ```bash

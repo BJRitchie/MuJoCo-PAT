@@ -8,6 +8,7 @@ import types
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 import driver  # noqa: E402
 
 SRC = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "src"))
@@ -51,6 +52,27 @@ class SpecTest(unittest.TestCase):
         vs = driver.queue_variations(a)
         self.assertNotIn({"shape": "circle", "partner": "mirror"}, vs)
         self.assertIn({"shape": "circle", "speed": 4}, vs)
+
+
+class TwinTest(unittest.TestCase):
+    """Every live queue cell has an offline twin, under the name collect.py gives it."""
+
+    def test_every_live_cell_has_a_twin(self):
+        import studies
+        a = types.SimpleNamespace(studies=list(driver.live_studies_names()), shapes=[],
+                                  sources=[])
+        twins = {c.name.rsplit("_", 2)[0] for c in studies.build("live_twin")}
+        for v in driver.queue_variations(a):
+            spec = driver.make_spec(args(shape=v["shape"], speed=v.get("speed", 1.0),
+                                         source=v.get("source", "ekf"),
+                                         damping=v.get("damping", 0.0),
+                                         mass_scale=v.get("mass_scale", 1.0),
+                                         tau_scale=v.get("tau_scale", 1.0)))
+            name = studies.live_twin_name({
+                "shape": spec["shape"], "speed": spec["speed"], "source": spec["state"],
+                "damping": spec["damping"], "mass_scale": spec.get("mass_scale", 1.0),
+                "tau_scale": spec.get("tau_scale", 1.0)})
+            self.assertIn(name, twins, v)
 
 
 class RosHomeTest(unittest.TestCase):

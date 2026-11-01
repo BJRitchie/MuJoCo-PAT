@@ -443,6 +443,73 @@ def timing(quick: bool) -> List[Cell]:
     return cells
 
 
+#: The estimator warm-up the live trials use (live/driver.py's --nav-warmup); the
+#: twins match it rather than NAV_WARMUP, so a live trial and its twin see the
+#: same converged-or-not estimator.
+LIVE_NAV_WARMUP = "15"
+
+#: Live state source -> the bench's arguments for the same thing.
+LIVE_SOURCES: Dict[str, Tuple[str, ...]] = {
+    "ekf": ("--state-source", "ekf", "--nav-warmup", LIVE_NAV_WARMUP),
+    "raw": ("--state-source", "raw", "--nav-warmup", LIVE_NAV_WARMUP),
+    "ekf-jkf": ("--state-source", "ekf", "--joint-filter", "kalman",
+                "--nav-warmup", LIVE_NAV_WARMUP),
+}
+
+
+def live_variations() -> List[dict]:
+    """Every scenario variation the live stack runs (live/live_studies.py), as the
+    queue expands it: partner cells, which the live stack cannot run yet, left out."""
+    import importlib.util
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "live", "live_studies.py")
+    spec = importlib.util.spec_from_file_location("live_studies", path)
+    ls = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(ls)
+    out: Dict[str, dict] = {}
+    for name in ls.STUDIES:
+        for v in ls.STUDIES[name]():
+            # Studies overlap (speed 1 and mass 1.0 are the nominal cell): one each.
+            if v.get("partner", "hold") == "hold":
+                out.setdefault(live_twin_name(v), v)
+    return list(out.values())
+
+
+def live_twin_name(v: dict) -> str:
+    """The twin cell's name for one live variation: every knob at its value, so
+    figures.py can match a live cell to its twin by the same fields."""
+    return _slug(v["shape"], f"x{float(v.get('speed', 1)):g}",
+                 f"m{float(v.get('mass_scale', 1)):g}", f"bd{float(v.get('damping', 0)):g}",
+                 f"tau{float(v.get('tau_scale', 1)):g}x", v.get("source", "ekf"))
+
+
+def live_twin(quick: bool) -> List[Cell]:
+    """The live trials' offline twins: each variation the live stack runs, on the
+    bench, with the same state source, sensors, estimator warm-up and knobs. The
+    gap between a live cell and its twin is what the real stack adds (threads,
+    DDS, the 100 Hz estimate hand-over) and nothing else."""
+    cells: List[Cell] = []
+    seeds = list(range(1, _n(quick, SEEDS_OBS) + 1))
+    for v in live_variations():
+        shape_args = CIRCLE if v["shape"] == "circle" else RECTANGLE
+        extra = list(LIVE_SOURCES[v.get("source", "ekf")])
+        if float(v.get("speed", 1)) != 1.0:
+            extra += ["--traj-speed", f"{float(v['speed']):g}"]
+        if float(v.get("mass_scale", 1)) != 1.0:
+            extra += ["--mass-scale", f"{float(v['mass_scale']):g}"]
+        if float(v.get("tau_scale", 1)) != 1.0:
+            lim = 0.25 * float(v["tau_scale"])
+            extra += ["--set", "model_tau_max=[" + ",".join([str(lim)] * 6) + "]"]
+        # The plant: frictionless unless the variation sets the table's drag.
+        extra += ["--base-damping", f"{float(v.get('damping', 0)):g}"]
+        base = live_twin_name(v)
+        for label, law, ctrl_args in active_controllers():
+            for seed in seeds:
+                cells.append(Cell("live_twin", _slug(base, label, f"s{seed}"), law, label,
+                                  tuple(shape_args) + tuple(ctrl_args) + tuple(extra),
+                                  seed=seed))
+    return cells
+
+
 STUDIES: Dict[str, Callable[[bool], List[Cell]]] = {
     "nominal": nominal,
     "balanced": balanced,
@@ -459,6 +526,7 @@ STUDIES: Dict[str, Callable[[bool], List[Cell]]] = {
     "warmup": warmup,
     "sensitivity": sensitivity,
     "timing": timing,
+    "live_twin": live_twin,
 }
 
 

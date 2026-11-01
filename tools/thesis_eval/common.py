@@ -65,6 +65,61 @@ def series(study: str, cell: str) -> Optional[pd.DataFrame]:
     return pd.read_csv(path)
 
 
+# ---------------------------------------------------------------------- live --
+#: Where a live run's trials and collected summary are (live/driver.py --out,
+#: live/collect.py). The tuned settings only: the live stack runs tuned.json.
+LIVE_RUN = "main"
+LIVE_DIR = os.path.join(DATA_ROOT, "live")
+
+#: The knobs a live cell and its offline twin are matched on, and their nominal
+#: values (the controllers' own setting in every other figure).
+LIVE_KNOBS = {"speed": 1.0, "mass": 1.0, "damping": 0.0, "tau": 1.0}
+LIVE_SOURCES = ["raw", "ekf", "ekf-jkf"]
+SOURCE_LABEL = {"exact": "exact state", "raw": "raw sensors", "ekf": "EKF",
+                "ekf-jkf": "EKF + joint KF"}
+
+
+def live_summary(run: str = LIVE_RUN) -> Optional[pd.DataFrame]:
+    """One row per live trial (live/collect.py's summary.csv), with the knobs under
+    the same names as live_twin()'s: shape, speed, mass, damping, tau, source."""
+    path = os.path.join(LIVE_DIR, run, "summary.csv")
+    if not os.path.isfile(path):
+        return None
+    df = pd.read_csv(path)
+    return df.rename(columns={"mass_scale": "mass", "tau_scale": "tau"})
+
+
+def live_series(trial_hash: str, run: str = LIVE_RUN) -> Optional[pd.DataFrame]:
+    path = os.path.join(LIVE_DIR, run, "trials", trial_hash, "series.csv")
+    return pd.read_csv(path) if os.path.isfile(path) else None
+
+
+def live_twin() -> Optional[pd.DataFrame]:
+    """The offline twins (study live_twin), with the same knob columns as
+    live_summary(). Always the tuned variant: the live stack runs tuned.json."""
+    df = summary_of("tuned", "live_twin")
+    if df is None:
+        return None
+    df = df.copy()
+    df["shape"] = df["scenario"]
+    df["speed"] = df["traj_speed"].astype(float)
+    df["mass"] = df["mass_scale"].astype(float)
+    df["damping"] = df["base_damping"].astype(float)
+    df["tau"] = df["cell"].str.extract(r"_tau([0-9.]+)x_")[0].astype(float)
+    filt = df["joint_filter"] if "joint_filter" in df else "none"
+    df["source"] = df["state_source"].where(filt != "kalman", "ekf-jkf")
+    return df
+
+
+def at_nominal(df: pd.DataFrame, but: Optional[str] = None) -> pd.DataFrame:
+    """Rows with every live knob at its nominal value except `but`."""
+    keep = pd.Series(True, index=df.index)
+    for k, v in LIVE_KNOBS.items():
+        if k != but:
+            keep &= (df[k].astype(float) - v).abs() < 1e-9
+    return df[keep]
+
+
 # Two-sided 95% Student-t quantiles by degrees of freedom; beyond 30, the normal.
 _T95 = {1: 12.706, 2: 4.303, 3: 3.182, 4: 2.776, 5: 2.571, 6: 2.447, 7: 2.365,
         8: 2.306, 9: 2.262, 10: 2.228, 11: 2.201, 12: 2.179, 13: 2.160, 14: 2.145,

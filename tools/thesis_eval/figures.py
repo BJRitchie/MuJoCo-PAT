@@ -1173,6 +1173,289 @@ def fig_tuning() -> None:
     C.OUT = out_dir
 
 
+# ------------------------------------------------------------------- live --
+# The live stack (live/driver.py): the deployed nodes against the simulator in
+# real time, a few repeats per cell. Each figure sets the live result against
+# its offline twin (study live_twin: the same scenario, sensors and estimator on
+# the bench), so what the real stack adds -- threads, DDS, the 100 Hz estimate
+# hand-over -- is the gap between the two and nothing else.
+
+LIVE_STYLE = dict(ls="none", capsize=2, ms=4.5, mew=1.0, zorder=4)
+TWIN_STYLE = dict(lw=1.0, alpha=0.9, zorder=3)
+
+
+def _live_frames(need_twin: bool = True):
+    live = C.live_summary()
+    if live is None:
+        return None, None, "no live run collected (live/collect.py)"
+    twin = C.live_twin()
+    if need_twin and twin is None:
+        return live, None, "no live_twin study (run_study.py run live_twin)"
+    return live, twin, ""
+
+
+def _live_failed(rows) -> bool:
+    return bool(len(rows)) and float(rows["safe_ticks"].max()) > 0
+
+
+def live_handles(with_twin: bool = True) -> List[plt.Line2D]:
+    out = [plt.Line2D([], [], color="0.3", marker="o", mfc="none", ls="none", ms=4.5,
+                      label="live (mean, 95% CI)")]
+    if with_twin:
+        out.append(plt.Line2D([], [], color="0.3", lw=1.0, label="offline twin"))
+    return out
+
+
+def fig_live_nominal() -> None:
+    live, twin, why = _live_frames()
+    if live is None:
+        return skip("live_nominal", why)
+    exact = C.summary("nominal")
+    live = C.at_nominal(live[live["source"] == "ekf"])
+    twin = C.at_nominal(twin[twin["source"] == "ekf"]) if twin is not None else None
+    metrics = (("rmse_mm", "RMSE [mm]", True), ("tau_step_rms", "rms Δτ per tick [N m]", True))
+    fig, axes = plt.subplots(2, 2, figsize=(FULL, 3.8), sharex=True)
+    safe = False
+    x = np.arange(len(C.CTRL))
+    for j, shape in enumerate(("circle", "rectangle")):
+        for i, (col, label, log) in enumerate(metrics):
+            ax = axes[i, j]
+            for k, c in enumerate(C.CTRL):
+                d = live[(live["shape"] == shape) & (live["tag"] == c)]
+                m, h = C.ci95(d[col])
+                ax.errorbar(x[k] + 0.12, m, yerr=h, color=C.COLOUR[c],
+                            marker=C.MARKER[c], mfc="none", **LIVE_STYLE)
+                ax.plot(np.full(len(d), x[k] + 0.12), d[col], ls="none", marker=".",
+                        ms=2.5, color=C.COLOUR[c], alpha=0.5, zorder=3)
+                safe |= mark_safe_at(ax, [x[k] + 0.12], [m], [_live_failed(d)])
+                if twin is not None:
+                    t = twin[(twin["shape"] == shape) & (twin["tag"] == c)]
+                    tm, th = C.ci95(t[col])
+                    ax.errorbar(x[k] - 0.12, tm, yerr=th, color=C.COLOUR[c],
+                                marker=C.MARKER[c], **LIVE_STYLE)
+                if exact is not None:
+                    e = exact[(exact["scenario"] == shape) & (exact["tag"] == c)]
+                    if len(e):
+                        ax.plot(x[k] - 0.36, e[col].iloc[0], marker="_", ms=9, mew=1.6,
+                                color=C.COLOUR[c], ls="none", zorder=3)
+            if log:
+                ax.set_yscale("log")
+                plain_log_y(ax)
+            if j == 0:
+                ax.set_ylabel(label)
+        axes[0, j].set_title(shape)
+        axes[1, j].set_xticks(x)
+        axes[1, j].set_xticklabels([C.LABEL[c] for c in C.CTRL])
+    handles = [plt.Line2D([], [], color="0.3", marker="_", ms=9, mew=1.6, ls="none",
+                          label="offline, exact state"),
+               plt.Line2D([], [], color="0.3", marker="o", ls="none", ms=4.5,
+                          label="offline twin (EKF)"),
+               plt.Line2D([], [], color="0.3", marker="o", mfc="none", ls="none", ms=4.5,
+                          label="live (EKF), mean and repeats")]
+    legend_below(fig, handles + ([safe_handle()] if safe else []), ncol=4)
+    save(fig, "fig17_live_nominal")
+
+
+#: (live knob, x label, symlog x)
+LIVE_SWEEPS = (("speed", "speed factor", False), ("mass", "link mass / model mass", False),
+               ("damping", "base damping [N s/m]", True), ("tau", "τ limit / 0.25 N m", False))
+
+
+def fig_live_robustness() -> None:
+    live, twin, why = _live_frames()
+    if live is None:
+        return skip("live_robustness", why)
+    live = live[live["source"] == "ekf"]
+    twin = twin[twin["source"] == "ekf"] if twin is not None else None
+    fig, axes = plt.subplots(2, 4, figsize=(FULL, 3.9))
+    safe = False
+    for i, shape in enumerate(("circle", "rectangle")):
+        for j, (knob, xl, symlog) in enumerate(LIVE_SWEEPS):
+            ax = axes[i, j]
+            lv = C.at_nominal(live[live["shape"] == shape], but=knob)
+            tw = C.at_nominal(twin[twin["shape"] == shape], but=knob) if twin is not None else None
+            for c in C.CTRL:
+                if tw is not None:
+                    d = tw[tw["tag"] == c]
+                    pts = sorted(d[knob].unique())
+                    if pts:
+                        m, h = map(np.array, zip(*(C.ci95(d[d[knob] == v]["rmse_mm"]) for v in pts)))
+                        ax.plot(pts, m, color=C.COLOUR[c], **TWIN_STYLE)
+                        ax.fill_between(pts, m - h, m + h, color=C.COLOUR[c], alpha=0.15, lw=0)
+                d = lv[lv["tag"] == c]
+                pts = sorted(d[knob].unique())
+                if pts:
+                    m, h = map(np.array, zip(*(C.ci95(d[d[knob] == v]["rmse_mm"]) for v in pts)))
+                    ax.errorbar(pts, m, yerr=h, color=C.COLOUR[c], marker=C.MARKER[c],
+                                mfc="none", **LIVE_STYLE)
+                    safe |= mark_safe_at(ax, pts, m, [_live_failed(d[d[knob] == v]) for v in pts])
+            mark_nominal(ax, C.LIVE_KNOBS[knob])
+            ax.set_yscale("log")
+            plain_log_y(ax)
+            if symlog:
+                ax.set_xscale("symlog", linthresh=0.05, linscale=0.5)
+                ticks = sorted(set(lv[knob].unique()) | (set(tw[knob].unique()) if tw is not None else set()))
+                ax.set_xticks(ticks)
+                ax.set_xticklabels([f"{t:g}" for t in ticks], fontsize=6)
+                ax.set_xlim(left=0)
+                ax.xaxis.set_minor_locator(matplotlib.ticker.NullLocator())
+            if i == 1:
+                ax.set_xlabel(xl)
+            if j == 0:
+                ax.set_ylabel(f"{shape} RMSE [mm]")
+    fig.tight_layout(rect=(0, 0.06, 1, 1))
+    handles = ctrl_handles() + live_handles() + [nominal_handle()] + \
+        ([safe_handle()] if safe else [])
+    fig.legend(handles=handles, loc="lower center", ncol=4, frameon=False,
+               bbox_to_anchor=(0.5, 0.0), fontsize=6.5)
+    save(fig, "fig18_live_robustness")
+
+
+def fig_live_estimator() -> None:
+    live, twin, why = _live_frames()
+    if live is None:
+        return skip("live_estimator", why)
+    live = C.at_nominal(live)
+    twin = C.at_nominal(twin) if twin is not None else None
+    srcs = [s for s in C.LIVE_SOURCES if s in set(live["source"])]
+    if len(srcs) < 2:
+        return skip("live_estimator", "fewer than two state sources run live")
+    metrics = (("rmse_mm", "RMSE [mm]"), ("tau_step_rms", "rms Δτ per tick [N m]"),
+               ("est_pos_rms_mm", "base position error [mm]"))
+    fig, axes = plt.subplots(len(metrics), 2, figsize=(FULL, 5.0), sharex=True)
+    x = np.arange(len(srcs))
+    safe = False
+    for j, shape in enumerate(("circle", "rectangle")):
+        for i, (col, label) in enumerate(metrics):
+            ax = axes[i, j]
+            for k, c in enumerate(C.CTRL):
+                off = (k - 1.5) * 0.06
+                if twin is not None:
+                    t = twin[(twin["shape"] == shape) & (twin["tag"] == c)]
+                    tm = [C.ci95(t[t["source"] == s][col])[0] for s in srcs]
+                    ax.plot(x + off, tm, color=C.COLOUR[c], ls="--", **TWIN_STYLE)
+                d = live[(live["shape"] == shape) & (live["tag"] == c)]
+                m, h = map(np.array, zip(*(C.ci95(d[d["source"] == s][col]) for s in srcs)))
+                ax.errorbar(x + off, m, yerr=h, color=C.COLOUR[c], marker=C.MARKER[c],
+                            mfc="none", **LIVE_STYLE)
+                ax.plot(x + off, m, color=C.COLOUR[c], lw=0.8, zorder=3)
+                safe |= mark_safe_at(ax, x + off, m,
+                                     [_live_failed(d[d["source"] == s]) for s in srcs])
+            ax.set_yscale("log")
+            plain_log_y(ax)
+            if j == 0:
+                ax.set_ylabel(label)
+        axes[0, j].set_title(shape)
+        axes[-1, j].set_xticks(x)
+        axes[-1, j].set_xticklabels([C.SOURCE_LABEL[s] for s in srcs])
+    handles = ctrl_handles() + [
+        plt.Line2D([], [], color="0.3", marker="o", mfc="none", lw=0.8, ms=4.5,
+                   label="live (mean, 95% CI)"),
+        plt.Line2D([], [], color="0.3", ls="--", lw=1.0, label="offline twin")]
+    legend_below(fig, handles + ([safe_handle()] if safe else []), ncol=4)
+    save(fig, "fig19_live_estimator")
+
+
+def fig_live_timing() -> None:
+    """Every control tick of every live trial: the distribution, and the worst
+    tick of each trial, which is what a deadline is judged by."""
+    live, _, why = _live_frames(need_twin=False)
+    if live is None:
+        return skip("live_timing", why)
+    fig, axes = plt.subplots(1, 2, figsize=(FULL, 2.6), gridspec_kw={"wspace": 0.3})
+    bins = np.logspace(0, 4.5, 140)
+    labels, have_series = [], False
+    for c in C.CTRL:
+        d = live[live["tag"] == c]
+        ticks = []
+        for h in d["hash"]:
+            s = C.live_series(h)
+            if s is not None and "tick_us" in s:
+                v = s["tick_us"].to_numpy()
+                ticks.append(v[np.isfinite(v) & (v > 0)])
+        misses = int(d["deadline_misses"].fillna(0).sum())
+        labels.append((c, f"{C.LABEL[c]} ({misses} missed)"))
+        if ticks:
+            have_series = True
+            t = np.concatenate(ticks)
+            axes[0].hist(t, bins=bins, histtype="step", color=C.COLOUR[c], density=True)
+            axes[0].plot(t.max(), 1.0, marker="v", color=C.COLOUR[c], ms=4, ls="none",
+                         transform=axes[0].get_xaxis_transform(), clip_on=False)
+        # Right: per trial, the worst tick (filled) over its p99 (hollow).
+        k = C.CTRL.index(c)
+        jit = (np.random.default_rng(k).random(len(d)) - 0.5) * 0.35
+        axes[1].plot(k + jit, d["tick_us_max"], ls="none", marker=C.MARKER[c], ms=3,
+                     color=C.COLOUR[c], alpha=0.8)
+        axes[1].plot(k + jit, d["tick_us_p99"], ls="none", marker=C.MARKER[c], ms=3,
+                     mfc="none", color=C.COLOUR[c], alpha=0.5)
+    for ax in axes:
+        (ax.axvline if ax is axes[0] else ax.axhline)(C.PERIOD_US, color="k", ls=":", lw=0.8)
+    if have_series:
+        axes[0].set_xscale("log")
+        axes[0].set_yscale("log")
+        axes[0].set_xlabel("control tick [µs] (▼ worst recorded)")
+        axes[0].set_ylabel("density")
+    else:
+        axes[0].text(0.5, 0.5, "per-tick records not on this machine", ha="center",
+                     va="center", transform=axes[0].transAxes, fontsize=7)
+        axes[0].set_axis_off()
+    axes[1].set_yscale("log")
+    axes[1].set_xticks(range(len(C.CTRL)))
+    axes[1].set_xticklabels([C.LABEL[c] for c in C.CTRL])
+    axes[1].set_ylabel("tick per trial [µs]")
+    handles = [plt.Line2D([], [], color=C.COLOUR[c], marker=C.MARKER[c], lw=1.1, ms=4,
+                          label=l) for c, l in labels]
+    handles += [plt.Line2D([], [], color="0.3", marker="o", ls="none", ms=3, label="worst"),
+                plt.Line2D([], [], color="0.3", marker="o", mfc="none", ls="none", ms=3,
+                           label="p99"),
+                plt.Line2D([], [], color="k", ls=":", lw=0.8, label="10 ms period")]
+    fig.subplots_adjust(bottom=0.33)
+    fig.legend(handles=handles, loc="lower center", ncol=4, frameon=False,
+               bbox_to_anchor=(0.5, 0.0))
+    save(fig, "fig20_live_timing")
+
+
+def fig_live_trace() -> None:
+    """One live trial per controller on the rectangle: the error against time."""
+    live, _, why = _live_frames(need_twin=False)
+    if live is None:
+        return skip("live_trace", why)
+    d = C.at_nominal(live[(live["shape"] == "rectangle") & (live["source"] == "ekf")])
+    if d.empty:
+        return skip("live_trace", "no live rectangle on the EKF")
+    fig, axes = plt.subplots(1, 2, figsize=(FULL, 2.5), gridspec_kw={"wspace": 0.28,
+                                                                     "width_ratios": [1.6, 1]})
+    safe = drawn = False
+    ref = None
+    for c in C.CTRL:
+        r = d[d["tag"] == c].sort_values("repeat")
+        if r.empty:
+            continue
+        s = C.live_series(r["hash"].iloc[0])
+        if s is None:
+            continue
+        drawn = True
+        axes[0].plot(s["t_s"], s["err_m"] * 1e3, color=C.COLOUR[c], lw=0.9, label=C.LABEL[c])
+        safe |= mark_safe_series(axes[0], s, s["t_s"], s["err_m"] * 1e3)
+        axes[1].plot(s["ee_x"] * 1e3, s["ee_y"] * 1e3, color=C.COLOUR[c], lw=0.8)
+        ref = s
+    if not drawn:
+        return skip("live_trace", "per-tick records not on this machine")
+    axes[1].plot(ref["ref_x"] * 1e3, ref["ref_y"] * 1e3, color="k", ls=":", lw=0.8)
+    axes[1].set_aspect("equal", adjustable="datalim")
+    axes[1].set_xlabel("x [mm]")
+    axes[1].set_ylabel("y [mm]")
+    axes[0].axvline(float(d["window_start_s"].iloc[0]), **NOMINAL_STYLE)
+    axes[0].set_yscale("log")
+    plain_log_y(axes[0])
+    axes[0].set_xlabel("time [s]")
+    axes[0].set_ylabel("EE error [mm]")
+    handles = ctrl_handles() + [plt.Line2D([], [], color="k", ls=":", lw=0.8, label="reference"),
+                                plt.Line2D([], [], label="scoring starts", **NOMINAL_STYLE)]
+    legend_below(fig, handles + ([safe_handle()] if safe else []), ncol=6)
+    save(fig, "fig21_live_trace")
+
+
 FIGURES: Dict[str, Callable[[], None]] = {
     "step": fig_step, "circle": fig_circle, "rectangle": fig_rectangle,
     "dashboard": fig_dashboard, "pareto": fig_pareto, "base": fig_base,
@@ -1180,6 +1463,9 @@ FIGURES: Dict[str, Callable[[], None]] = {
     "timing": fig_timing, "constraint": fig_constraint,
     "observer": fig_observer, "ffgain": fig_ffgain, "warmup": fig_warmup,
     "estimator": fig_estimator, "tuning": fig_tuning,
+    "live_nominal": fig_live_nominal, "live_robustness": fig_live_robustness,
+    "live_estimator": fig_live_estimator, "live_timing": fig_live_timing,
+    "live_trace": fig_live_trace,
 }
 
 
