@@ -172,6 +172,33 @@ Each study's `summary.csv` (one row per cell, ~60 metric columns) and
 `manifest.json` (git revision, binary hash, machine state, every command) are
 kept in git. The per-tick series and the cache are not.
 
+## 1b. The live stack (inside the dev container)
+
+`live/driver.py` runs the same scenarios on the deployed ROS nodes (simulator,
+`nav_node`, both arm controllers) in real time, one trial at a time, scored with the
+bench's own metrics by `series_summary`. `live/live_studies.py` lists the studies
+that have a live form; `queue --study` runs every cell of them, repeat by repeat:
+
+```bash
+python3 tools/thesis_eval/live/driver.py queue --study nominal speed model_error \
+    damping torque_limit estimator --list --out data/thesis_eval/live/main      # 140 cells
+python3 tools/thesis_eval/live/driver.py queue --study nominal speed model_error \
+    damping torque_limit estimator --fixed --max-repeats 3 --out data/thesis_eval/live/main
+```
+
+A trial takes about 45-60 s, so three repeats of all 140 cells is roughly 6 h.
+`touch data/thesis_eval/live/main/STOP` ends a queue cleanly after the trial in
+flight; rerunning the same command resumes it (finished trials are kept by hash).
+Single trials: `driver.py run --tag sqp --shape rectangle [--speed 2] [--mass-scale 2]
+[--tau-scale 0.5] [--damping 5] [--source odom] --out DIR`.
+
+The live `odom` source is the flight-profile `/chaser/odom` with no estimator: the
+same held, late pose fix as the bench's `raw`, but with exact base velocity, so it
+flatters the no-estimator case. Partner `mirror` / `same`, the steps, the joint
+disturbance, `exact` and `ekf-jkf` have no live form yet (`live_studies.OFFLINE`).
+The CPU map is picked per machine (`CORE_MAPS` in `driver.py`; `LIVE_CORE_MAP`
+overrides it).
+
 ## 2. Make the figures and tables (on the host)
 
 ```bash

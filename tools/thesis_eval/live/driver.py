@@ -9,8 +9,15 @@ a crash, a power cut or a Ctrl-C costs the trial in flight and no other.
 Run it INSIDE the dev container (`docker exec mujoco_pat_dev ...`), as the
 `timeout` has to be container-side too.
 
-    live/driver.py run --law ompc --shape circle --repeat 1 --out data/thesis_eval/live/pilot
+    live/driver.py run --tag ompc --shape circle --repeat 1 --out data/thesis_eval/live/pilot
+    live/driver.py run --tag sqp --shape rectangle --mass-scale 2 --out data/thesis_eval/live/smoke
+    live/driver.py queue --study nominal speed --list --out data/thesis_eval/live/main
+    live/driver.py queue --study nominal speed model_error damping torque_limit estimator \
+        --fixed --max-repeats 3 --out data/thesis_eval/live/main
     live/driver.py status --out data/thesis_eval/live/pilot
+
+The CPU map is chosen per machine (CORE_MAPS: the dev laptop, or the GB10 DGX,
+detected as a 20-CPU aarch64 host); LIVE_CORE_MAP=<name> forces one.
 
 What a trial does:
   1. refuses unless the machine is fit (governor `performance`, mains) and no stale
@@ -48,15 +55,46 @@ sys.path.insert(0, HERE)
 import join_trace  # noqa: E402
 
 # ------------------------------------------------------------------ machine --
-# CPU map for the dev laptop (i7-13700H): P-cores 0-11 as SMT pairs, E-cores 12-19.
-# Every realtime thread gets a pair of its own; everything else stays off them.
-# Another machine needs its own map (the DGX, the Orin).
-CORES = {
-    "nav": [2, 3],
-    "left": [4, 5], "right": [6, 7],
-    "left_observer": [8, 9], "right_observer": [10, 11],
-    "rest": "0,1,12-19",        # simulator, launch, recorder, driver
+# One CPU map per machine. Every realtime thread gets a physical core of its own;
+# everything else (simulator, launch, recorder, driver) stays off them.
+CORE_MAPS = {
+    # Dev laptop (i7-13700H): P-cores 0-11 as SMT pairs, E-cores 12-19. A pair is
+    # one physical core.
+    "laptop": {
+        "nav": [2, 3],
+        "left": [4, 5], "right": [6, 7],
+        "left_observer": [8, 9], "right_observer": [10, 11],
+        "rest": "0,1,12-19",
+    },
+    # DGX / ThinkStation PGX (GB10): no SMT; Cortex-X925 at 3.9 GHz on CPUs 5-9 and
+    # 15-19, Cortex-A725 at 2.8 GHz on 0-4 and 10-14 (`lscpu -e=CPU,CORE,MAXMHZ`).
+    # The realtime threads take one X925 each in the first cluster; the simulator
+    # and the rest share the second cluster's X925s and the A725s.
+    "gb10": {
+        "nav": [5],
+        "left": [6], "right": [7],
+        "left_observer": [8], "right_observer": [9],
+        "rest": "0-4,10-19",
+    },
 }
+
+
+def detect_core_map():
+    """LIVE_CORE_MAP names a map outright; otherwise a 20-CPU aarch64 machine is the
+    GB10 and anything else is the laptop."""
+    import platform
+    name = os.environ.get("LIVE_CORE_MAP")
+    if name:
+        if name not in CORE_MAPS:
+            raise SystemExit(f"LIVE_CORE_MAP={name}: choose from {list(CORE_MAPS)}")
+        return name
+    if platform.machine() == "aarch64" and os.cpu_count() == 20:
+        return "gb10"
+    return "laptop"
+
+
+CORE_MAP = detect_core_map()
+CORES = CORE_MAPS[CORE_MAP]
 RT_PRIORITY = 80
 STRAY = r"simulation_node|nav_node|nmpc_node|ompc_node|smc_node|ee_target_publisher|recorder\.py"
 SETTLE_S = 4.0                  # stack start-up before the warm-up clock starts
@@ -123,12 +161,37 @@ def make_spec(a):
     if a.tag not in tuned:
         raise SystemExit(f"{a.tag} is not in tuned.json (choose from {list(tuned)})")
     t = tuned[a.tag]
-    return {
+    spec = {
         "tag": a.tag, "law": t["law"], "tuned_args": t["args"],
-        "shape": a.shape, "speed": a.speed, "repeat": a.repeat,
-        "duration": a.duration, "nav_warmup": a.nav_warmup, "damping": 0.0,
-        "partner": "hold", "state": "ekf",
+        "shape": a.shape, "speed": float(a.speed), "repeat": a.repeat,
+        "duration": a.duration, "nav_warmup": a.nav_warmup,
+        "damping": float(getattr(a, "damping", 0.0)),
+        "partner": "hold", "state": getattr(a, "source", "ekf"),
     }
+    # The two knobs added for the live studies enter the spec only when they move
+    # off 1, so a nominal spec reads the same as the pilot's.
+    for key in ("mass_scale", "tau_scale"):
+        v = float(getattr(a, key, 1.0))
+        if not v > 0.0:
+            raise SystemExit(f"--{key.replace('_', '-')} must be positive")
+        if v != 1.0:
+            spec[key] = v
+    if spec["state"] not in SOURCES:
+        raise SystemExit(f"--source {spec['state']}: choose from {list(SOURCES)}")
+    return spec
+
+
+#: What the arms are handed on the live stack. `ekf`: nav_node's fused estimate
+#: (/chaser/nav/odom). `odom`: the simulator's /chaser/odom under the flight profile,
+#: with no estimator: the last 5 Hz relative-nav fix (0.15 s late) and star-tracker
+#: yaw, held between updates. Unlike the bench's `raw`, its base VELOCITY is exact,
+#: because the flight profile leaves the chaser_v* channels perfect; it is the raw
+#: pose with ideal velocity, which flatters it against the EKF.
+SOURCES = ("ekf", "odom")
+
+#: The bodies the model joints move (jnt_bodyid), as contact_bench's --mass-scale
+#: scales them: both arms, mass and rotational inertia together.
+ARM_BODIES = [f"link{n}_{s}" for s in ("L", "R") for n in (2, 3, 5)]
 
 
 def trial_hash(spec):
@@ -226,6 +289,12 @@ def write_params(spec, work):
     # The shared file: only the observer thread's priority differs.
     common = load_yaml(os.path.join(arm, "arm_common.yaml"))
     common["/**"]["ros__parameters"]["rt_priority_observer"] = RT_PRIORITY
+    # The torque-limit study scales the controllers' clamp, as the bench's
+    # `--set model_tau_max=[...]` does (the simulated motors deliver far more).
+    tau_scale = spec.get("tau_scale", 1.0)
+    if tau_scale != 1.0:
+        cp = common["/**"]["ros__parameters"]
+        cp["model_tau_max"] = [float(t) * tau_scale for t in cp["model_tau_max"]]
     common_yaml = os.path.join(work, "arm_common.yaml")
     yaml.safe_dump(common, open(common_yaml, "w"), sort_keys=False)
 
@@ -243,7 +312,13 @@ def write_params(spec, work):
     # Each repeat gets its own sensor noise (the repeat number is the seed, as in the
     # bench, where one seed number gives every controller the same noise).
     plant = {"pat_simulation": {"ros__parameters": {
-        "chaser_damping": [spec["damping"]] * 3, "sensor_seed": spec["repeat"]}}}
+        "chaser_damping": [float(spec["damping"])] * 3, "sensor_seed": spec["repeat"]}}}
+    # Model error: the scene's arm links heavier or lighter than the controllers'
+    # model, which is left alone.
+    mass_scale = spec.get("mass_scale", 1.0)
+    if mass_scale != 1.0:
+        plant["pat_simulation"]["ros__parameters"].update(
+            mass_scale_bodies=ARM_BODIES, mass_scale_factors=[mass_scale] * len(ARM_BODIES))
     plant_yaml = os.path.join(work, "plant.yaml")
     yaml.safe_dump(plant, open(plant_yaml, "w"))
 
@@ -433,10 +508,10 @@ def cpu_list(cpus):
     return ",".join(str(c) for c in cpus) if len(cpus) != 2 else f"{cpus[0]}-{cpus[1]}"
 
 
-def rt_problems(found):
+def rt_problems(found, with_nav=True):
     """What is missing from the realtime configuration the trial asked for."""
     out = []
-    for label in ("nav", "left", "right"):
+    for label in (("nav",) if with_nav else ()) + ("left", "right"):
         want = cpu_list(CORES[label])
         ok = any(t["policy"] == "FIFO" and t["priority"] == RT_PRIORITY and t["cpus"] == want
                  for t in found.get(label, []))
@@ -504,7 +579,9 @@ def run_trial(spec, out, allow_stray=False, clear_stale=False):
         stack_log = os.path.join(partial, "stack.log")
         pin = ["taskset", "-c", CORES["rest"]]
         stack = Group(pin + ["ros2", "launch", os.path.join(ROOT, "launch", "full_stack_nmpc.launch.py"),
-                             f"law:={spec['law']}", "with_nav:=true", "visualise:=false",
+                             f"law:={spec['law']}",
+                             "with_nav:=" + ("true" if spec["state"] == "ekf" else "false"),
+                             "visualise:=false",
                              f"sensor_profile:={files['sensors']}", f"nav_params:={files['nav']}",
                              f"params_file:={files['law']}", f"common_params_file:={files['common']}",
                              f"trace_file:={trace}"],
@@ -546,7 +623,7 @@ def run_trial(spec, out, allow_stray=False, clear_stale=False):
                 next_fit = now + 5.0
                 if rt_found is None:
                     rt_found = rt_threads(spec["law"])
-                    if (bad := rt_problems(rt_found)):
+                    if (bad := rt_problems(rt_found, with_nav=spec["state"] == "ekf")):
                         raise Fail("realtime configuration not in force: " + "; ".join(bad))
             time.sleep(0.5)
 
@@ -603,7 +680,9 @@ def summarise(spec, tau_limit, work, csv_path):
         cmd.append("--no-solver")
     for k, v in (("state_source", "live-" + spec["state"]), ("partner", spec["partner"]),
                  ("traj_speed", spec["speed"]), ("base_damping", spec["damping"]),
-                 ("nav_warmup", spec["nav_warmup"])):
+                 ("nav_warmup", spec["nav_warmup"]),
+                 ("mass_scale", spec.get("mass_scale", 1.0)),
+                 ("tau_scale", spec.get("tau_scale", 1.0))):
         cmd += ["--label", f"{k}={v}"]
     r = subprocess.run(cmd, capture_output=True, text=True)
     if r.returncode:
@@ -643,14 +722,64 @@ def converged(values, rel, min_n):
     return mean > 0 and 1.96 * sd / n ** 0.5 <= rel * mean
 
 
+def describe(spec):
+    """A cell in a few words, for the queue's log."""
+    out = [spec["tag"], spec["shape"]]
+    if spec["speed"] != 1.0:
+        out.append(f"{spec['speed']:g}x")
+    if spec["state"] != "ekf":
+        out.append(spec["state"])
+    if spec["damping"]:
+        out.append(f"damp {spec['damping']:g}")
+    for k, label in (("mass_scale", "mass"), ("tau_scale", "tau")):
+        if k in spec:
+            out.append(f"{label} {spec[k]:g}x")
+    return " ".join(out)
+
+
+def queue_variations(a):
+    """The scenario variations a queue runs: every cell of the named live studies, or
+    (no --study) --shapes at --speed, as before."""
+    if not a.studies:
+        return [{"shape": s} for s in a.shapes]
+    import live_studies
+    unknown = [s for s in a.studies if s not in live_studies.STUDIES]
+    if unknown:
+        raise SystemExit(f"unknown live studies {unknown}; choose from "
+                         f"{list(live_studies.STUDIES)} (offline only: "
+                         f"{list(live_studies.OFFLINE)})")
+    out = []
+    for name in a.studies:
+        for v in live_studies.STUDIES[name]():
+            if v.get("partner", "hold") != "hold":
+                print(f"queue: skipping {name} {v}: the target publisher has no "
+                      f"{v['partner']} partner yet", flush=True)
+                continue
+            if v not in out:
+                out.append(v)
+    return out
+
+
 def run_queue(a):
     """Every cell, repeat by repeat: repeat 1 of all of them, then repeat 2, so that
     stopping at any point leaves a balanced set. A cell stops early once its mean is
     pinned down; a failure is retried twice and then logged, never allowed to block
     the rest; an unfit machine pauses the queue instead of costing a trial."""
-    cells = [make_spec(types.SimpleNamespace(tag=t, shape=s, speed=a.speed, repeat=1,
-                                             duration=a.duration, nav_warmup=a.nav_warmup))
-             for t in a.tags for s in a.shapes]
+    cells = []
+    for v in queue_variations(a):
+        for t in a.tags:
+            spec = make_spec(types.SimpleNamespace(
+                tag=t, shape=v["shape"], speed=v.get("speed", a.speed), repeat=1,
+                duration=a.duration, nav_warmup=a.nav_warmup,
+                damping=v.get("damping", 0.0), source=v.get("source", "ekf"),
+                mass_scale=v.get("mass_scale", 1.0), tau_scale=v.get("tau_scale", 1.0)))
+            if spec not in cells:            # studies overlap (speed 1 = nominal)
+                cells.append(spec)
+    print(f"queue: {len(cells)} cells on core map '{CORE_MAP}'", flush=True)
+    if a.list:
+        for c in cells:
+            print("  " + describe(c))
+        return 0
     stop_file = os.path.join(a.out, "STOP")
     os.makedirs(a.out, exist_ok=True)
     ran = failed = 0
@@ -674,15 +803,15 @@ def run_queue(a):
                 try:
                     path, how = run_trial(spec, a.out, False, True)
                     ran += 1
-                    print(f"[{time.strftime('%H:%M:%S')}] {spec['tag']} {spec['shape']} "
-                          f"r{r}: {how}", flush=True)
+                    print(f"[{time.strftime('%H:%M:%S')}] {describe(spec)} r{r}: {how}",
+                          flush=True)
                     break
                 except Unfit as e:
                     print(f"[{time.strftime('%H:%M:%S')}] paused: {e}", flush=True)
                     time.sleep(30)
                 except Fail as e:
                     attempts += 1
-                    print(f"[{time.strftime('%H:%M:%S')}] {spec['tag']} {spec['shape']} r{r} "
+                    print(f"[{time.strftime('%H:%M:%S')}] {describe(spec)} r{r} "
                           f"failed ({attempts}/3): {e}", flush=True)
                     if attempts > 2:
                         failed += 1
@@ -709,11 +838,22 @@ def main():
     # 15 s covers convergence with margin and the stack's own start-up. The pilot
     # compares 15 s against 60 s live before the long runs rely on it.
     r.add_argument("--nav-warmup", type=float, default=15.0)
+    r.add_argument("--source", choices=SOURCES, default="ekf",
+                   help="ekf: nav_node's estimate; odom: the flight-profile /chaser/odom, "
+                        "no estimator (exact velocity)")
+    r.add_argument("--damping", type=float, default=0.0, help="table drag on x, y, yaw")
+    r.add_argument("--mass-scale", type=float, default=1.0,
+                   help="scene arm-link mass and inertia over the controllers' model")
+    r.add_argument("--tau-scale", type=float, default=1.0,
+                   help="factor on the controllers' torque limit (model_tau_max)")
     r.add_argument("--out", required=True)
     r.add_argument("--allow-stray", action="store_true")
     r.add_argument("--kill-stale", action="store_true",
                    help="stop ROS nodes a killed driver left behind (what a queue passes)")
     q = sub.add_parser("queue", help="every cell, repeat by repeat, adaptively")
+    q.add_argument("--study", dest="studies", nargs="+", default=[],
+                   help="run every cell of these live studies (live_studies.py); "
+                        "without it, --shapes at --speed")
     q.add_argument("--tags", nargs="+", default=["sqp", "iter", "ompc", "smc"])
     q.add_argument("--shapes", nargs="+", choices=("circle", "rectangle"),
                    default=["circle", "rectangle"])
@@ -725,6 +865,7 @@ def main():
     q.add_argument("--rel-ci", type=float, default=0.10,
                    help="a cell stops once its 95%% interval is under this fraction of its mean")
     q.add_argument("--fixed", action="store_true", help="always run --max-repeats")
+    q.add_argument("--list", action="store_true", help="print the cells and stop")
     q.add_argument("--out", required=True)
     s = sub.add_parser("status")
     s.add_argument("--out", required=True)
