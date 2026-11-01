@@ -302,7 +302,7 @@ DASH = [("rmse_mm", "RMSE [mm]"), ("err_var_mm2", "var(e) [mm²]"),
         ("err_peak_mm", "peak error [mm]"), ("tau2_int_win", "∫‖τ‖²dt [N²m²s]"),
         ("tau_var", "var(τ) [N²m²]"), ("chatter_tv", "Σ|Δτ| [N m]"),
         ("rail_frac", "at torque limit [-]"), ("yaw2_int_total", "∫ψ²dt [rad²s]"),
-        ("tick_us_mean", "tick [µs]")]
+        ("tick_us_mean", "tick [µs]"), ("tick_us_max", "worst tick [µs]")]
 
 
 def _fmt(v: float) -> str:
@@ -687,9 +687,13 @@ def fig_timing() -> None:
         labels.append((c, C.LABEL[c] + (" ×" if bad else "")))
         t = np.concatenate(ticks)
         axes[0].hist(t, bins=bins, histtype="step", color=C.COLOUR[c], density=True)
+        # The worst tick recorded, which is what a realtime deadline is judged by:
+        # a histogram's tail is too thin to see at one sample in 10^4.
+        axes[0].plot(t.max(), 1.0, marker="v", color=C.COLOUR[c], ms=4, ls="none",
+                     transform=axes[0].get_xaxis_transform(), clip_on=False)
     axes[0].set_xscale("log")
     axes[0].axvline(C.PERIOD_US, color="k", ls=":", lw=0.8)
-    axes[0].set_xlabel("control tick [µs]")
+    axes[0].set_xlabel("control tick [µs] (▼ worst recorded)")
     axes[0].set_ylabel("density")
     axes[0].set_yscale("log")
     axes[0].legend(handles=[plt.Line2D([], [], color=C.COLOUR[c], marker=C.MARKER[c],
@@ -701,12 +705,16 @@ def fig_timing() -> None:
     for c in ("sqp", "iter"):
         d = hz[hz["tag"] == c]
         pts = sorted(d["N"].unique())
-        for col, ls in (("tick_us_mean", "-"), ("tick_us_p99", "--")):
+        for col, ls, name in (("tick_us_mean", "-", "mean"), ("tick_us_p99", "--", "p99")):
             m, h = zip(*(C.ci95(d[d["N"] == n][col]) for n in pts))
             axes[1].errorbar(pts, m, yerr=h, color=C.COLOUR[c], ls=ls, marker=C.MARKER[c],
-                             ms=3.5, capsize=2,
-                             label=f"{C.LABEL[c]} {'mean' if ls == '-' else 'p99'}")
+                             ms=3.5, capsize=2, label=f"{C.LABEL[c]} {name}")
             safe |= mark_safe_at(axes[1], pts, m, [failed(d[d["N"] == n]) for n in pts])
+        # The worst case is the maximum over every run at that N, not a mean of
+        # maxima: it is the single tick a deadline has to survive.
+        worst = [d[d["N"] == n]["tick_us_max"].max() for n in pts]
+        axes[1].plot(pts, worst, color=C.COLOUR[c], ls=":", marker=C.MARKER[c], ms=3.5,
+                     mfc="none", label=f"{C.LABEL[c]} max")
     # Each NMPC's own horizon, in its colour (30 as shipped; tuned per controller).
     for label, _, args in C.studies.active_controllers():
         if label in ("sqp", "iter"):

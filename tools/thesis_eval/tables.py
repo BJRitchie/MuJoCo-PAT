@@ -110,9 +110,9 @@ def tab_timing() -> None:
     if df is None:
         return
     nom = df[~df["cell"].str.contains("_N")]
-    cols = ["mean", "p50", "p95", "p99", "max", "headroom", "QP iter"]
+    cols = ["mean", "p50", "p95", "p99", "max", "headroom p99", "headroom max", "QP iter"]
     lines = [r"\begin{tabular}{l" + "r" * len(cols) + "}", r"\toprule",
-             r" & \multicolumn{5}{c}{control tick [\textmu s]} & & \\",
+             r" & \multicolumn{5}{c}{control tick [\textmu s]} & & & \\",
              r"\cmidrule(lr){2-6}", " & " + " & ".join(cols) + r" \\", r"\midrule"]
     rows = []
     for c in C.CTRL:
@@ -120,10 +120,12 @@ def tab_timing() -> None:
         if d.empty:
             continue
         p99 = d["tick_us_p99"].mean()
+        worst = d["tick_us_max"].max()      # the worst tick of every run, not a mean
         rows.append((C.LABEL[c], [d["tick_us_mean"].mean(), d["tick_us_p50"].mean(),
-                                  d["tick_us_p95"].mean(), p99, d["tick_us_max"].max(),
-                                  C.PERIOD_US / p99, d["qp_iter_mean"].mean()]))
-    lines += block(rows, [True] * 5 + [False, True])
+                                  d["tick_us_p95"].mean(), p99, worst,
+                                  C.PERIOD_US / p99, C.PERIOD_US / worst,
+                                  d["qp_iter_mean"].mean()]))
+    lines += block(rows, [True] * 5 + [False, False, True])
     lines += [r"\bottomrule", r"\end{tabular}"]
     write("tab_timing", lines)
 
