@@ -53,6 +53,29 @@ class SpecTest(unittest.TestCase):
         self.assertIn({"shape": "circle", "speed": 4}, vs)
 
 
+class RosHomeTest(unittest.TestCase):
+    def setUp(self):
+        self.env = dict(os.environ)
+
+    def tearDown(self):
+        os.environ.clear()
+        os.environ.update(self.env)
+
+    def test_an_unwritable_home_gets_a_fallback(self):
+        os.environ.pop("ROS_HOME", None)
+        os.environ["HOME"] = "/proc"          # exists, never writable
+        if os.access("/proc", os.W_OK):
+            self.skipTest("running as root")
+        got = driver.writable_ros_home()
+        self.assertIsNotNone(got)
+        self.assertTrue(os.access(os.environ["ROS_HOME"], os.W_OK))
+
+    def test_a_writable_home_is_left_alone(self):
+        os.environ.pop("ROS_HOME", None)
+        os.environ["HOME"] = tempfile.mkdtemp()
+        self.assertIsNone(driver.writable_ros_home())
+
+
 class ParamsTest(unittest.TestCase):
     """write_params against the source configs, laid out as installed shares."""
 

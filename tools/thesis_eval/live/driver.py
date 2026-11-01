@@ -824,7 +824,28 @@ def run_queue(a):
 
 # ---------------------------------------------------------------------- cli --
 
+def writable_ros_home():
+    """Point ROS_HOME (and HOME) somewhere writable when the home directory is not.
+
+    The container runs as the host user's UID so bind-mounted files keep their owner;
+    on a machine where that UID is not the image's `dev` user (1000) it has no passwd
+    entry, HOME resolves to `/`, and `ros2 launch` dies creating `/.ros/log`. Every
+    child process inherits os.environ, so setting it here covers the stack, the
+    recorder and the target publisher alike."""
+    home = os.path.expanduser("~")
+    if os.environ.get("ROS_HOME") or (os.path.isdir(home) and os.access(home, os.W_OK)):
+        return None
+    fallback = f"/tmp/ros-home-{os.getuid()}"
+    os.makedirs(os.path.join(fallback, ".ros"), exist_ok=True)
+    os.environ["HOME"] = fallback
+    os.environ["ROS_HOME"] = os.path.join(fallback, ".ros")
+    return fallback
+
+
 def main():
+    if (fallback := writable_ros_home()):
+        print(f"driver: home directory not writable; using {fallback} for ROS logs",
+              flush=True)
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
     r = sub.add_parser("run")
