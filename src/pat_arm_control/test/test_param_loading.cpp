@@ -169,6 +169,66 @@ TEST(ParamLoading, EveryKeyReachesItsOwnField) {
     EXPECT_EQ(L.mjcf, "model.xml");
 }
 
+TEST(ParamLoading, TheJointFilterIsOffUnlessAsked) {
+    const std::string path = writeYaml("joint_filter_default.yaml", R"(
+/**:
+  ros__parameters:
+    model_joint_names: [a1]
+    model_tau_max: [0.1]
+pat_arm_nmpc_left:
+  ros__parameters:
+    joint_names: [a1]
+    limits: {q_min: [-1.0], q_max: [1.0], qd_max: [1.0]}
+)");
+    const auto jf = load(path).joint_filter;
+    EXPECT_EQ(jf.type, "none");
+    EXPECT_DOUBLE_EQ(jf.kf.accel_psd, pat_arm_control::JointKalmanParams{}.accel_psd);
+}
+
+TEST(ParamLoading, TheJointFilterKeysAreMapped) {
+    const std::string path = writeYaml("joint_filter_kalman.yaml", R"(
+/**:
+  ros__parameters:
+    model_joint_names: [a1]
+    model_tau_max: [0.1]
+    joint_filter: kalman
+    joint_kf.accel_psd: 1.0e-2
+    joint_kf.pos_meas_std: 1.0e-3
+    joint_kf.vel_meas_std: 2.0e-2
+    joint_kf.init_vel_std: 0.5
+pat_arm_nmpc_left:
+  ros__parameters:
+    joint_names: [a1]
+    limits: {q_min: [-1.0], q_max: [1.0], qd_max: [1.0]}
+)");
+    const auto jf = load(path).joint_filter;
+    EXPECT_EQ(jf.type, "kalman");
+    EXPECT_DOUBLE_EQ(jf.kf.accel_psd, 1.0e-2);
+    EXPECT_DOUBLE_EQ(jf.kf.pos_meas_std, 1.0e-3);
+    EXPECT_DOUBLE_EQ(jf.kf.vel_meas_std, 2.0e-2);
+    EXPECT_DOUBLE_EQ(jf.kf.init_vel_std, 0.5);
+}
+
+TEST(ParamLoading, AnUnknownJointFilterOrABadSigmaIsRefused) {
+    const char* head = R"(
+/**:
+  ros__parameters:
+    model_joint_names: [a1]
+    model_tau_max: [0.1]
+)";
+    const char* tail = R"(
+pat_arm_nmpc_left:
+  ros__parameters:
+    joint_names: [a1]
+    limits: {q_min: [-1.0], q_max: [1.0], qd_max: [1.0]}
+)";
+    EXPECT_ANY_THROW(load(writeYaml("jf_bad_type.yaml",
+        std::string(head) + "    joint_filter: median\n" + tail)));
+    EXPECT_ANY_THROW(load(writeYaml("jf_bad_sigma.yaml",
+        std::string(head) + "    joint_filter: kalman\n    joint_kf.pos_meas_std: 0.0\n" +
+        tail)));
+}
+
 TEST(ParamLoading, TheObserverTypeIsItsOwnKey) {
     const std::string path = writeYaml("observer_type.yaml", R"(
 /**:

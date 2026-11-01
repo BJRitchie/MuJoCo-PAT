@@ -38,9 +38,16 @@ class SpecTest(unittest.TestCase):
         with self.assertRaises(SystemExit):
             driver.make_spec(args(source="odom"))
 
+    def test_queue_can_take_one_source_of_a_study(self):
+        a = types.SimpleNamespace(studies=["estimator"], shapes=["circle"],
+                                  sources=["ekf-jkf"])
+        vs = driver.queue_variations(a)
+        self.assertEqual(len(vs), 2)
+        self.assertTrue(all(v["source"] == "ekf-jkf" for v in vs))
+
     def test_queue_expands_studies_and_skips_partners(self):
         a = types.SimpleNamespace(studies=["nominal", "speed", "balanced"],
-                                  shapes=["circle"])
+                                  shapes=["circle"], sources=[])
         vs = driver.queue_variations(a)
         self.assertNotIn({"shape": "circle", "partner": "mirror"}, vs)
         self.assertIn({"shape": "circle", "speed": 4}, vs)
@@ -116,10 +123,13 @@ class ParamsTest(unittest.TestCase):
         self.assertLess(p["imu_ekf.history_len"], 256)
 
     def test_the_source_picks_nav_nodes_navigator(self):
-        for src, nav in (("ekf", "imu_ekf"), ("raw", "raw")):
+        for src, nav, jf in (("ekf", "imu_ekf", "none"), ("raw", "raw", "none"),
+                             ("ekf-jkf", "imu_ekf", "kalman")):
             files = driver.write_params(driver.make_spec(args(source=src)), self.work)
             p = driver.load_yaml(files["nav"])["pat_nav"]["ros__parameters"]
-            self.assertEqual(p["navigator"], nav)
+            self.assertEqual(p["navigator"], nav, src)
+            c = driver.load_yaml(files["common"])["/**"]["ros__parameters"]
+            self.assertEqual(c["joint_filter"], jf, src)
 
     def test_damping_reaches_the_plant(self):
         driver.write_params(driver.make_spec(args(damping=5.0)), self.work)

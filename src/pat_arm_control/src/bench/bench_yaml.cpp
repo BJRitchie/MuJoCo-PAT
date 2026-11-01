@@ -127,6 +127,7 @@ Loaded loadConfig(const std::vector<std::string>& yaml_paths, const std::string&
     else if (law == "ompc") L.ompc   = loadOmpcParams(src, L.joints);
     else                    L.smc    = loadSmcParams(src, L.joints);
     L.observer = loadObserverConfig(src);
+    L.joint_filter = loadJointFilterConfig(src);
     L.anchor   = loadBaseAnchor(src);
 
     // --model wins, then the params file, then the installed model. nmpc.yaml

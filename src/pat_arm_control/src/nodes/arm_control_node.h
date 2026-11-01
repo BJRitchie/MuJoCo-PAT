@@ -20,6 +20,7 @@
 #include "pat_arm_control/common/param_source.h"
 #include "pat_arm_control/control/controller_config.h"
 #include "pat_arm_control/control/i_arm_controller.h"
+#include "pat_arm_control/estimation/joint_reading_filter.h"
 #include "pat_arm_control/observers/momentum_observer.h"
 #include "pat_arm_control/reference/reference_window.h"
 #include "pat_rt/rt_mailbox.h"
@@ -343,6 +344,12 @@ private:
     //! The state vectors the tick assembles. Members, not locals: a VectorXd per
     //! tick is an allocation per tick on the one thread that must not make them.
     Eigen::VectorXd q_, v_;
+
+    //! The encoder filter (`joint_filter: kalman`), or null for "none". Built in
+    //! the constructor and touched only by the control thread after that: it
+    //! fuses each joint_states message once, by its stamp, and the tick reads
+    //! the filtered joints in place of joints_.q / joints_.v.
+    std::unique_ptr<pat_arm_control::JointReadingFilter> joint_filter_;
 
     //! Outbound queues and the timer that drains them. The drain runs at twice
     //! the control rate so a tick's output waits well under one period, and the

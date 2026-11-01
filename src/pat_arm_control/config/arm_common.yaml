@@ -145,3 +145,17 @@
     # is most of what having its own thread was meant to avoid. rt_cpus_observer
     # is set per node, like rt_cpus, in the law's file.
     rt_priority_observer: 0
+
+    # --- Encoder filter ------------------------------------------------------
+    # What the control thread does to the joint readings before the controller
+    # sees them. "none": as they arrive. "kalman": a per-joint [q, qdot] Kalman
+    # filter (estimation/joint_kalman_filter.h) on every model joint, fusing
+    # each joint_states message once, by its stamp. The same filter as
+    # contact_bench's --joint-filter kalman. The sigmas are the encoders' own
+    # (a datasheet's, on hardware); accel_psd is the bench's tuning. The
+    # disturbance observer still reads the unfiltered joints.
+    joint_filter: "none"
+    joint_kf.accel_psd: 3.0e-3      # [(rad/s^2)^2/Hz]
+    joint_kf.pos_meas_std: 5.0e-4   # [rad]   encoder position, 1 sigma
+    joint_kf.vel_meas_std: 1.0e-2   # [rad/s] encoder velocity; <= 0: not given
+    joint_kf.init_vel_std: 0.1      # [rad/s]

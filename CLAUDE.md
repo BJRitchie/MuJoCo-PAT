@@ -310,7 +310,10 @@ control/ompc/  ArmOMPC (one-step MPC), OMPCParams + loadOmpcParams
 control/smc/   ArmSMC (sliding mode), SMCParams + loadSmcParams
 observers/     IDisturbanceObserver, MomentumObserver
 estimation/    JointKalmanFilter: per-joint [q, qdot] Kalman filter for encoder
-               readings, allocation-free (benches only so far; not in the node)
+               readings, allocation-free; JointReadingFilter runs it in the node
+               (`joint_filter: kalman`, default "none"), fusing each joint_states
+               message once by its stamp -- the same filter as contact_bench's
+               --joint-filter kalman (JointReadingFilter.OneReadingPerPeriodIsTheBenchFilter)
 reference/     reference window, trajectory shapes, teleop (own dependency-free lib)
 src/nodes/     ROS nodes, headers private: ArmControlNode (law-agnostic, split
                into node/loop/observer/report), nmpc_node.cpp, ompc_node.cpp,

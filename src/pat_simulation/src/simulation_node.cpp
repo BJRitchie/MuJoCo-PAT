@@ -393,6 +393,18 @@ void SimulationNode::publishTruth(const rclcpp::Time& t) {
         m.name.push_back(name);
         m.effort.push_back(value);
     }
+    // The arm joints' true angles and rates, before the encoder model. Scoring
+    // the end effector against truth needs the true joints as well as the true
+    // base: with the measured ones, encoder noise would count as tracking error.
+    if (!arm_joint_names_.empty()) {
+        const auto js = sim_->getJointStates(arm_joint_names_);
+        for (std::size_t i = 0; i < js.name.size(); ++i) {
+            m.name.push_back("q." + js.name[i]);
+            m.effort.push_back(js.pos[i]);
+            m.name.push_back("qd." + js.name[i]);
+            m.effort.push_back(js.vel[i]);
+        }
+    }
     truth_pub_->publish(m);
 
     // Which geoms are touching, throttled. A JointState cannot carry names

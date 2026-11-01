@@ -79,6 +79,9 @@ struct Loaded {
     //! Loaded even by nmpc_bench, which runs no observer, so the observer's
     //! keys count as mapped; contact_bench runs it.
     ObserverConfig observer;
+    //! The node's encoder filter (`joint_filter`, `joint_kf.*`). Loaded so the
+    //! keys count as mapped; contact_bench chooses its own with --joint-filter.
+    JointFilterConfig joint_filter;
     //! The node's own frame correction, applied so a setpoint means the same
     //! thing to a bench as it does to the running stack.
     BaseAnchor     anchor;

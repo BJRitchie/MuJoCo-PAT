@@ -10,6 +10,7 @@
 
 #include "pat_arm_control/common/param_source.h"
 #include "pat_arm_control/control/controller_params.h"
+#include "pat_arm_control/estimation/joint_kalman_filter.h"
 
 namespace pat_arm_control {
 
@@ -57,6 +58,20 @@ struct ObserverConfig {
 };
 
 ObserverConfig loadObserverConfig(ParamSource& src);
+
+/*! What the node does to the encoder readings before the controller sees them
+ *  (`joint_filter`, `joint_kf.*`). "none" hands them over as they arrive;
+ *  "kalman" runs a JointKalmanFilter on every model joint, told the encoders'
+ *  sigmas, which belong to the hardware (the encoder datasheet), not to the
+ *  simulator. contact_bench's `--joint-filter kalman` is the same filter. */
+struct JointFilterConfig {
+    std::string       type = "none";   //!< "none" or "kalman"
+    JointKalmanParams kf;              //!< its defaults are the bench's tuning
+};
+
+/*! Throws std::runtime_error on a type other than "none" / "kalman", and
+ *  (via JointKalmanFilter's own check) on bad sigmas when it is "kalman". */
+JointFilterConfig loadJointFilterConfig(ParamSource& src);
 
 /*! The world-frame position of the chaser body's anchor in this MJCF
  *  (`base_anchor_x`/`_y`): odom reports x/y relative to it, the model

@@ -99,6 +99,21 @@ ObserverConfig loadObserverConfig(ParamSource& src) {
     return o;
 }
 
+JointFilterConfig loadJointFilterConfig(ParamSource& src) {
+    JointFilterConfig c;
+    c.type             = src.getString("joint_filter", c.type);
+    c.kf.accel_psd     = src.getDouble("joint_kf.accel_psd", c.kf.accel_psd);
+    c.kf.pos_meas_std  = src.getDouble("joint_kf.pos_meas_std", c.kf.pos_meas_std);
+    c.kf.vel_meas_std  = src.getDouble("joint_kf.vel_meas_std", c.kf.vel_meas_std);
+    c.kf.init_vel_std  = src.getDouble("joint_kf.init_vel_std", c.kf.init_vel_std);
+    if (c.type != "none" && c.type != "kalman") {
+        throw std::runtime_error("joint_filter must be \"none\" or \"kalman\", not \"" +
+                                 c.type + "\"");
+    }
+    if (c.type == "kalman") JointKalmanFilter(c.kf, 1);   // validates the sigmas
+    return c;
+}
+
 BaseAnchor loadBaseAnchor(ParamSource& src) {
     BaseAnchor a;
     a.x = src.getDouble("base_anchor_x", a.x);

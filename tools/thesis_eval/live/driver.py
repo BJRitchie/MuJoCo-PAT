@@ -182,14 +182,17 @@ def make_spec(a):
     return spec
 
 
-#: What the arms are handed on the live stack, both through nav_node (on its own
-#: realtime thread, publishing /chaser/nav/odom) and both from the same flight
+#: What the arms are handed on the live stack, all through nav_node (on its own
+#: realtime thread, publishing /chaser/nav/odom) and all from the same flight
 #: sensors: `ekf` its IMU EKF (navigator imu_ekf), `raw` no estimator (navigator
 #: raw, pat_gnc's RawFlightNavigator: the last fix, the last star-tracker yaw, the
 #: raw gyro, velocity differenced between fixes) -- the bench's
-#: `--state-source raw`, the same rule in the same order.
-SOURCES = ("ekf", "raw")
-NAVIGATOR = {"ekf": "imu_ekf", "raw": "raw"}
+#: `--state-source raw`, the same rule in the same order -- and `ekf-jkf` the EKF
+#: with the arm node's encoder filter on (joint_filter: kalman), the bench's
+#: `--state-source ekf --joint-filter kalman`.
+SOURCES = ("ekf", "raw", "ekf-jkf")
+NAVIGATOR = {"ekf": "imu_ekf", "raw": "raw", "ekf-jkf": "imu_ekf"}
+JOINT_FILTER = {"ekf": "none", "raw": "none", "ekf-jkf": "kalman"}
 
 #: The bodies the model joints move (jnt_bodyid), as contact_bench's --mass-scale
 #: scales them: both arms, mass and rotational inertia together.
@@ -293,6 +296,9 @@ def write_params(spec, work):
     common["/**"]["ros__parameters"]["rt_priority_observer"] = RT_PRIORITY
     # The torque-limit study scales the controllers' clamp, as the bench's
     # `--set model_tau_max=[...]` does (the simulated motors deliver far more).
+    # The encoder filter, by state source. Set explicitly either way, so a trial
+    # does not depend on the installed default.
+    common["/**"]["ros__parameters"]["joint_filter"] = JOINT_FILTER[spec["state"]]
     tau_scale = spec.get("tau_scale", 1.0)
     if tau_scale != 1.0:
         cp = common["/**"]["ros__parameters"]
@@ -646,6 +652,12 @@ def run_trial(spec, out, allow_stray=False, clear_stale=False):
 
         if not os.path.isfile(csv_path):
             raise Fail("the recorder wrote nothing")
+        # Scored against the plant's true joints, as the bench is, or not kept.
+        scoring = json.load(open(csv_path + ".scoring.json"))
+        if scoring["rows_measured_joints"]:
+            raise Fail(f"{scoring['rows_measured_joints']} rows were scored on the measured "
+                       "joints: the simulator published no true joint angles "
+                       "(rebuild pat_simulation)")
         trace_lines, torque_msgs = join_trace.join(csv_path, os.path.join(partial, "trace_left.csv"))
         n_rows = sum(1 for _ in open(csv_path)) - 1
         info = health(os.path.join(partial, "stack.log"), trace_lines, torque_msgs, n_rows, spec)
@@ -766,6 +778,8 @@ def queue_variations(a):
                 print(f"queue: skipping {name} {v}: the target publisher has no "
                       f"{v['partner']} partner yet", flush=True)
                 continue
+            if a.sources and v.get("source", "ekf") not in a.sources:
+                continue
             if v not in out:
                 out.append(v)
     return out
@@ -871,8 +885,9 @@ def main():
     # compares 15 s against 60 s live before the long runs rely on it.
     r.add_argument("--nav-warmup", type=float, default=15.0)
     r.add_argument("--source", choices=SOURCES, default="ekf",
-                   help="the base state the arms get from nav_node: ekf (its IMU EKF) or "
-                        "raw (the flight sensors, no estimator: the bench's raw)")
+                   help="the state the arms get: ekf (nav_node's IMU EKF), raw (the "
+                        "flight sensors, no estimator: the bench's raw), or ekf-jkf (the "
+                        "EKF and the arm node's encoder Kalman filter)")
     r.add_argument("--damping", type=float, default=0.0, help="table drag on x, y, yaw")
     r.add_argument("--mass-scale", type=float, default=1.0,
                    help="scene arm-link mass and inertia over the controllers' model")
@@ -886,6 +901,8 @@ def main():
     q.add_argument("--study", dest="studies", nargs="+", default=[],
                    help="run every cell of these live studies (live_studies.py); "
                         "without it, --shapes at --speed")
+    q.add_argument("--sources", nargs="+", choices=SOURCES, default=[],
+                   help="only the cells of these state sources (with --study)")
     q.add_argument("--tags", nargs="+", default=["sqp", "iter", "ompc", "smc"])
     q.add_argument("--shapes", nargs="+", choices=("circle", "rectangle"),
                    default=["circle", "rectangle"])

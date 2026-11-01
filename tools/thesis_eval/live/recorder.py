@@ -13,9 +13,13 @@ One row per joint_states message (the plant's 100 Hz publish, one per control
 period) from the first trajectory window on:
 
   true EE     forward kinematics of the MuJoCo model at the plant's TRUE base
-              pose (/sim_only/ground_truth) and the measured joint angles, which
-              is what the bench scores (the arm's own ee_pose uses the base state
-              it believed, and would hide an estimator's error)
+              pose and TRUE joint angles (/sim_only/ground_truth), which is what
+              the bench scores. Not the arm's own ee_pose, which uses the state it
+              believed and would hide an estimator's error; and not the measured
+              joints, whose encoder noise would count as tracking error. The q / qd
+              columns, from which the joint-limit and work metrics come, are the
+              true joints too, as in the bench. A simulator too old to publish the
+              true joints falls back to the measured ones, and the log says so.
   reference   the arm's trajectory window, interpolated to the row's stamp
   torque      the arm's published torque_command in force at that stamp
   est error   the base state the arm read (--base-topic) minus the truth
@@ -102,9 +106,11 @@ class Recorder(Node):
     def on_truth(self, m):
         e = dict(zip(m.name, m.effort))
         if "chaser.x" in e:
+            joints = {n[2:]: (e[n], e.get("qd." + n[2:], math.nan))
+                      for n in e if n.startswith("q.")}
             self.truth[stamp_ns(m)] = (e["chaser.x"], e["chaser.y"], e["chaser.yaw"],
                                        e["chaser.vx"], e["chaser.vy"], e["chaser.omega"],
-                                       int(e.get("ncon", 0)))
+                                       int(e.get("ncon", 0)), joints)
 
     def on_base(self, m):
         p, v = m.pose.pose, m.twist.twist
@@ -148,6 +154,7 @@ class Recorder(Node):
         tq_ns = np.array([t[0] for t in self.torque], dtype=np.int64)
 
         rows, tick_of_row = [], {}
+        n_true = n_measured = 0
         yaw_start = None
         last_tau = {n: 0.0 for n in owned}
         tq_i = 0
@@ -157,9 +164,14 @@ class Recorder(Node):
                 continue
             if a.duration > 0.0 and t - t_start > a.duration:
                 break
-            x, y, yaw, vx, vy, wz, ncon = self.truth[ns]
+            x, y, yaw, vx, vy, wz, ncon, true_joints = self.truth[ns]
+            if all(n in true_joints for n in MODEL_JOINTS):
+                js = true_joints
+                n_true += 1
+            else:
+                n_measured += 1
 
-            # Forward kinematics at the true base pose and the measured joints.
+            # Forward kinematics at the true base pose and the true joints.
             data.qpos[:] = 0.0
             data.qpos[0], data.qpos[1] = x + a.anchor_x, y + a.anchor_y
             data.qpos[3], data.qpos[6] = math.cos(yaw / 2.0), math.sin(yaw / 2.0)
@@ -219,6 +231,12 @@ class Recorder(Node):
             json.dump({"row_of_torque_msg": tick_of_row, "n_torque_msgs": len(self.torque),
                        "n_rows": len(rows), "t_start": t_start}, fh)
         self.get_logger().info(f"wrote {len(rows)} rows to {a.out}")
+        if n_measured:
+            self.get_logger().warning(
+                f"{n_measured} of {n_true + n_measured} rows scored on the MEASURED joints: "
+                "the simulator published no true joint angles (rebuild pat_simulation)")
+        with open(a.out + ".scoring.json", "w") as fh:
+            json.dump({"rows_true_joints": n_true, "rows_measured_joints": n_measured}, fh)
 
 
 def main():

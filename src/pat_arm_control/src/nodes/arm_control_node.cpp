@@ -98,6 +98,21 @@ ArmControlNode::ArmControlNode(const ControlLaw& law)
     q_joints_.assign(model_joint_names_.size(), 0.0);
     v_joints_.assign(model_joint_names_.size(), 0.0);
 
+    // The encoder filter: every model joint, as contact_bench filters them.
+    const pat_arm_control::JointFilterConfig jf = pat_arm_control::loadJointFilterConfig(src);
+    if (jf.type == "kalman") {
+        joint_filter_ = std::make_unique<pat_arm_control::JointReadingFilter>(
+            jf.kf, static_cast<int>(model_joint_names_.size()));
+        RCLCPP_INFO(get_logger(),
+                    "%s[%s]: joint filter kalman on %zu joints (accel_psd %g, pos %g rad, "
+                    "vel %g rad/s)", log_name_.c_str(), arm_side_.c_str(),
+                    model_joint_names_.size(), jf.kf.accel_psd, jf.kf.pos_meas_std,
+                    jf.kf.vel_meas_std);
+    } else {
+        RCLCPP_INFO(get_logger(), "%s[%s]: joint filter none", log_name_.c_str(),
+                    arm_side_.c_str());
+    }
+
     state_sub_ = create_subscription<sensor_msgs::msg::JointState>(
         "/chaser/arm/joint_states", 10,
         std::bind(&ArmControlNode::onJointState, this, std::placeholders::_1));

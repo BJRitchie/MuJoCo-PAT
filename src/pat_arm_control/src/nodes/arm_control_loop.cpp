@@ -70,9 +70,22 @@ void ArmControlNode::controlLoop() {
     q(6) = std::sin(base_.yaw / 2.0);
     v(0) = base_.vx; v(1) = base_.vy; v(2) = 0.0;
     v(3) = 0.0; v(4) = 0.0; v(5) = base_.omega;
-    for (int i = 0; i < n; ++i) {
-        q(7 + i) = joints_.q[static_cast<size_t>(i)];
-        v(6 + i) = joints_.v[static_cast<size_t>(i)];
+    // The encoder filter fuses this message if it is new (a tick can read the
+    // same joint_states twice) and the controller gets its estimate; without
+    // one, the readings go straight in.
+    if (joint_filter_) {
+        joint_filter_->update(joints_.stamp, joints_.q, joints_.v);
+    }
+    if (joint_filter_ && joint_filter_->ready()) {
+        for (int i = 0; i < n; ++i) {
+            q(7 + i) = joint_filter_->position(i);
+            v(6 + i) = joint_filter_->velocity(i);
+        }
+    } else {
+        for (int i = 0; i < n; ++i) {
+            q(7 + i) = joints_.q[static_cast<size_t>(i)];
+            v(6 + i) = joints_.v[static_cast<size_t>(i)];
+        }
     }
 
     // Measured EE pose (world frame): published for downstream consumers

@@ -81,7 +81,8 @@ add_library(pat_arm_control_lib STATIC
     src/control/smc/arm_smc.cpp
     src/control/smc/smc_config.cpp
     src/observers/momentum_observer.cpp
-    src/estimation/joint_kalman_filter.cpp)
+    src/estimation/joint_kalman_filter.cpp
+    src/estimation/joint_reading_filter.cpp)
 target_include_directories(pat_arm_control_lib PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>)
@@ -286,6 +287,7 @@ if(BUILD_TESTING)
         test/test_state_source.cpp
         test/test_momentum_observer.cpp
         test/test_joint_kalman_filter.cpp
+        test/test_joint_reading_filter.cpp
         test/test_bench_scoring.cpp
         test/test_reference.cpp
         test/test_teleop_reference.cpp)

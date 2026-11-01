@@ -7,7 +7,9 @@ fields `driver.make_spec` accepts on top of a controller and a shape:
     speed        trajectory speed factor (circle period divided, rectangle speed multiplied)
     partner      hold | same | mirror: what the other arm does
     source       ekf (nav_node's IMU EKF) | raw (nav_node's RawFlightNavigator: the
-                 flight sensors with no estimator, exactly the bench's raw)
+                 flight sensors with no estimator, exactly the bench's raw) |
+                 ekf-jkf (the EKF and the arm node's encoder Kalman filter, the
+                 bench's ekf with --joint-filter kalman)
     mass_scale   factor on every arm link's mass and inertia, as the bench's --mass-scale
     damping      table drag on all three planar DOF (0 = frictionless)
     tau_scale    factor on the controllers' torque limit (the 0.25 N.m clamp)
@@ -55,8 +57,8 @@ def torque_limit():
 
 def estimator():
     """What each estimator gives the arm. `exact` has no live equivalent (the live
-    stack always runs on flight sensing); the joint filter needs wiring into the arm node."""
-    return [{"shape": s, "source": src} for s in SHAPES for src in ("raw", "ekf")]
+    stack always runs on flight sensing)."""
+    return [{"shape": s, "source": src} for s in SHAPES for src in ("raw", "ekf", "ekf-jkf")]
 
 
 STUDIES = {"nominal": nominal, "balanced": balanced, "speed": speed,
@@ -68,7 +70,6 @@ OFFLINE = {
     "disturbance": "joint torque in the bench, body wrench in the simulator",
     "noise, delay, warm-up, observer, sensitivity, constraint, tuning": "offline sweeps",
     "estimator source 'exact'": "the live stack is always on flight sensing",
-    "estimator source 'ekf-jkf'": "joint filter not wired into the arm node",
     "balanced mirror / same": "the target publisher drives the scored arm only (the queue "
                               "skips these cells)",
 }
