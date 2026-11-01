@@ -5,6 +5,7 @@
 #include "pat_gnc/navigation/direct_navigator.hpp"
 #include "pat_gnc/navigation/ekf_navigator.hpp"
 #include "pat_gnc/navigation/imu_ekf_navigator.hpp"
+#include "pat_gnc/navigation/raw_flight_navigator.hpp"
 
 TEST(DirectNavigator, StoresPoseAndTwist) {
     pat_gnc::DirectNavigator nav;
@@ -33,6 +34,7 @@ TEST(NavigatorInterface, AllImplementINavigator) {
         std::make_unique<pat_gnc::DirectNavigator>(),
         std::make_unique<pat_gnc::EkfNavigator>(p),
         std::make_unique<pat_gnc::ImuEkfNavigator>(pat_gnc::ImuEkfNavigator::Config{}),
+        std::make_unique<pat_gnc::RawFlightNavigator>(),
     };
     for (auto& nav : navs) {
         nav->onImu(0.0, {0.0, 0.0}, 0.0);
@@ -40,6 +42,41 @@ TEST(NavigatorInterface, AllImplementINavigator) {
         EXPECT_TRUE(nav->ready());
         EXPECT_NEAR(nav->state()(0), 1.0, 0.1);
     }
+}
+
+// ========================== RawFlightNavigator ============================ //
+
+TEST(RawFlightNavigator, PoseIsTheLastFixAndRateIsTheRawGyro) {
+    pat_gnc::RawFlightNavigator nav;
+    EXPECT_FALSE(nav.ready());
+    nav.onImu(0.0, {0.0, 0.0}, 0.02);
+    nav.onOdometry(0.0, {1.0, 2.0, 0.3}, {9.0, 9.0, 9.0});
+    ASSERT_TRUE(nav.ready());
+    const auto s = nav.state();
+    EXPECT_DOUBLE_EQ(s(0), 1.0);
+    EXPECT_DOUBLE_EQ(s(1), 2.0);
+    EXPECT_DOUBLE_EQ(s(2), 0.3);
+    EXPECT_DOUBLE_EQ(s(5), 0.02) << "yaw rate is the gyro, bias and all";
+    EXPECT_DOUBLE_EQ(s(3), 0.0) << "the odometry twist is ignored: no velocity sensor";
+    EXPECT_DOUBLE_EQ(s(4), 0.0) << "one fix gives no velocity";
+}
+
+TEST(RawFlightNavigator, VelocityIsDifferencedBetweenDistinctFixesNotRepeats) {
+    pat_gnc::RawFlightNavigator nav;
+    nav.onOdometry(0.00, {0.0, 0.0, 0.0}, {});
+    // The 5 Hz fix rides on 100 Hz odometry: repeats change nothing.
+    for (int k = 1; k < 20; ++k) nav.onOdometry(0.01 * k, {0.0, 0.0, 0.001 * k}, {});
+    EXPECT_DOUBLE_EQ(nav.state()(3), 0.0);
+    EXPECT_DOUBLE_EQ(nav.state()(2), 0.019) << "yaw (the star tracker) still follows each message";
+    nav.onOdometry(0.20, {0.002, -0.004, 0.0}, {});
+    EXPECT_NEAR(nav.state()(3), 0.01, 1e-12);
+    EXPECT_NEAR(nav.state()(4), -0.02, 1e-12);
+    // The next distinct fix differences against 0.20, not against the start.
+    for (int k = 21; k < 40; ++k) nav.onOdometry(0.01 * k, {0.002, -0.004, 0.0}, {});
+    nav.onOdometry(0.40, {0.004, -0.004, 0.0}, {});
+    EXPECT_NEAR(nav.state()(3), 0.01, 1e-12);
+    EXPECT_NEAR(nav.state()(4), 0.0, 1e-12);
+    EXPECT_TRUE(nav.covariance().isZero());
 }
 
 // =========================== ImuEkfNavigator ============================== //

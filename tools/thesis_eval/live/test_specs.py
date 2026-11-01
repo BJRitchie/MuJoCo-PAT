@@ -28,22 +28,15 @@ class SpecTest(unittest.TestCase):
         self.assertEqual((s["state"], s["damping"], s["partner"]), ("ekf", 0.0, "hold"))
 
     def test_knobs_enter_the_spec(self):
-        s = driver.make_spec(args(mass_scale=2.0, tau_scale=0.5, damping=5, source="odom"))
+        s = driver.make_spec(args(mass_scale=2.0, tau_scale=0.5, damping=5, source="raw"))
         self.assertEqual((s["mass_scale"], s["tau_scale"], s["damping"], s["state"]),
-                         (2.0, 0.5, 5.0, "odom"))
+                         (2.0, 0.5, 5.0, "raw"))
 
     def test_bad_knobs_are_refused(self):
         with self.assertRaises(SystemExit):
             driver.make_spec(args(mass_scale=0.0))
         with self.assertRaises(SystemExit):
-            driver.make_spec(args(source="raw"))
-
-    def test_without_nav_the_nav_thread_is_not_required(self):
-        cpus = driver.cpu_list
-        found = {k: [{"policy": "FIFO", "priority": driver.RT_PRIORITY,
-                      "cpus": cpus(driver.CORES[k])}] for k in ("left", "right")}
-        self.assertEqual(driver.rt_problems(found, with_nav=False), [])
-        self.assertEqual(len(driver.rt_problems(found, with_nav=True)), 1)
+            driver.make_spec(args(source="odom"))
 
     def test_queue_expands_studies_and_skips_partners(self):
         a = types.SimpleNamespace(studies=["nominal", "speed", "balanced"],
@@ -121,6 +114,12 @@ class ParamsTest(unittest.TestCase):
         need = max(p["imu_ekf.latency_pos"], p["imu_ekf.latency_yaw"]) * p["imu_hz"] + 2
         self.assertGreaterEqual(p["imu_ekf.history_len"], need)
         self.assertLess(p["imu_ekf.history_len"], 256)
+
+    def test_the_source_picks_nav_nodes_navigator(self):
+        for src, nav in (("ekf", "imu_ekf"), ("raw", "raw")):
+            files = driver.write_params(driver.make_spec(args(source=src)), self.work)
+            p = driver.load_yaml(files["nav"])["pat_nav"]["ros__parameters"]
+            self.assertEqual(p["navigator"], nav)
 
     def test_damping_reaches_the_plant(self):
         driver.write_params(driver.make_spec(args(damping=5.0)), self.work)

@@ -16,6 +16,7 @@
 #include "pat_gnc/navigation/direct_navigator.hpp"
 #include "pat_gnc/navigation/ekf_navigator.hpp"
 #include "pat_gnc/navigation/imu_ekf_navigator.hpp"
+#include "pat_gnc/navigation/raw_flight_navigator.hpp"
 
 namespace pat_gnc {
 
@@ -80,6 +81,9 @@ inline std::unique_ptr<INavigator> makeNavigator(rclcpp::Node& node, double nav_
     }
     if (type_out == "imu_ekf") {
         return std::make_unique<ImuEkfNavigator>(declareImuEkfConfig(node));
+    }
+    if (type_out == "raw") {
+        return std::make_unique<RawFlightNavigator>();
     }
     RCLCPP_WARN(node.get_logger(), "Unknown navigator '%s', using 'direct'",
                 type_out.c_str());

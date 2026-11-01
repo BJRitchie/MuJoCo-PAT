@@ -182,13 +182,14 @@ def make_spec(a):
     return spec
 
 
-#: What the arms are handed on the live stack. `ekf`: nav_node's fused estimate
-#: (/chaser/nav/odom). `odom`: the simulator's /chaser/odom under the flight profile,
-#: with no estimator: the last 5 Hz relative-nav fix (0.15 s late) and star-tracker
-#: yaw, held between updates. Unlike the bench's `raw`, its base VELOCITY is exact,
-#: because the flight profile leaves the chaser_v* channels perfect; it is the raw
-#: pose with ideal velocity, which flatters it against the EKF.
-SOURCES = ("ekf", "odom")
+#: What the arms are handed on the live stack, both through nav_node (on its own
+#: realtime thread, publishing /chaser/nav/odom) and both from the same flight
+#: sensors: `ekf` its IMU EKF (navigator imu_ekf), `raw` no estimator (navigator
+#: raw, pat_gnc's RawFlightNavigator: the last fix, the last star-tracker yaw, the
+#: raw gyro, velocity differenced between fixes) -- the bench's
+#: `--state-source raw`, the same rule in the same order.
+SOURCES = ("ekf", "raw")
+NAVIGATOR = {"ekf": "imu_ekf", "raw": "raw"}
 
 #: The bodies the model joints move (jnt_bodyid), as contact_bench's --mass-scale
 #: scales them: both arms, mass and rotational inertia together.
@@ -306,6 +307,7 @@ def write_params(spec, work):
     p["rt_priority_nav"] = RT_PRIORITY
     p["lock_memory"] = True
     p["rt_cpus_nav"] = CORES["nav"]
+    p["navigator"] = NAVIGATOR[spec["state"]]
     # nav_node times a replay of its WHOLE history at startup, on its main thread
     # (pinned to CORES["rest"], not the nav core), and refuses to start if twice
     # that exceeds half its 2 ms period. The history only has to outlast the
@@ -589,7 +591,7 @@ def run_trial(spec, out, allow_stray=False, clear_stale=False):
         pin = ["taskset", "-c", CORES["rest"]]
         stack = Group(pin + ["ros2", "launch", os.path.join(ROOT, "launch", "full_stack_nmpc.launch.py"),
                              f"law:={spec['law']}",
-                             "with_nav:=" + ("true" if spec["state"] == "ekf" else "false"),
+                             "with_nav:=true",
                              "visualise:=false",
                              f"sensor_profile:={files['sensors']}", f"nav_params:={files['nav']}",
                              f"params_file:={files['law']}", f"common_params_file:={files['common']}",
@@ -632,7 +634,7 @@ def run_trial(spec, out, allow_stray=False, clear_stale=False):
                 next_fit = now + 5.0
                 if rt_found is None:
                     rt_found = rt_threads(spec["law"])
-                    if (bad := rt_problems(rt_found, with_nav=spec["state"] == "ekf")):
+                    if (bad := rt_problems(rt_found)):
                         raise Fail("realtime configuration not in force: " + "; ".join(bad))
             time.sleep(0.5)
 
@@ -869,8 +871,8 @@ def main():
     # compares 15 s against 60 s live before the long runs rely on it.
     r.add_argument("--nav-warmup", type=float, default=15.0)
     r.add_argument("--source", choices=SOURCES, default="ekf",
-                   help="ekf: nav_node's estimate; odom: the flight-profile /chaser/odom, "
-                        "no estimator (exact velocity)")
+                   help="the base state the arms get from nav_node: ekf (its IMU EKF) or "
+                        "raw (the flight sensors, no estimator: the bench's raw)")
     r.add_argument("--damping", type=float, default=0.0, help="table drag on x, y, yaw")
     r.add_argument("--mass-scale", type=float, default=1.0,
                    help="scene arm-link mass and inertia over the controllers' model")

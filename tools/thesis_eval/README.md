@@ -190,12 +190,14 @@ A trial takes about 45-60 s, so three repeats of all 140 cells is roughly 6 h.
 `touch data/thesis_eval/live/main/STOP` ends a queue cleanly after the trial in
 flight; rerunning the same command resumes it (finished trials are kept by hash).
 Single trials: `driver.py run --tag sqp --shape rectangle [--speed 2] [--mass-scale 2]
-[--tau-scale 0.5] [--damping 5] [--source odom] --out DIR`.
+[--tau-scale 0.5] [--damping 5] [--source raw] --out DIR`.
 
-The live `odom` source is the flight-profile `/chaser/odom` with no estimator: the
-same held, late pose fix as the bench's `raw`, but with exact base velocity, so it
-flatters the no-estimator case. Partner `mirror` / `same`, the steps, the joint
-disturbance, `exact` and `ekf-jkf` have no live form yet (`live_studies.OFFLINE`).
+Both live state sources go through `nav_node` on the flight sensors: `ekf` runs its
+IMU EKF, `raw` runs `RawFlightNavigator` (pat_gnc), which hands over the last fix,
+the last star-tracker yaw, the raw gyro and velocity differenced between fixes --
+the bench's `--state-source raw`, rule for rule. Partner `mirror` / `same`, the
+steps, the joint disturbance, `exact` and `ekf-jkf` have no live form yet
+(`live_studies.OFFLINE`).
 The CPU map is picked per machine (`CORE_MAPS` in `driver.py`; `LIVE_CORE_MAP`
 overrides it).
 
