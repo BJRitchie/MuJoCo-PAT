@@ -88,6 +88,24 @@ JOBS=16 WORKERS=4 tools/jetson_bench/enter.sh tools/jetson_bench/build_ws.sh
 Ends with `build_ws.sh: done`. `JOBS`/`WORKERS` only set build parallelism;
 leave them out on a small machine.
 
+**A3b. Check the build works** (2 min, can share the machine). Correctness only,
+not timing, so it can run while the DGX is busy; its result goes in a scratch
+directory and is not used:
+
+```bash
+tools/jetson_bench/enter.sh build/pat_arm_control/test_pat_arm_control \
+    --gtest_filter='RealtimeProfile*:JointReadingFilter*' --gtest_brief=1
+tools/jetson_bench/enter.sh python3 tools/thesis_eval/run_study.py run jetson_timing \
+    --select rectangle_x1_m1_bd0_tau1x_ekf_sqp_s1 --results scratch --pin 6 --allow-noisy-timing
+```
+
+Expect `[  PASSED  ]` and `jetson_timing: ran 1, summary.csv has 1 rows`. Then
+`rm -rf data/thesis_eval/machines/scratch`.
+
+**If the DGX is busy tonight** (renders, other users): do A1-A3b and A6 now, so
+the Jetson can be set up from the package, and A4-A5 later in a quiet slot. A4
+needs no rebuild and no repackaging: the Jetson runs the same binaries either way.
+
 **A4. Rehearse: run the suite on the DGX** (15-20 min, **quiet machine**). This
 is also the DGX half of the comparison, with exactly the binary the Jetson will
 run. Check nobody else is running heavy work (`top`), then in two terminals:
@@ -170,7 +188,10 @@ grep "POWER_MODEL ID" /etc/nvpmodel.conf           # the modes this board has
 sudo nvpmodel -m <ID>                              # the one named MAXN_SUPER if listed, else MAXN
 ```
 
-If `nvpmodel` asks to reboot, reboot and come back to this step. Then:
+If `nvpmodel` asks to reboot, reboot and come back to this step. The power mode
+survives reboots; what follows (`jetson_clocks`, the governor) does not, so if the
+Jetson is rebooted between preparing it and running the suite, repeat from here.
+Then:
 
 ```bash
 sudo jetson_clocks                                  # lock every clock at its maximum (and the fan, on the dev kit)
@@ -182,6 +203,12 @@ Close anything else running (a browser, a desktop session's heavy apps). For the
 cleanest numbers you can drop to the console with
 `sudo systemctl isolate multi-user.target` (it stops the desktop; `sudo systemctl
 isolate graphical.target` brings it back).
+
+If the controllers' settings changed after packaging (a retune: a new
+`tools/thesis_eval/tuned.json`), copy the new `tuned.json` into
+`~/jetson_bench/tools/thesis_eval/` now. Settings are read at run time, so
+nothing needs rebuilding; rerun A4 on the DGX with the same file, so both
+machines ran the same settings.
 
 **B4. Run the suite** (45-70 min, **leave the Jetson alone**)
 
