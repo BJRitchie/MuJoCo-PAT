@@ -1,0 +1,70 @@
+{
+ "spec": {
+  "tag": "ompc",
+  "law": "ompc",
+  "tuned_args": [
+   "--set",
+   "ompc.Ts=1.4",
+   "--set",
+   "ompc.Q=[1.6e+06,1.6e+06,100000]"
+  ],
+  "shape": "rectangle",
+  "speed": 1.0,
+  "repeat": 2,
+  "duration": 20.0,
+  "nav_warmup": 15.0,
+  "damping": 0.0,
+  "partner": "hold",
+  "state": "ekf",
+  "tau_scale": 1.5
+ },
+ "hash": "33a03fb2cbd48338",
+ "health": {
+  "deadline_misses": 0,
+  "skipped_periods": 0,
+  "nav_overruns": 0,
+  "rows": 2000,
+  "rows_expected": 2000,
+  "rows_short": 0,
+  "trace_lines": 4400,
+  "torque_msgs": 2512,
+  "rt_threads": {
+   "nav": [
+    {
+     "policy": "FIFO",
+     "priority": 80,
+     "cpus": "5"
+    }
+   ],
+   "left": [
+    {
+     "policy": "FIFO",
+     "priority": 80,
+     "cpus": "6"
+    }
+   ],
+   "right": [
+    {
+     "policy": "FIFO",
+     "priority": 80,
+     "cpus": "7"
+    }
+   ]
+  },
+  "resources": {
+   "mem_avail_min_kb": 121593312,
+   "swap_used_max_kb": 0,
+   "temp_max_c": null,
+   "rss_max_kb": 683688
+  }
+ },
+ "machine": {
+  "hostname": "thinkstationpgx-f66e",
+  "cpu_governor": "performance",
+  "on_mains": null,
+  "usb_pd_watts": null,
+  "python": "3.10.12",
+  "date": "2026-11-01T19:05:26+00:00"
+ },
+ "finished": "2026-11-01T19:05:26+0000"
+}

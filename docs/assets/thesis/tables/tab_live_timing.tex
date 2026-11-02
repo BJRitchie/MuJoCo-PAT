@@ -1,0 +1,12 @@
+\begin{tabular}{lrrrrrr}
+\toprule
+ & \multicolumn{3}{c}{control tick [\textmu s]} & & & \\
+\cmidrule(lr){2-4}
+ & mean & p99 & worst & headroom (worst) & missed deadlines & trials \\
+\midrule
+SQP-NMPC & 1112 & 2307 & 16073 & 0.622 & 607 & 111 \\
+LMPC & 1735 & 3452 & 24154 & 0.414 & 2604 & 111 \\
+OMPC & \textbf{28.8} & \textbf{69.5} & \textbf{260} & \textbf{38.4} & \textbf{0} & 111 \\
+SMC & 32.3 & 78.7 & 286 & 35 & 0 & 111 \\
+\bottomrule
+\end{tabular}

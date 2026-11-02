@@ -1,0 +1,36 @@
+/**:
+  ros__parameters:
+    mjcf_path: ''
+    control_hz: 100.0
+    model_joint_names:
+    - joint2_L
+    - joint3_L
+    - joint5_L
+    - joint2_R
+    - joint3_R
+    - joint5_R
+    model_tau_max:
+    - 0.25
+    - 0.25
+    - 0.25
+    - 0.25
+    - 0.25
+    - 0.25
+    safe_mode:
+      damping_frac: 1.0
+      recovery_ticks: 10
+      tier3_latch_after_ticks: 500
+    base_anchor_x: -0.5
+    base_anchor_y: 0.0
+    rt_priority: 0
+    lock_memory: false
+    observer: none
+    observer.hz: 100.0
+    observer.gain: 20.0
+    observer.gain_base: -1.0
+    observer.mdot_clamp: 0.0
+    observer.estimate_clamp: 0.0
+    observer.ff_gain: 0.0
+    observer.ff_max_frac: 0.3
+    observer.ff_slew: 0.0
+    rt_priority_observer: 80

@@ -1,0 +1,75 @@
+ee_target_publisher:
+  ros__parameters:
+    sides:
+    - left
+    mode: relative
+    pattern: waypoints
+    trajectory_hz: 20.0
+    window_s: 2.0
+    sample_dt: 0.01
+    window_lookback_s: 0.1
+    approach_s: 3.0
+    circle:
+      center_dx: 0.17
+      center_dy: 0.0
+      radius: 0.06
+      period: 8.0
+      ccw: true
+      ramp_s: 2.0
+    rectangle:
+      center_dx: 0.17
+      center_dy: 0.0
+      width: 0.12
+      height: 0.1
+      speed: 0.055
+      ccw: true
+    teleop:
+      update_hz: 50.0
+      cmd_timeout: 0.3
+      max_lin_speed: 0.1
+      max_yaw_rate: 0.6
+      max_lin_accel: 0.25
+      max_yaw_accel: 2.0
+      dx_min: 0.0
+      dx_max: 0.25
+      dy_min: -0.12
+      dy_max: 0.12
+      yaw_max: 0.3
+    dwell_sec: 4.0
+    republish_hz: 2.0
+    loop: true
+    frame_id: map
+    left:
+      waypoints:
+      - 0.2
+      - 0.0
+      - 0.0
+      - 0.25
+      - 0.0
+      - 0.0
+      - 0.15
+      - -0.12
+      - -0.15
+      - 0.15
+      - 0.12
+      - 0.15
+      - 0.1
+      - 0.0
+      - 0.0
+    right:
+      waypoints:
+      - 0.2
+      - 0.0
+      - 0.0
+      - 0.15
+      - -0.12
+      - -0.15
+      - 0.25
+      - 0.0
+      - 0.0
+      - 0.15
+      - 0.12
+      - 0.15
+      - 0.1
+      - 0.0
+      - 0.0

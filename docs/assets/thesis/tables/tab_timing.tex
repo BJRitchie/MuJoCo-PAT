@@ -1,12 +1,12 @@
-\begin{tabular}{lrrrrrrr}
+\begin{tabular}{lrrrrrrrr}
 \toprule
- & \multicolumn{5}{c}{control tick [\textmu s]} & & \\
+ & \multicolumn{5}{c}{control tick [\textmu s]} & & & \\
 \cmidrule(lr){2-6}
- & mean & p50 & p95 & p99 & max & headroom & QP iter \\
+ & mean & p50 & p95 & p99 & max & headroom p99 & headroom max & QP iter \\
 \midrule
-SQP-NMPC & 717 & 712 & 762 & 835 & 1317 & 12 & \textbf{7.05} \\
-LMPC & 990 & 970 & 1134 & 1232 & 1695 & 8.12 & 7.16 \\
-OMPC & \textbf{4.85} & \textbf{4.63} & \textbf{5.89} & \textbf{8.25} & \textbf{28.2} & \textbf{1212} & -- \\
-SMC & 5.29 & 4.96 & 7.02 & 9.73 & 68.5 & 1028 & -- \\
+SQP-NMPC & 717 & 712 & 762 & 835 & 1317 & 12 & 7.59 & \textbf{7.05} \\
+LMPC & 990 & 970 & 1134 & 1232 & 1695 & 8.12 & 5.9 & 7.16 \\
+OMPC & \textbf{4.85} & \textbf{4.63} & \textbf{5.89} & \textbf{8.25} & \textbf{28.2} & \textbf{1212} & \textbf{355} & -- \\
+SMC & 5.29 & 4.96 & 7.02 & 9.73 & 68.5 & 1028 & 146 & -- \\
 \bottomrule
 \end{tabular}
