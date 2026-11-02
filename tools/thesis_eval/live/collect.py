@@ -46,6 +46,11 @@ def row_of(trial_dir):
            "nav_warmup": s["nav_warmup"]}
     for k in HEALTH:
         out[k] = rep["health"].get(k, "")
+    cap = ""
+    if s["law"] == "nmpc":
+        cap = next((a.split("=", 1)[1] for a in s.get("tuned_args", [])
+                    if a.startswith("qp.max_iter=")), "none")
+    out["qp_cap"] = cap
     out["hash"] = rep["hash"]
     out["machine"] = rep.get("machine", {}).get("hostname", "")
     out["finished"] = rep.get("finished", "")
@@ -70,33 +75,49 @@ def is_current(trial_dir, args=None):
     return spec.get("tuned_args") == args.get(spec["tag"])
 
 
-def collect(out_dir, include_stale=False):
-    rows, stale = [], 0
-    args = current_args()
-    for d in sorted(glob.glob(os.path.join(out_dir, "trials", "*"))):
-        if d.endswith(".partial") or not os.path.isfile(os.path.join(d, "report.json")):
-            continue
-        if not include_stale and not is_current(d, args):
-            stale += 1
-            continue
-        try:
-            rows.append(row_of(d))
-        except (OSError, ValueError, KeyError, StopIteration) as e:
-            print(f"collect: skipping {d}: {e}", file=sys.stderr)
-    if not rows:
-        sys.exit(f"collect: no finished trials under {out_dir}/trials")
+def write_rows(path, rows):
     head = list(rows[0])
     for r in rows[1:]:
         head += [k for k in r if k not in head]
-    if stale:
-        print(f"collect: left out {stale} trials run with settings tuned.json no longer has "
-              "(--include-stale keeps them)", file=sys.stderr)
     rows.sort(key=lambda r: (r["cell"], r["tag"], int(r["repeat"])))
-    path = os.path.join(out_dir, "summary.csv")
     with open(path, "w", newline="") as fh:
         w = csv.DictWriter(fh, fieldnames=head, lineterminator="\n")
         w.writeheader()
         w.writerows(rows)
+
+
+def collect(out_dir, include_stale=False):
+    rows, stale_rows = [], []
+    args = current_args()
+    for d in sorted(glob.glob(os.path.join(out_dir, "trials", "*"))):
+        if d.endswith(".partial") or not os.path.isfile(os.path.join(d, "report.json")):
+            continue
+        current = is_current(d, args)
+        try:
+            row = row_of(d)
+        except (OSError, ValueError, KeyError, StopIteration) as e:
+            print(f"collect: skipping {d}: {e}", file=sys.stderr)
+            continue
+        if current or include_stale:
+            rows.append(row)
+        else:
+            stale_rows.append(row)
+    stale = len(stale_rows)
+    # Trials run with settings tuned.json no longer has (the uncapped first run):
+    # kept apart, for the before/after comparison, never mixed into the results.
+    stale_path = os.path.join(out_dir, "summary_stale.csv")
+    if stale_rows:
+        write_rows(stale_path, stale_rows)
+    elif os.path.isfile(stale_path):
+        os.remove(stale_path)
+    if not rows:
+        sys.exit(f"collect: no finished trials under {out_dir}/trials")
+    if stale:
+        print(f"collect: {stale} trials run with settings tuned.json no longer has went to "
+              f"{stale_path}, not the results (--include-stale mixes them in)",
+              file=sys.stderr)
+    path = os.path.join(out_dir, "summary.csv")
+    write_rows(path, rows)
     return path, rows
 
 
