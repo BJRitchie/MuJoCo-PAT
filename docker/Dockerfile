@@ -7,6 +7,7 @@
 #   mujoco  — MuJoCo release tarball for $TARGETARCH        ->  /opt/mujoco
 #   ws-base — base + /opt/acados + /opt/mujoco + the source tree
 #   dev     — + RViz/GLFW; builds the FULL workspace (incl. pat_simulation)   [x86]
+#   bench   — ws-base + GLFW, headless: the Jetson timing image          [arm64]
 #   runtime — headless; builds only the algorithm packages (Jetson image)  [arm64+]
 #
 # The sim-to-real split is enforced at the image boundary: `runtime` builds
@@ -157,6 +158,19 @@ RUN groupadd --gid ${USER_GID} dev \
       "[ -f /ws/install/setup.bash ] && source /ws/install/setup.bash" \
       | tee -a /home/dev/.bashrc /etc/bash.bashrc >/dev/null
 USER dev
+
+# ── bench: the Jetson timing image (tools/jetson_bench/) ─────────────────────
+# ws-base plus what building EVERY package needs (pat_simulation's GLFW): the
+# bench reads pat_simulation's installed scene and flight-sensor configs, which
+# `runtime` deliberately does not build. Headless, no ROS desktop. Built on an
+# arm64 host with the Orin's BLASFEO kernels, so one image (and one workspace
+# build) runs on both the DGX and the Jetson:
+#   tools/jetson_bench/build_image.sh
+FROM ws-base AS bench
+ARG DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libglfw3-dev python3-yaml \
+    && rm -rf /var/lib/apt/lists/*
 
 # ── runtime: headless, algorithm packages only (the Jetson image) ───────────
 FROM ws-base AS runtime

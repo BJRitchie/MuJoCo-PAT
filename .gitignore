@@ -35,3 +35,4 @@ tools/pinn_datagen/.trial_*.npz
 # Miscellaneous 
 docs/realtime_deployment_research.md 
 MUJOCO_LOG.TXT
+tools/jetson_bench/REVISION

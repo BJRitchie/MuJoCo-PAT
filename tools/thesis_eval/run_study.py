@@ -243,9 +243,18 @@ def git_state() -> Dict[str, object]:
     def run(*args: str) -> str:
         return subprocess.run(["git", "-C", ROOT, *args], capture_output=True,
                               text=True).stdout.strip()
-    return {"revision": run("rev-parse", "HEAD"), "branch": run("rev-parse",
-            "--abbrev-ref", "HEAD"), "dirty": bool(run("status", "--porcelain",
-            "--untracked-files=no"))}
+    rev = run("rev-parse", "HEAD")
+    if not rev:
+        # A packed checkout with no .git (tools/jetson_bench/package.sh): the
+        # revision it was packed from, recorded alongside.
+        p = os.path.join(ROOT, "tools", "jetson_bench", "REVISION")
+        if os.path.isfile(p):
+            parts = open(p).read().split()
+            return {"revision": parts[0] if parts else "", "branch": parts[1] if
+                    len(parts) > 1 else "", "dirty": len(parts) > 2 and parts[2] == "dirty",
+                    "from": "REVISION file"}
+    return {"revision": rev, "branch": run("rev-parse", "--abbrev-ref", "HEAD"),
+            "dirty": bool(run("status", "--porcelain", "--untracked-files=no"))}
 
 
 def timing_allowed(state: Dict[str, object], allow_noisy: bool) -> Optional[str]:

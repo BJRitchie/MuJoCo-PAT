@@ -74,14 +74,16 @@ def series(machine: str, study: str, cell: str) -> Optional[pd.DataFrame]:
     return pd.read_csv(p) if os.path.isfile(p) else None
 
 
-def current_caps() -> Dict[str, int]:
-    tuned = json.load(open(C.studies.TUNED_JSON))
-    out = {}
-    for tag in NMPC:
-        for a in tuned[tag]["args"]:
-            m = re.match(r"qp\.max_iter=(\d+)", a)
-            if m:
-                out[tag] = int(m.group(1))
+def caps_of(manifest: Optional[dict]) -> Dict[str, int]:
+    """The QP cap each NMPC ran with, from the run's own manifest: a rerun at
+    other caps (set_caps.sh) reports its own, not the repo's tuned.json."""
+    out: Dict[str, int] = {}
+    for c in (manifest or {}).get("cells", []):
+        if c.get("tag") in NMPC and c["tag"] not in out:
+            for a in c.get("args", []):
+                m = re.match(r"qp\.max_iter=(\d+)", a)
+                if m:
+                    out[c["tag"]] = int(m.group(1))
     return out
 
 
@@ -216,15 +218,15 @@ def ticks_section(out: Out, a: str, b: str, sa, sb) -> Dict[Tuple[str, str], dic
 # ---------------------------------------------------------- 4. worst case --
 
 def worst_section(out: Out, a: str, b: str, budget_us: float) -> Dict[Tuple[str, str], dict]:
-    caps = current_caps()
     out(f"4. FORCED WORST CASE (every QP fails: the cap twice per tick); budget "
         f"{budget_us:.0f} us of the {C.PERIOD_US:.0f} us period")
     res = {}
     for name in (a, b):
-        summ, _ = load(name, "worst_case")
+        summ, man = load(name, "worst_case")
         if summ is None:
             out(f"  {name}: no worst_case study")
             continue
+        caps = caps_of(man)
         for tag in NMPC:
             d = summ[summ["tag"] == tag]
             if d.empty:
