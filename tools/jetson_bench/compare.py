@@ -159,6 +159,11 @@ def identity_section(out: Out, a: str, b: str, sa: pd.DataFrame, sb: pd.DataFram
             dev = max(float(np.nanmax(np.abs(xa[c].to_numpy()[:n] - xb[c].to_numpy()[:n])))
                       for c in cols) if n else float("nan")
             diff.append((cell, len(xa), len(xb), dev))
+    if missing == len(cells):
+        out("  the per-tick records are not on this machine (they stay where the runs "
+            "were made): see the report written there, compare_*.txt")
+        out()
+        return
     out(f"  {same} of {len(cells) - missing} cells identical tick for tick"
         + (f" ({missing} without per-tick records on one machine)" if missing else ""))
     if diff:
@@ -187,22 +192,52 @@ def ticks_of(machine: str, summ: pd.DataFrame, tag: str) -> np.ndarray:
     return np.concatenate(out) if out else np.array([])
 
 
-def tick_stats(t: np.ndarray) -> Dict[str, float]:
-    if not len(t):
+def hist_path(machine: str) -> str:
+    return os.path.join(MACHINES, machine, "jetson_timing", "tick_hist.json")
+
+
+def machine_hists(machine: str, summ: Optional[pd.DataFrame]) -> Dict[str, dict]:
+    """Per controller, the tick histogram: from the per-tick records when they are
+    on this machine (and then saved, so git has it), else the saved one."""
+    hists = {}
+    for tag in C.CTRL:
+        t = ticks_of(machine, summ, tag) if summ is not None else np.array([])
+        if len(t):
+            hists[tag] = C.tick_hist_of(t)
+    if hists:
+        C.write_tick_hist(hist_path(machine), hists)
+        return hists
+    return C.read_tick_hist(hist_path(machine)) or {}
+
+
+def hist_quantile(h: dict, q: float) -> float:
+    """A quantile of a binned distribution: the upper edge of the bin it falls in
+    (within 2.3% at 100 bins per decade)."""
+    c = np.cumsum(h["counts"])
+    i = int(np.searchsorted(c, q * c[-1]))
+    return float(C.hist_edges()[min(i + 1, len(c))])
+
+
+def tick_stats(h: Optional[dict]) -> Dict[str, float]:
+    if not h or not h["n"]:
         return {}
-    return {"n": len(t), "mean": float(t.mean()), "p99": float(np.percentile(t, 99)),
-            "p999": float(np.percentile(t, 99.9)), "max": float(t.max()),
-            "over": int((t > C.PERIOD_US).sum())}
+    e = C.hist_edges()
+    mid = np.sqrt(e[:-1] * e[1:])
+    return {"n": h["n"], "mean": float((h["counts"] * mid).sum() / h["n"]),
+            "p99": hist_quantile(h, 0.99), "p999": hist_quantile(h, 0.999),
+            "max": float(h["max"]), "over": int(h["counts"][e[:-1] >= C.PERIOD_US].sum())}
 
 
 def ticks_section(out: Out, a: str, b: str, sa, sb) -> Dict[Tuple[str, str], dict]:
-    out(f"3. CONTROL TICK, jetson_timing (all cells) [us]; period {C.PERIOD_US:.0f} us")
+    out(f"3. CONTROL TICK, jetson_timing (all cells) [us]; period {C.PERIOD_US:.0f} us "
+        "(mean and percentiles from the tick histogram, to its 2% bins; worst exact)")
     out(f"  {'':10s} {'machine':10s} {'ticks':>8s} {'mean':>8s} {'p99':>8s} {'p99.9':>8s} "
         f"{'worst':>8s} {'>period':>8s}")
     stats = {}
+    hists = {a: machine_hists(a, sa), b: machine_hists(b, sb)}
     for tag in C.CTRL:
         for name, summ in ((a, sa), (b, sb)):
-            st = tick_stats(ticks_of(name, summ, tag)) if summ is not None else {}
+            st = tick_stats(hists[name].get(tag))
             stats[(tag, name)] = st
             if st:
                 out(f"  {C.LABEL[tag]:10s} {name:10s} {st['n']:8d} {st['mean']:8.0f} "
@@ -261,20 +296,18 @@ def worst_section(out: Out, a: str, b: str, budget_us: float) -> Dict[Tuple[str,
 def figure(a: str, b: str, sa, sb, worst: Dict) -> None:
     fig, axes = plt.subplots(1, 2, figsize=(F.FULL, 2.8), gridspec_kw={"wspace": 0.3,
                                                                        "width_ratios": [1.6, 1]})
-    bins = np.logspace(0, 4.7, 150)
     styles = {a: dict(ls="-"), b: dict(ls="--")}
+    hists = {a: machine_hists(a, sa), b: machine_hists(b, sb)}
     for tag in C.CTRL:
-        for name, summ in ((a, sa), (b, sb)):
-            if summ is None:
+        for name in (a, b):
+            h = hists[name].get(tag)
+            if not h or not h["n"]:
                 continue
-            t = ticks_of(name, summ, tag)
-            if not len(t):
-                continue
-            axes[0].hist(t, bins=bins, histtype="step", color=C.COLOUR[tag], density=True,
-                         **styles[name])
-            axes[0].plot(t.max(), 1.0, marker="v" if name == a else "1", color=C.COLOUR[tag],
+            C.stairs_tick_hist(axes[0], h, color=C.COLOUR[tag], **styles[name])
+            axes[0].plot(h["max"], 1.0, marker="v" if name == a else "1", color=C.COLOUR[tag],
                          ms=5, ls="none", transform=axes[0].get_xaxis_transform(),
                          clip_on=False)
+    axes[0].set_xlim(0.5, 5e4)
     axes[0].axvline(C.PERIOD_US, color="k", ls=":", lw=0.8)
     axes[0].set_xscale("log")
     axes[0].set_yscale("log")

@@ -259,6 +259,13 @@ Writes `data/thesis_eval/machines/compare_dgx_orin_nx.txt`,
    largest cap inside the budget.
 5. **Horizon sweep**: mean and worst tick against N on both machines.
 
+Run `compare.py` here on the DGX the first time: it needs both machines' per-tick
+records (the Jetson's came back in the tarball) to check that the inputs were
+identical, and it saves each machine's tick histogram (`tick_hist.json`) as it
+goes. The records themselves stay out of git (~90 MB a machine); with the
+histograms and summaries committed, `compare.py` redraws the figure and table on
+any machine, Windows and macOS included.
+
 Keep the results:
 
 ```bash
