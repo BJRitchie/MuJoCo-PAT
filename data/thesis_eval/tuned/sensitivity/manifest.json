@@ -3,37 +3,39 @@
  "variant": "tuned",
  "quick": false,
  "git": {
-  "revision": "bf6e9f4f553218b12c99245ef42ffd68e9057acd",
-  "branch": "baseline_controllers",
+  "revision": "0335c287ae9e4b65aea6532f392a7863afd1ff38",
+  "branch": "live_eval",
   "dirty": true
  },
  "machine": {
-  "hostname": "ben-XPS-15-9530",
+  "hostname": "thinkstationpgx-f66e",
   "cpu_governor": "performance",
-  "on_mains": true,
-  "usb_pd_watts": 120,
+  "on_mains": null,
+  "usb_pd_watts": null,
   "python": "3.10.12",
-  "date": "2026-10-24T04:59:01+00:00"
+  "date": "2026-11-02T00:23:37+00:00"
  },
  "timing_study": false,
  "noisy_timing_allowed": false,
  "pinned_to": null,
  "bench": {
   "path": "/ws/install/pat_arm_control/lib/pat_arm_control/contact_bench",
-  "sha256": "67eaec5ed7d9a2a996bd80d11c979ba07b203ee54adff3dedc7b16964dad71b9",
-  "config_sha256": "af00c9718d81bb5ef8696d4148990ed547f85a01ed93d8e0ee8910883e84d964"
+  "sha256": "7b6eb3d4fa31a570e672da8861a0593ab42011d6392e822545b187954db77fcd",
+  "config_sha256": "d729b1602c620df8d6b4c97690dc96544fa2854709248745de88731ebe98e7e9"
  },
  "cells": [
   {
    "name": "circle_sqp_weights.Q_pos_-4-4-0.0875-",
    "study": "sensitivity",
-   "hash": "4090cd8778b2c928",
+   "hash": "e3777f932dd32eeb",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
    "args": [
     "--trajectory",
     "circle",
+    "--set",
+    "qp.max_iter=20",
     "--set",
     "weights.Q_pos=[4,4,0.0875]",
     "--set",
@@ -58,6 +60,8 @@
     "--trajectory",
     "circle",
     "--set",
+    "qp.max_iter=20",
+    "--set",
     "weights.Q_pos=[4,4,0.0875]",
     "--set",
     "weights.Q_vel=[160,160,0.0229687]",
@@ -78,21 +82,23 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/4090cd8778b2c928.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/e3777f932dd32eeb.csv.part"
    ],
-   "seconds": 5.17,
+   "seconds": 6.23,
    "status": "ran"
   },
   {
    "name": "circle_sqp_weights.Q_pos_-0.4-0.4-0.00875-",
    "study": "sensitivity",
-   "hash": "104d6c75021ace38",
+   "hash": "a176466f1eb9cb16",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
    "args": [
     "--trajectory",
     "circle",
+    "--set",
+    "qp.max_iter=20",
     "--set",
     "weights.Q_pos=[4,4,0.0875]",
     "--set",
@@ -117,6 +123,8 @@
     "--trajectory",
     "circle",
     "--set",
+    "qp.max_iter=20",
+    "--set",
     "weights.Q_pos=[4,4,0.0875]",
     "--set",
     "weights.Q_vel=[160,160,0.0229687]",
@@ -137,21 +145,23 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/104d6c75021ace38.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/a176466f1eb9cb16.csv.part"
    ],
-   "seconds": 5.04,
+   "seconds": 3.34,
    "status": "ran"
   },
   {
    "name": "circle_sqp_weights.Q_pos_-1.2-1.2-0.02625-",
    "study": "sensitivity",
-   "hash": "a84ded1241123ac2",
+   "hash": "418bb59e9c99f538",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
    "args": [
     "--trajectory",
     "circle",
+    "--set",
+    "qp.max_iter=20",
     "--set",
     "weights.Q_pos=[4,4,0.0875]",
     "--set",
@@ -176,6 +186,8 @@
     "--trajectory",
     "circle",
     "--set",
+    "qp.max_iter=20",
+    "--set",
     "weights.Q_pos=[4,4,0.0875]",
     "--set",
     "weights.Q_vel=[160,160,0.0229687]",
@@ -196,21 +208,23 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/a84ded1241123ac2.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/418bb59e9c99f538.csv.part"
    ],
-   "seconds": 5.03,
+   "seconds": 6.74,
    "status": "ran"
   },
   {
    "name": "circle_sqp_weights.Q_pos_-12-12-0.2625-",
    "study": "sensitivity",
-   "hash": "61c82eded1ae73fc",
+   "hash": "c9764f2e20fe6359",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
    "args": [
     "--trajectory",
     "circle",
+    "--set",
+    "qp.max_iter=20",
     "--set",
     "weights.Q_pos=[4,4,0.0875]",
     "--set",
@@ -235,6 +249,8 @@
     "--trajectory",
     "circle",
     "--set",
+    "qp.max_iter=20",
+    "--set",
     "weights.Q_pos=[4,4,0.0875]",
     "--set",
     "weights.Q_vel=[160,160,0.0229687]",
@@ -255,21 +271,23 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/61c82eded1ae73fc.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/c9764f2e20fe6359.csv.part"
    ],
-   "seconds": 5.07,
+   "seconds": 5.22,
    "status": "ran"
   },
   {
    "name": "circle_sqp_weights.Q_pos_-40-40-0.875-",
    "study": "sensitivity",
-   "hash": "c0b836348152808e",
+   "hash": "9461afadce63de5a",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
    "args": [
     "--trajectory",
     "circle",
+    "--set",
+    "qp.max_iter=20",
     "--set",
     "weights.Q_pos=[4,4,0.0875]",
     "--set",
@@ -294,6 +312,8 @@
     "--trajectory",
     "circle",
     "--set",
+    "qp.max_iter=20",
+    "--set",
     "weights.Q_pos=[4,4,0.0875]",
     "--set",
     "weights.Q_vel=[160,160,0.0229687]",
@@ -314,21 +334,23 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/c0b836348152808e.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/9461afadce63de5a.csv.part"
    ],
-   "seconds": 5.3,
+   "seconds": 3.59,
    "status": "ran"
   },
   {
    "name": "circle_sqp_weights.R_-0.035-0.035-0.035-",
    "study": "sensitivity",
-   "hash": "90eaff581364796b",
+   "hash": "e3c9d6a374c12eb2",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
    "args": [
     "--trajectory",
     "circle",
+    "--set",
+    "qp.max_iter=20",
     "--set",
     "weights.Q_pos=[4,4,0.0875]",
     "--set",
@@ -353,6 +375,8 @@
     "--trajectory",
     "circle",
     "--set",
+    "qp.max_iter=20",
+    "--set",
     "weights.Q_pos=[4,4,0.0875]",
     "--set",
     "weights.Q_vel=[160,160,0.0229687]",
@@ -373,21 +397,23 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/90eaff581364796b.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/e3c9d6a374c12eb2.csv.part"
    ],
-   "seconds": 5.17,
+   "seconds": 5.58,
    "status": "ran"
   },
   {
    "name": "circle_sqp_weights.R_-0.0035-0.0035-0.0035-",
    "study": "sensitivity",
-   "hash": "3573c5d992c85c0f",
+   "hash": "224e5e83a6c523f4",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
    "args": [
     "--trajectory",
     "circle",
+    "--set",
+    "qp.max_iter=20",
     "--set",
     "weights.Q_pos=[4,4,0.0875]",
     "--set",
@@ -412,6 +438,8 @@
     "--trajectory",
     "circle",
     "--set",
+    "qp.max_iter=20",
+    "--set",
     "weights.Q_pos=[4,4,0.0875]",
     "--set",
     "weights.Q_vel=[160,160,0.0229687]",
@@ -432,21 +460,23 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/3573c5d992c85c0f.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/224e5e83a6c523f4.csv.part"
    ],
-   "seconds": 5.34,
+   "seconds": 3.76,
    "status": "ran"
   },
   {
    "name": "circle_sqp_weights.R_-0.0105-0.0105-0.0105-",
    "study": "sensitivity",
-   "hash": "f85ba0f7ad327ddc",
+   "hash": "06509806ee245a38",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
    "args": [
     "--trajectory",
     "circle",
+    "--set",
+    "qp.max_iter=20",
     "--set",
     "weights.Q_pos=[4,4,0.0875]",
     "--set",
@@ -471,6 +501,8 @@
     "--trajectory",
     "circle",
     "--set",
+    "qp.max_iter=20",
+    "--set",
     "weights.Q_pos=[4,4,0.0875]",
     "--set",
     "weights.Q_vel=[160,160,0.0229687]",
@@ -491,21 +523,23 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/f85ba0f7ad327ddc.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/06509806ee245a38.csv.part"
    ],
-   "seconds": 5.39,
+   "seconds": 3.46,
    "status": "ran"
   },
   {
    "name": "circle_sqp_weights.R_-0.105-0.105-0.105-",
    "study": "sensitivity",
-   "hash": "ffc917e580906eed",
+   "hash": "d236bae16a7cdd72",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
    "args": [
     "--trajectory",
     "circle",
+    "--set",
+    "qp.max_iter=20",
     "--set",
     "weights.Q_pos=[4,4,0.0875]",
     "--set",
@@ -530,6 +564,8 @@
     "--trajectory",
     "circle",
     "--set",
+    "qp.max_iter=20",
+    "--set",
     "weights.Q_pos=[4,4,0.0875]",
     "--set",
     "weights.Q_vel=[160,160,0.0229687]",
@@ -550,21 +586,23 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/ffc917e580906eed.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/d236bae16a7cdd72.csv.part"
    ],
-   "seconds": 5.06,
+   "seconds": 5.39,
    "status": "ran"
   },
   {
    "name": "circle_sqp_weights.R_-0.35-0.35-0.35-",
    "study": "sensitivity",
-   "hash": "1e2d7475ec5e6906",
+   "hash": "ea28ddfb946ccd3b",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
    "args": [
     "--trajectory",
     "circle",
+    "--set",
+    "qp.max_iter=20",
     "--set",
     "weights.Q_pos=[4,4,0.0875]",
     "--set",
@@ -589,6 +627,8 @@
     "--trajectory",
     "circle",
     "--set",
+    "qp.max_iter=20",
+    "--set",
     "weights.Q_pos=[4,4,0.0875]",
     "--set",
     "weights.Q_vel=[160,160,0.0229687]",
@@ -609,21 +649,23 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/1e2d7475ec5e6906.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/ea28ddfb946ccd3b.csv.part"
    ],
-   "seconds": 5.05,
+   "seconds": 5.04,
    "status": "ran"
   },
   {
    "name": "circle_sqp_nmpc.N_24",
    "study": "sensitivity",
-   "hash": "f1bb6029410115af",
+   "hash": "6b38fa7ef4d002ec",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
    "args": [
     "--trajectory",
     "circle",
+    "--set",
+    "qp.max_iter=20",
     "--set",
     "weights.Q_pos=[4,4,0.0875]",
     "--set",
@@ -648,6 +690,8 @@
     "--trajectory",
     "circle",
     "--set",
+    "qp.max_iter=20",
+    "--set",
     "weights.Q_pos=[4,4,0.0875]",
     "--set",
     "weights.Q_vel=[160,160,0.0229687]",
@@ -668,21 +712,23 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/f1bb6029410115af.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/6b38fa7ef4d002ec.csv.part"
    ],
-   "seconds": 5.07,
+   "seconds": 3.37,
    "status": "ran"
   },
   {
    "name": "circle_sqp_nmpc.N_12",
    "study": "sensitivity",
-   "hash": "98cbd785bc5ca7ec",
+   "hash": "a95441d9853eee79",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
    "args": [
     "--trajectory",
     "circle",
+    "--set",
+    "qp.max_iter=20",
     "--set",
     "weights.Q_pos=[4,4,0.0875]",
     "--set",
@@ -707,6 +753,8 @@
     "--trajectory",
     "circle",
     "--set",
+    "qp.max_iter=20",
+    "--set",
     "weights.Q_pos=[4,4,0.0875]",
     "--set",
     "weights.Q_vel=[160,160,0.0229687]",
@@ -727,21 +775,23 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/98cbd785bc5ca7ec.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/a95441d9853eee79.csv.part"
    ],
-   "seconds": 3.21,
+   "seconds": 3.89,
    "status": "ran"
   },
   {
    "name": "circle_sqp_nmpc.N_18",
    "study": "sensitivity",
-   "hash": "bc432a515a323745",
+   "hash": "ffa9ae8f7a089119",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
    "args": [
     "--trajectory",
     "circle",
+    "--set",
+    "qp.max_iter=20",
     "--set",
     "weights.Q_pos=[4,4,0.0875]",
     "--set",
@@ -766,6 +816,8 @@
     "--trajectory",
     "circle",
     "--set",
+    "qp.max_iter=20",
+    "--set",
     "weights.Q_pos=[4,4,0.0875]",
     "--set",
     "weights.Q_vel=[160,160,0.0229687]",
@@ -786,21 +838,23 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/bc432a515a323745.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/ffa9ae8f7a089119.csv.part"
    ],
-   "seconds": 4.27,
+   "seconds": 4.57,
    "status": "ran"
   },
   {
    "name": "circle_sqp_nmpc.N_36",
    "study": "sensitivity",
-   "hash": "97ff8eb974460ad1",
+   "hash": "a9f5bd453109ff84",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
    "args": [
     "--trajectory",
     "circle",
+    "--set",
+    "qp.max_iter=20",
     "--set",
     "weights.Q_pos=[4,4,0.0875]",
     "--set",
@@ -825,6 +879,8 @@
     "--trajectory",
     "circle",
     "--set",
+    "qp.max_iter=20",
+    "--set",
     "weights.Q_pos=[4,4,0.0875]",
     "--set",
     "weights.Q_vel=[160,160,0.0229687]",
@@ -845,21 +901,23 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/97ff8eb974460ad1.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/a9f5bd453109ff84.csv.part"
    ],
-   "seconds": 7.03,
+   "seconds": 6.08,
    "status": "ran"
   },
   {
    "name": "circle_sqp_nmpc.N_48",
    "study": "sensitivity",
-   "hash": "d79c4f8809647677",
+   "hash": "d9ed3c249fc52f82",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
    "args": [
     "--trajectory",
     "circle",
+    "--set",
+    "qp.max_iter=20",
     "--set",
     "weights.Q_pos=[4,4,0.0875]",
     "--set",
@@ -884,6 +942,8 @@
     "--trajectory",
     "circle",
     "--set",
+    "qp.max_iter=20",
+    "--set",
     "weights.Q_pos=[4,4,0.0875]",
     "--set",
     "weights.Q_vel=[160,160,0.0229687]",
@@ -904,21 +964,23 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/d79c4f8809647677.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/d9ed3c249fc52f82.csv.part"
    ],
-   "seconds": 9.38,
+   "seconds": 6.89,
    "status": "ran"
   },
   {
    "name": "circle_sqp_nmpc.Ts_0.033",
    "study": "sensitivity",
-   "hash": "956e0b6f4abf77f4",
+   "hash": "5abac408cace0e0c",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
    "args": [
     "--trajectory",
     "circle",
+    "--set",
+    "qp.max_iter=20",
     "--set",
     "weights.Q_pos=[4,4,0.0875]",
     "--set",
@@ -943,6 +1005,8 @@
     "--trajectory",
     "circle",
     "--set",
+    "qp.max_iter=20",
+    "--set",
     "weights.Q_pos=[4,4,0.0875]",
     "--set",
     "weights.Q_vel=[160,160,0.0229687]",
@@ -963,21 +1027,23 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/956e0b6f4abf77f4.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/5abac408cace0e0c.csv.part"
    ],
-   "seconds": 5.11,
+   "seconds": 3.44,
    "status": "ran"
   },
   {
    "name": "circle_sqp_nmpc.Ts_0.0198",
    "study": "sensitivity",
-   "hash": "b18f637b4c236b14",
+   "hash": "2adf75ecc229dfee",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
    "args": [
     "--trajectory",
     "circle",
+    "--set",
+    "qp.max_iter=20",
     "--set",
     "weights.Q_pos=[4,4,0.0875]",
     "--set",
@@ -1002,6 +1068,8 @@
     "--trajectory",
     "circle",
     "--set",
+    "qp.max_iter=20",
+    "--set",
     "weights.Q_pos=[4,4,0.0875]",
     "--set",
     "weights.Q_vel=[160,160,0.0229687]",
@@ -1022,21 +1090,23 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/b18f637b4c236b14.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/2adf75ecc229dfee.csv.part"
    ],
-   "seconds": 4.91,
+   "seconds": 3.45,
    "status": "ran"
   },
   {
    "name": "circle_sqp_nmpc.Ts_0.0495",
    "study": "sensitivity",
-   "hash": "149642a541a98913",
+   "hash": "213293a0cffab227",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
    "args": [
     "--trajectory",
     "circle",
+    "--set",
+    "qp.max_iter=20",
     "--set",
     "weights.Q_pos=[4,4,0.0875]",
     "--set",
@@ -1061,6 +1131,8 @@
     "--trajectory",
     "circle",
     "--set",
+    "qp.max_iter=20",
+    "--set",
     "weights.Q_pos=[4,4,0.0875]",
     "--set",
     "weights.Q_vel=[160,160,0.0229687]",
@@ -1081,21 +1153,23 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/149642a541a98913.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/213293a0cffab227.csv.part"
    ],
-   "seconds": 5.07,
+   "seconds": 3.66,
    "status": "ran"
   },
   {
    "name": "circle_sqp_nmpc.Ts_0.099",
    "study": "sensitivity",
-   "hash": "e3e777bd2fb78e5a",
+   "hash": "e6dd7ecaebbb56cf",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
    "args": [
     "--trajectory",
     "circle",
+    "--set",
+    "qp.max_iter=20",
     "--set",
     "weights.Q_pos=[4,4,0.0875]",
     "--set",
@@ -1120,6 +1194,8 @@
     "--trajectory",
     "circle",
     "--set",
+    "qp.max_iter=20",
+    "--set",
     "weights.Q_pos=[4,4,0.0875]",
     "--set",
     "weights.Q_vel=[160,160,0.0229687]",
@@ -1140,21 +1216,23 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/e3e777bd2fb78e5a.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/e6dd7ecaebbb56cf.csv.part"
    ],
-   "seconds": 5.38,
+   "seconds": 3.58,
    "status": "ran"
   },
   {
    "name": "circle_sqp_qp.max_iter_60",
    "study": "sensitivity",
-   "hash": "8e8ba822be57baf6",
+   "hash": "100e860892e1db4d",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
    "args": [
     "--trajectory",
     "circle",
+    "--set",
+    "qp.max_iter=20",
     "--set",
     "weights.Q_pos=[4,4,0.0875]",
     "--set",
@@ -1179,6 +1257,8 @@
     "--trajectory",
     "circle",
     "--set",
+    "qp.max_iter=20",
+    "--set",
     "weights.Q_pos=[4,4,0.0875]",
     "--set",
     "weights.Q_vel=[160,160,0.0229687]",
@@ -1199,21 +1279,23 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/8e8ba822be57baf6.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/100e860892e1db4d.csv.part"
    ],
-   "seconds": 4.97,
+   "seconds": 3.75,
    "status": "ran"
   },
   {
    "name": "circle_sqp_qp.max_iter_10",
    "study": "sensitivity",
-   "hash": "95fdbaef7e30fe6d",
+   "hash": "3133828630f572e4",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
    "args": [
     "--trajectory",
     "circle",
+    "--set",
+    "qp.max_iter=20",
     "--set",
     "weights.Q_pos=[4,4,0.0875]",
     "--set",
@@ -1238,6 +1320,8 @@
     "--trajectory",
     "circle",
     "--set",
+    "qp.max_iter=20",
+    "--set",
     "weights.Q_pos=[4,4,0.0875]",
     "--set",
     "weights.Q_vel=[160,160,0.0229687]",
@@ -1258,21 +1342,23 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/95fdbaef7e30fe6d.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/3133828630f572e4.csv.part"
    ],
-   "seconds": 5.02,
+   "seconds": 3.47,
    "status": "ran"
   },
   {
    "name": "circle_sqp_qp.max_iter_20",
    "study": "sensitivity",
-   "hash": "ca55ab5e0d726e02",
+   "hash": "6a43bb854280b385",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
    "args": [
     "--trajectory",
     "circle",
+    "--set",
+    "qp.max_iter=20",
     "--set",
     "weights.Q_pos=[4,4,0.0875]",
     "--set",
@@ -1297,6 +1383,8 @@
     "--trajectory",
     "circle",
     "--set",
+    "qp.max_iter=20",
+    "--set",
     "weights.Q_pos=[4,4,0.0875]",
     "--set",
     "weights.Q_vel=[160,160,0.0229687]",
@@ -1317,21 +1405,23 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/ca55ab5e0d726e02.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/6a43bb854280b385.csv.part"
    ],
-   "seconds": 4.9,
+   "seconds": 7.12,
    "status": "ran"
   },
   {
    "name": "circle_sqp_qp.max_iter_100",
    "study": "sensitivity",
-   "hash": "8c27fd23b679b7c2",
+   "hash": "f3a56a17da7e9b1f",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
    "args": [
     "--trajectory",
     "circle",
+    "--set",
+    "qp.max_iter=20",
     "--set",
     "weights.Q_pos=[4,4,0.0875]",
     "--set",
@@ -1356,6 +1446,8 @@
     "--trajectory",
     "circle",
     "--set",
+    "qp.max_iter=20",
+    "--set",
     "weights.Q_pos=[4,4,0.0875]",
     "--set",
     "weights.Q_vel=[160,160,0.0229687]",
@@ -1376,21 +1468,23 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/8c27fd23b679b7c2.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/f3a56a17da7e9b1f.csv.part"
    ],
-   "seconds": 4.96,
+   "seconds": 3.42,
    "status": "ran"
   },
   {
    "name": "circle_sqp_nmpc.sqp_iters_1",
    "study": "sensitivity",
-   "hash": "9ee3cee3136dc9fb",
+   "hash": "2c2260b8bf287298",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
    "args": [
     "--trajectory",
     "circle",
+    "--set",
+    "qp.max_iter=20",
     "--set",
     "weights.Q_pos=[4,4,0.0875]",
     "--set",
@@ -1415,6 +1509,8 @@
     "--trajectory",
     "circle",
     "--set",
+    "qp.max_iter=20",
+    "--set",
     "weights.Q_pos=[4,4,0.0875]",
     "--set",
     "weights.Q_vel=[160,160,0.0229687]",
@@ -1435,21 +1531,23 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/9ee3cee3136dc9fb.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/2c2260b8bf287298.csv.part"
    ],
-   "seconds": 4.89,
+   "seconds": 5.13,
    "status": "ran"
   },
   {
    "name": "circle_sqp_nmpc.sqp_iters_2",
    "study": "sensitivity",
-   "hash": "c71a4ac94d97ff9d",
+   "hash": "3c076d7f3dc090c3",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
    "args": [
     "--trajectory",
     "circle",
+    "--set",
+    "qp.max_iter=20",
     "--set",
     "weights.Q_pos=[4,4,0.0875]",
     "--set",
@@ -1474,6 +1572,8 @@
     "--trajectory",
     "circle",
     "--set",
+    "qp.max_iter=20",
+    "--set",
     "weights.Q_pos=[4,4,0.0875]",
     "--set",
     "weights.Q_vel=[160,160,0.0229687]",
@@ -1494,21 +1594,23 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/c71a4ac94d97ff9d.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/3c076d7f3dc090c3.csv.part"
    ],
-   "seconds": 8.57,
+   "seconds": 6.79,
    "status": "ran"
   },
   {
    "name": "circle_sqp_nmpc.sqp_iters_3",
    "study": "sensitivity",
-   "hash": "23e85bd1948f822b",
+   "hash": "87bcfef99afc79d1",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
    "args": [
     "--trajectory",
     "circle",
+    "--set",
+    "qp.max_iter=20",
     "--set",
     "weights.Q_pos=[4,4,0.0875]",
     "--set",
@@ -1533,6 +1635,8 @@
     "--trajectory",
     "circle",
     "--set",
+    "qp.max_iter=20",
+    "--set",
     "weights.Q_pos=[4,4,0.0875]",
     "--set",
     "weights.Q_vel=[160,160,0.0229687]",
@@ -1553,21 +1657,23 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/23e85bd1948f822b.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/87bcfef99afc79d1.csv.part"
    ],
-   "seconds": 12.16,
+   "seconds": 8.49,
    "status": "ran"
   },
   {
    "name": "circle_iter_weights.Q_pos_-1-1-1000-",
    "study": "sensitivity",
-   "hash": "f5f8389f7ca0ffa1",
+   "hash": "6079280f793c75ed",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
    "args": [
     "--trajectory",
     "circle",
+    "--set",
+    "qp.max_iter=14",
     "--set",
     "nmpc.full_nonlinear=false",
     "--set",
@@ -1594,6 +1700,8 @@
     "--trajectory",
     "circle",
     "--set",
+    "qp.max_iter=14",
+    "--set",
     "nmpc.full_nonlinear=false",
     "--set",
     "weights.Q_pos=[1,1,1000]",
@@ -1616,21 +1724,23 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/f5f8389f7ca0ffa1.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/6079280f793c75ed.csv.part"
    ],
-   "seconds": 6.49,
+   "seconds": 5.18,
    "status": "ran"
   },
   {
    "name": "circle_iter_weights.Q_pos_-0.1-0.1-100-",
    "study": "sensitivity",
-   "hash": "5fb3c557c7f0b086",
+   "hash": "8f57f5a6c9aeeee4",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
    "args": [
     "--trajectory",
     "circle",
+    "--set",
+    "qp.max_iter=14",
     "--set",
     "nmpc.full_nonlinear=false",
     "--set",
@@ -1657,6 +1767,8 @@
     "--trajectory",
     "circle",
     "--set",
+    "qp.max_iter=14",
+    "--set",
     "nmpc.full_nonlinear=false",
     "--set",
     "weights.Q_pos=[1,1,1000]",
@@ -1679,21 +1791,23 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/5fb3c557c7f0b086.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/8f57f5a6c9aeeee4.csv.part"
    ],
-   "seconds": 6.64,
+   "seconds": 5.91,
    "status": "ran"
   },
   {
    "name": "circle_iter_weights.Q_pos_-0.3-0.3-300-",
    "study": "sensitivity",
-   "hash": "4b53b595542ea50b",
+   "hash": "e02854a14b596c27",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
    "args": [
     "--trajectory",
     "circle",
+    "--set",
+    "qp.max_iter=14",
     "--set",
     "nmpc.full_nonlinear=false",
     "--set",
@@ -1720,6 +1834,8 @@
     "--trajectory",
     "circle",
     "--set",
+    "qp.max_iter=14",
+    "--set",
     "nmpc.full_nonlinear=false",
     "--set",
     "weights.Q_pos=[1,1,1000]",
@@ -1742,21 +1858,23 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/4b53b595542ea50b.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/e02854a14b596c27.csv.part"
    ],
-   "seconds": 6.46,
+   "seconds": 5.04,
    "status": "ran"
   },
   {
    "name": "circle_iter_weights.Q_pos_-3-3-3000-",
    "study": "sensitivity",
-   "hash": "0e2af162814f0ed9",
+   "hash": "aa42848590199553",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
    "args": [
     "--trajectory",
     "circle",
+    "--set",
+    "qp.max_iter=14",
     "--set",
     "nmpc.full_nonlinear=false",
     "--set",
@@ -1783,6 +1901,8 @@
     "--trajectory",
     "circle",
     "--set",
+    "qp.max_iter=14",
+    "--set",
     "nmpc.full_nonlinear=false",
     "--set",
     "weights.Q_pos=[1,1,1000]",
@@ -1805,21 +1925,23 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/0e2af162814f0ed9.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/aa42848590199553.csv.part"
    ],
-   "seconds": 6.62,
+   "seconds": 6.41,
    "status": "ran"
   },
   {
    "name": "circle_iter_weights.Q_pos_-10-10-10000-",
    "study": "sensitivity",
-   "hash": "c53ef7bccb5d4aa7",
+   "hash": "9b69c71785ddf253",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
    "args": [
     "--trajectory",
     "circle",
+    "--set",
+    "qp.max_iter=14",
     "--set",
     "nmpc.full_nonlinear=false",
     "--set",
@@ -1846,6 +1968,8 @@
     "--trajectory",
     "circle",
     "--set",
+    "qp.max_iter=14",
+    "--set",
     "nmpc.full_nonlinear=false",
     "--set",
     "weights.Q_pos=[1,1,1000]",
@@ -1868,21 +1992,23 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/c53ef7bccb5d4aa7.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/9b69c71785ddf253.csv.part"
    ],
-   "seconds": 6.63,
+   "seconds": 5.63,
    "status": "ran"
   },
   {
    "name": "circle_iter_weights.R_-0.07-0.07-0.07-",
    "study": "sensitivity",
-   "hash": "0926103485281c2d",
+   "hash": "d6e839aee840d228",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
    "args": [
     "--trajectory",
     "circle",
+    "--set",
+    "qp.max_iter=14",
     "--set",
     "nmpc.full_nonlinear=false",
     "--set",
@@ -1909,6 +2035,8 @@
     "--trajectory",
     "circle",
     "--set",
+    "qp.max_iter=14",
+    "--set",
     "nmpc.full_nonlinear=false",
     "--set",
     "weights.Q_pos=[1,1,1000]",
@@ -1931,21 +2059,23 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/0926103485281c2d.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/d6e839aee840d228.csv.part"
    ],
-   "seconds": 6.46,
+   "seconds": 5.64,
    "status": "ran"
   },
   {
    "name": "circle_iter_weights.R_-0.007-0.007-0.007-",
    "study": "sensitivity",
-   "hash": "a7b37954eab52ef4",
+   "hash": "9dc966cdc96b1401",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
    "args": [
     "--trajectory",
     "circle",
+    "--set",
+    "qp.max_iter=14",
     "--set",
     "nmpc.full_nonlinear=false",
     "--set",
@@ -1972,6 +2102,8 @@
     "--trajectory",
     "circle",
     "--set",
+    "qp.max_iter=14",
+    "--set",
     "nmpc.full_nonlinear=false",
     "--set",
     "weights.Q_pos=[1,1,1000]",
@@ -1994,21 +2126,23 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/a7b37954eab52ef4.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/9dc966cdc96b1401.csv.part"
    ],
-   "seconds": 6.59,
+   "seconds": 5.14,
    "status": "ran"
   },
   {
    "name": "circle_iter_weights.R_-0.021-0.021-0.021-",
    "study": "sensitivity",
-   "hash": "a570364bbdc8f36f",
+   "hash": "6edc4e8be7eb3431",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
    "args": [
     "--trajectory",
     "circle",
+    "--set",
+    "qp.max_iter=14",
     "--set",
     "nmpc.full_nonlinear=false",
     "--set",
@@ -2035,6 +2169,8 @@
     "--trajectory",
     "circle",
     "--set",
+    "qp.max_iter=14",
+    "--set",
     "nmpc.full_nonlinear=false",
     "--set",
     "weights.Q_pos=[1,1,1000]",
@@ -2057,21 +2193,23 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/a570364bbdc8f36f.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/6edc4e8be7eb3431.csv.part"
    ],
-   "seconds": 6.51,
+   "seconds": 8.21,
    "status": "ran"
   },
   {
    "name": "circle_iter_weights.R_-0.21-0.21-0.21-",
    "study": "sensitivity",
-   "hash": "85718716da8b083e",
+   "hash": "c2be0f6f0fb4a04f",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
    "args": [
     "--trajectory",
     "circle",
+    "--set",
+    "qp.max_iter=14",
     "--set",
     "nmpc.full_nonlinear=false",
     "--set",
@@ -2098,6 +2236,8 @@
     "--trajectory",
     "circle",
     "--set",
+    "qp.max_iter=14",
+    "--set",
     "nmpc.full_nonlinear=false",
     "--set",
     "weights.Q_pos=[1,1,1000]",
@@ -2120,21 +2260,23 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/85718716da8b083e.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/c2be0f6f0fb4a04f.csv.part"
    ],
-   "seconds": 6.56,
+   "seconds": 7.61,
    "status": "ran"
   },
   {
    "name": "circle_iter_weights.R_-0.7-0.7-0.7-",
    "study": "sensitivity",
-   "hash": "bd8b34ade9807dc5",
+   "hash": "575dbf455eeedce6",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
    "args": [
     "--trajectory",
     "circle",
+    "--set",
+    "qp.max_iter=14",
     "--set",
     "nmpc.full_nonlinear=false",
     "--set",
@@ -2161,6 +2303,8 @@
     "--trajectory",
     "circle",
     "--set",
+    "qp.max_iter=14",
+    "--set",
     "nmpc.full_nonlinear=false",
     "--set",
     "weights.Q_pos=[1,1,1000]",
@@ -2183,21 +2327,23 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/bd8b34ade9807dc5.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/575dbf455eeedce6.csv.part"
    ],
-   "seconds": 6.51,
+   "seconds": 5.76,
    "status": "ran"
   },
   {
    "name": "circle_iter_nmpc.N_45",
    "study": "sensitivity",
-   "hash": "68a2d2be2d89c5c7",
+   "hash": "d337bb316c15769f",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
    "args": [
     "--trajectory",
     "circle",
+    "--set",
+    "qp.max_iter=14",
     "--set",
     "nmpc.full_nonlinear=false",
     "--set",
@@ -2224,6 +2370,8 @@
     "--trajectory",
     "circle",
     "--set",
+    "qp.max_iter=14",
+    "--set",
     "nmpc.full_nonlinear=false",
     "--set",
     "weights.Q_pos=[1,1,1000]",
@@ -2246,21 +2394,23 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/68a2d2be2d89c5c7.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/d337bb316c15769f.csv.part"
    ],
-   "seconds": 6.57,
+   "seconds": 4.56,
    "status": "ran"
   },
   {
    "name": "circle_iter_nmpc.N_22",
    "study": "sensitivity",
-   "hash": "8ad98ef220967a04",
+   "hash": "8ed3b12fedae594d",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
    "args": [
     "--trajectory",
     "circle",
+    "--set",
+    "qp.max_iter=14",
     "--set",
     "nmpc.full_nonlinear=false",
     "--set",
@@ -2287,6 +2437,8 @@
     "--trajectory",
     "circle",
     "--set",
+    "qp.max_iter=14",
+    "--set",
     "nmpc.full_nonlinear=false",
     "--set",
     "weights.Q_pos=[1,1,1000]",
@@ -2309,21 +2461,23 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/8ad98ef220967a04.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/8ed3b12fedae594d.csv.part"
    ],
-   "seconds": 3.87,
+   "seconds": 4.12,
    "status": "ran"
   },
   {
    "name": "circle_iter_nmpc.N_34",
    "study": "sensitivity",
-   "hash": "327a082deac46d60",
+   "hash": "83f816e50727102a",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
    "args": [
     "--trajectory",
     "circle",
+    "--set",
+    "qp.max_iter=14",
     "--set",
     "nmpc.full_nonlinear=false",
     "--set",
@@ -2350,6 +2504,8 @@
     "--trajectory",
     "circle",
     "--set",
+    "qp.max_iter=14",
+    "--set",
     "nmpc.full_nonlinear=false",
     "--set",
     "weights.Q_pos=[1,1,1000]",
@@ -2372,21 +2528,23 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/327a082deac46d60.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/83f816e50727102a.csv.part"
    ],
-   "seconds": 5.14,
+   "seconds": 5.44,
    "status": "ran"
   },
   {
    "name": "circle_iter_nmpc.N_68",
    "study": "sensitivity",
-   "hash": "1c916a5d202209dd",
+   "hash": "35179ea6fcdc9439",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
    "args": [
     "--trajectory",
     "circle",
+    "--set",
+    "qp.max_iter=14",
     "--set",
     "nmpc.full_nonlinear=false",
     "--set",
@@ -2413,6 +2571,8 @@
     "--trajectory",
     "circle",
     "--set",
+    "qp.max_iter=14",
+    "--set",
     "nmpc.full_nonlinear=false",
     "--set",
     "weights.Q_pos=[1,1,1000]",
@@ -2435,21 +2595,23 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/1c916a5d202209dd.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/35179ea6fcdc9439.csv.part"
    ],
-   "seconds": 10.1,
+   "seconds": 9.96,
    "status": "ran"
   },
   {
    "name": "circle_iter_nmpc.N_90",
    "study": "sensitivity",
-   "hash": "e2851dc415910f00",
+   "hash": "2525e58dee73e2bd",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
    "args": [
     "--trajectory",
     "circle",
+    "--set",
+    "qp.max_iter=14",
     "--set",
     "nmpc.full_nonlinear=false",
     "--set",
@@ -2476,6 +2638,8 @@
     "--trajectory",
     "circle",
     "--set",
+    "qp.max_iter=14",
+    "--set",
     "nmpc.full_nonlinear=false",
     "--set",
     "weights.Q_pos=[1,1,1000]",
@@ -2498,21 +2662,23 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/e2851dc415910f00.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/2525e58dee73e2bd.csv.part"
    ],
-   "seconds": 14.34,
+   "seconds": 11.42,
    "status": "ran"
   },
   {
    "name": "circle_iter_nmpc.Ts_0.033",
    "study": "sensitivity",
-   "hash": "95fa031f1b6e12a5",
+   "hash": "3b4b1cbea35d3ab2",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
    "args": [
     "--trajectory",
     "circle",
+    "--set",
+    "qp.max_iter=14",
     "--set",
     "nmpc.full_nonlinear=false",
     "--set",
@@ -2539,6 +2705,8 @@
     "--trajectory",
     "circle",
     "--set",
+    "qp.max_iter=14",
+    "--set",
     "nmpc.full_nonlinear=false",
     "--set",
     "weights.Q_pos=[1,1,1000]",
@@ -2561,21 +2729,23 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/95fa031f1b6e12a5.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/3b4b1cbea35d3ab2.csv.part"
    ],
-   "seconds": 6.69,
+   "seconds": 5.26,
    "status": "ran"
   },
   {
    "name": "circle_iter_nmpc.Ts_0.0198",
    "study": "sensitivity",
-   "hash": "b06f57b5fecef05b",
+   "hash": "c1eee57d7ec14d64",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
    "args": [
     "--trajectory",
     "circle",
+    "--set",
+    "qp.max_iter=14",
     "--set",
     "nmpc.full_nonlinear=false",
     "--set",
@@ -2602,6 +2772,8 @@
     "--trajectory",
     "circle",
     "--set",
+    "qp.max_iter=14",
+    "--set",
     "nmpc.full_nonlinear=false",
     "--set",
     "weights.Q_pos=[1,1,1000]",
@@ -2624,21 +2796,23 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/b06f57b5fecef05b.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/c1eee57d7ec14d64.csv.part"
    ],
-   "seconds": 6.9,
+   "seconds": 5.4,
    "status": "ran"
   },
   {
    "name": "circle_iter_nmpc.Ts_0.0495",
    "study": "sensitivity",
-   "hash": "16f04b80ba836f0d",
+   "hash": "f336d752c521fbbe",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
    "args": [
     "--trajectory",
     "circle",
+    "--set",
+    "qp.max_iter=14",
     "--set",
     "nmpc.full_nonlinear=false",
     "--set",
@@ -2665,6 +2839,8 @@
     "--trajectory",
     "circle",
     "--set",
+    "qp.max_iter=14",
+    "--set",
     "nmpc.full_nonlinear=false",
     "--set",
     "weights.Q_pos=[1,1,1000]",
@@ -2687,21 +2863,23 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/16f04b80ba836f0d.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/f336d752c521fbbe.csv.part"
    ],
-   "seconds": 7.07,
+   "seconds": 5.67,
    "status": "ran"
   },
   {
    "name": "circle_iter_nmpc.Ts_0.099",
    "study": "sensitivity",
-   "hash": "8f4c76c5cab194ae",
+   "hash": "0dae6e030f7c89c3",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
    "args": [
     "--trajectory",
     "circle",
+    "--set",
+    "qp.max_iter=14",
     "--set",
     "nmpc.full_nonlinear=false",
     "--set",
@@ -2728,6 +2906,8 @@
     "--trajectory",
     "circle",
     "--set",
+    "qp.max_iter=14",
+    "--set",
     "nmpc.full_nonlinear=false",
     "--set",
     "weights.Q_pos=[1,1,1000]",
@@ -2750,21 +2930,23 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/8f4c76c5cab194ae.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/0dae6e030f7c89c3.csv.part"
    ],
-   "seconds": 10.59,
+   "seconds": 7.48,
    "status": "ran"
   },
   {
    "name": "circle_iter_qp.max_iter_60",
    "study": "sensitivity",
-   "hash": "0a2d4635ff0b8f67",
+   "hash": "3ec5c2fa9113ade3",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
    "args": [
     "--trajectory",
     "circle",
+    "--set",
+    "qp.max_iter=14",
     "--set",
     "nmpc.full_nonlinear=false",
     "--set",
@@ -2791,6 +2973,8 @@
     "--trajectory",
     "circle",
     "--set",
+    "qp.max_iter=14",
+    "--set",
     "nmpc.full_nonlinear=false",
     "--set",
     "weights.Q_pos=[1,1,1000]",
@@ -2813,21 +2997,23 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/0a2d4635ff0b8f67.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/3ec5c2fa9113ade3.csv.part"
    ],
-   "seconds": 6.77,
+   "seconds": 6.04,
    "status": "ran"
   },
   {
    "name": "circle_iter_qp.max_iter_10",
    "study": "sensitivity",
-   "hash": "03ca50f9c5b7f8bf",
+   "hash": "3925e511d66ad519",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
    "args": [
     "--trajectory",
     "circle",
+    "--set",
+    "qp.max_iter=14",
     "--set",
     "nmpc.full_nonlinear=false",
     "--set",
@@ -2854,6 +3040,8 @@
     "--trajectory",
     "circle",
     "--set",
+    "qp.max_iter=14",
+    "--set",
     "nmpc.full_nonlinear=false",
     "--set",
     "weights.Q_pos=[1,1,1000]",
@@ -2876,21 +3064,23 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/03ca50f9c5b7f8bf.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/3925e511d66ad519.csv.part"
    ],
-   "seconds": 6.43,
+   "seconds": 7.01,
    "status": "ran"
   },
   {
    "name": "circle_iter_qp.max_iter_20",
    "study": "sensitivity",
-   "hash": "c29af3a63c1c600d",
+   "hash": "33620d2e64b9adab",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
    "args": [
     "--trajectory",
     "circle",
+    "--set",
+    "qp.max_iter=14",
     "--set",
     "nmpc.full_nonlinear=false",
     "--set",
@@ -2917,6 +3107,8 @@
     "--trajectory",
     "circle",
     "--set",
+    "qp.max_iter=14",
+    "--set",
     "nmpc.full_nonlinear=false",
     "--set",
     "weights.Q_pos=[1,1,1000]",
@@ -2939,21 +3131,23 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/c29af3a63c1c600d.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/33620d2e64b9adab.csv.part"
    ],
-   "seconds": 6.35,
+   "seconds": 6.38,
    "status": "ran"
   },
   {
    "name": "circle_iter_qp.max_iter_100",
    "study": "sensitivity",
-   "hash": "889b57f21de671ac",
+   "hash": "29e2084dd9074f1e",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
    "args": [
     "--trajectory",
     "circle",
+    "--set",
+    "qp.max_iter=14",
     "--set",
     "nmpc.full_nonlinear=false",
     "--set",
@@ -2980,6 +3174,8 @@
     "--trajectory",
     "circle",
     "--set",
+    "qp.max_iter=14",
+    "--set",
     "nmpc.full_nonlinear=false",
     "--set",
     "weights.Q_pos=[1,1,1000]",
@@ -3002,15 +3198,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/889b57f21de671ac.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/29e2084dd9074f1e.csv.part"
    ],
-   "seconds": 6.32,
+   "seconds": 4.79,
    "status": "ran"
   },
   {
    "name": "circle_ompc_ompc.Ts_1.4",
    "study": "sensitivity",
-   "hash": "3f488d8e014f4e59",
+   "hash": "b65ef6a4f1439da6",
    "tag": "ompc",
    "seed": 0,
    "law": "ompc",
@@ -3045,15 +3241,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/3f488d8e014f4e59.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/b65ef6a4f1439da6.csv.part"
    ],
-   "seconds": 1.35,
+   "seconds": 1.32,
    "status": "ran"
   },
   {
    "name": "circle_ompc_ompc.Ts_0.35",
    "study": "sensitivity",
-   "hash": "fd314583ac754d04",
+   "hash": "de2cb68b9d3ebff1",
    "tag": "ompc",
    "seed": 0,
    "law": "ompc",
@@ -3088,15 +3284,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/fd314583ac754d04.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/de2cb68b9d3ebff1.csv.part"
    ],
-   "seconds": 1.42,
+   "seconds": 1.26,
    "status": "ran"
   },
   {
    "name": "circle_ompc_ompc.Ts_0.7",
    "study": "sensitivity",
-   "hash": "1e85d799cec58222",
+   "hash": "81b3cab57634e3e0",
    "tag": "ompc",
    "seed": 0,
    "law": "ompc",
@@ -3131,15 +3327,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/1e85d799cec58222.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/81b3cab57634e3e0.csv.part"
    ],
-   "seconds": 1.46,
+   "seconds": 1.29,
    "status": "ran"
   },
   {
    "name": "circle_ompc_ompc.Ts_2.8",
    "study": "sensitivity",
-   "hash": "cd1fc7b040bb7ec9",
+   "hash": "7a99c11505e75bb3",
    "tag": "ompc",
    "seed": 0,
    "law": "ompc",
@@ -3174,15 +3370,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/cd1fc7b040bb7ec9.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/7a99c11505e75bb3.csv.part"
    ],
-   "seconds": 1.33,
+   "seconds": 1.09,
    "status": "ran"
   },
   {
    "name": "circle_ompc_ompc.Ts_5.6",
    "study": "sensitivity",
-   "hash": "02a432ee67b74c92",
+   "hash": "2e45ef01b4b77084",
    "tag": "ompc",
    "seed": 0,
    "law": "ompc",
@@ -3217,15 +3413,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/02a432ee67b74c92.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/2e45ef01b4b77084.csv.part"
    ],
-   "seconds": 1.33,
+   "seconds": 1.29,
    "status": "ran"
   },
   {
    "name": "circle_ompc_ompc.Q_-1.6e+06-1.6e+06-100000-",
    "study": "sensitivity",
-   "hash": "25e8a494e7dc08f4",
+   "hash": "e2c0bc1a1999c248",
    "tag": "ompc",
    "seed": 0,
    "law": "ompc",
@@ -3260,15 +3456,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/25e8a494e7dc08f4.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/e2c0bc1a1999c248.csv.part"
    ],
-   "seconds": 1.41,
+   "seconds": 0.76,
    "status": "ran"
   },
   {
    "name": "circle_ompc_ompc.Q_-160000-160000-10000-",
    "study": "sensitivity",
-   "hash": "0bd441bbe146a846",
+   "hash": "b90255369a1771a7",
    "tag": "ompc",
    "seed": 0,
    "law": "ompc",
@@ -3303,15 +3499,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/0bd441bbe146a846.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/b90255369a1771a7.csv.part"
    ],
-   "seconds": 1.29,
+   "seconds": 1.14,
    "status": "ran"
   },
   {
    "name": "circle_ompc_ompc.Q_-480000-480000-30000-",
    "study": "sensitivity",
-   "hash": "91da8293c7d62b71",
+   "hash": "9769abea364424c4",
    "tag": "ompc",
    "seed": 0,
    "law": "ompc",
@@ -3346,7 +3542,7 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/91da8293c7d62b71.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/9769abea364424c4.csv.part"
    ],
    "seconds": 1.28,
    "status": "ran"
@@ -3354,7 +3550,7 @@
   {
    "name": "circle_ompc_ompc.Q_-4.8e+06-4.8e+06-300000-",
    "study": "sensitivity",
-   "hash": "148d95e4b5ddeeae",
+   "hash": "c266ca12c2ecf1c6",
    "tag": "ompc",
    "seed": 0,
    "law": "ompc",
@@ -3389,15 +3585,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/148d95e4b5ddeeae.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/c266ca12c2ecf1c6.csv.part"
    ],
-   "seconds": 1.31,
+   "seconds": 1.21,
    "status": "ran"
   },
   {
    "name": "circle_ompc_ompc.Q_-1.6e+07-1.6e+07-1e+06-",
    "study": "sensitivity",
-   "hash": "c8673d8a2c8d2958",
+   "hash": "cb9fc0287259afb3",
    "tag": "ompc",
    "seed": 0,
    "law": "ompc",
@@ -3432,15 +3628,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/c8673d8a2c8d2958.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/cb9fc0287259afb3.csv.part"
    ],
-   "seconds": 1.31,
+   "seconds": 1.15,
    "status": "ran"
   },
   {
    "name": "circle_smc_smc.epsilon_5",
    "study": "sensitivity",
-   "hash": "ecf89c970ae608d7",
+   "hash": "c27de4c2f05b1914",
    "tag": "smc",
    "seed": 0,
    "law": "smc",
@@ -3487,15 +3683,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/ecf89c970ae608d7.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/c27de4c2f05b1914.csv.part"
    ],
-   "seconds": 1.28,
+   "seconds": 1.23,
    "status": "ran"
   },
   {
    "name": "circle_smc_smc.epsilon_1",
    "study": "sensitivity",
-   "hash": "f378e13ac5777366",
+   "hash": "059619fd79bc5478",
    "tag": "smc",
    "seed": 0,
    "law": "smc",
@@ -3542,15 +3738,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/f378e13ac5777366.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/059619fd79bc5478.csv.part"
    ],
-   "seconds": 1.38,
+   "seconds": 1.28,
    "status": "ran"
   },
   {
    "name": "circle_smc_smc.epsilon_2",
    "study": "sensitivity",
-   "hash": "cea2306b610dae82",
+   "hash": "c79de43484e4d5e4",
    "tag": "smc",
    "seed": 0,
    "law": "smc",
@@ -3597,15 +3793,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/cea2306b610dae82.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/c79de43484e4d5e4.csv.part"
    ],
-   "seconds": 1.34,
+   "seconds": 1.01,
    "status": "ran"
   },
   {
    "name": "circle_smc_smc.epsilon_10",
    "study": "sensitivity",
-   "hash": "0b6f846e91d174c5",
+   "hash": "01e0ce7b7c9e1756",
    "tag": "smc",
    "seed": 0,
    "law": "smc",
@@ -3652,15 +3848,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/0b6f846e91d174c5.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/01e0ce7b7c9e1756.csv.part"
    ],
-   "seconds": 1.28,
+   "seconds": 1.22,
    "status": "ran"
   },
   {
    "name": "circle_smc_smc.epsilon_20",
    "study": "sensitivity",
-   "hash": "eca56a3d37092c9a",
+   "hash": "98fdb3d278869b41",
    "tag": "smc",
    "seed": 0,
    "law": "smc",
@@ -3707,15 +3903,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/eca56a3d37092c9a.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/98fdb3d278869b41.csv.part"
    ],
-   "seconds": 1.28,
+   "seconds": 0.96,
    "status": "ran"
   },
   {
    "name": "circle_smc_smc.epsilon_50",
    "study": "sensitivity",
-   "hash": "1f4776949419ecaf",
+   "hash": "663f7100af116b83",
    "tag": "smc",
    "seed": 0,
    "law": "smc",
@@ -3762,15 +3958,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/1f4776949419ecaf.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/663f7100af116b83.csv.part"
    ],
-   "seconds": 1.33,
+   "seconds": 0.82,
    "status": "ran"
   },
   {
    "name": "circle_smc_smc.lam_-0.75-0.75-0.75-",
    "study": "sensitivity",
-   "hash": "8d29998433491975",
+   "hash": "e1a16907178d14e3",
    "tag": "smc",
    "seed": 0,
    "law": "smc",
@@ -3817,15 +4013,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/8d29998433491975.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/e1a16907178d14e3.csv.part"
    ],
-   "seconds": 1.3,
+   "seconds": 1.27,
    "status": "ran"
   },
   {
    "name": "circle_smc_smc.lam_-0.2475-0.2475-0.2475-",
    "study": "sensitivity",
-   "hash": "be18b529b04b8df3",
+   "hash": "bbcf49e1f8941fe3",
    "tag": "smc",
    "seed": 0,
    "law": "smc",
@@ -3872,15 +4068,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/be18b529b04b8df3.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/bbcf49e1f8941fe3.csv.part"
    ],
-   "seconds": 1.27,
+   "seconds": 1.15,
    "status": "ran"
   },
   {
    "name": "circle_smc_smc.lam_-0.5025-0.5025-0.5025-",
    "study": "sensitivity",
-   "hash": "3d4699ada2337232",
+   "hash": "a33289b18ebd0162",
    "tag": "smc",
    "seed": 0,
    "law": "smc",
@@ -3927,15 +4123,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/3d4699ada2337232.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/a33289b18ebd0162.csv.part"
    ],
-   "seconds": 1.34,
+   "seconds": 0.96,
    "status": "ran"
   },
   {
    "name": "circle_smc_smc.lam_-1.2525-1.2525-1.2525-",
    "study": "sensitivity",
-   "hash": "54c37e8df65a499c",
+   "hash": "2dbee5326ba4932e",
    "tag": "smc",
    "seed": 0,
    "law": "smc",
@@ -3982,15 +4178,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/54c37e8df65a499c.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/2dbee5326ba4932e.csv.part"
    ],
-   "seconds": 1.42,
+   "seconds": 1.23,
    "status": "ran"
   },
   {
    "name": "circle_smc_smc.lam_-2.0025-2.0025-2.0025-",
    "study": "sensitivity",
-   "hash": "ff18e3ed851e3b0a",
+   "hash": "712d4fd7b28d46f8",
    "tag": "smc",
    "seed": 0,
    "law": "smc",
@@ -4037,15 +4233,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/ff18e3ed851e3b0a.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/712d4fd7b28d46f8.csv.part"
    ],
-   "seconds": 1.43,
+   "seconds": 1.26,
    "status": "ran"
   },
   {
    "name": "circle_smc_smc.alpha_-5.6-5.6-5.6-",
    "study": "sensitivity",
-   "hash": "8e4968c730dd7567",
+   "hash": "9935ad5191be9a2a",
    "tag": "smc",
    "seed": 0,
    "law": "smc",
@@ -4092,15 +4288,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/8e4968c730dd7567.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/9935ad5191be9a2a.csv.part"
    ],
-   "seconds": 1.36,
+   "seconds": 1.33,
    "status": "ran"
   },
   {
    "name": "circle_smc_smc.alpha_-1.12-1.12-1.12-",
    "study": "sensitivity",
-   "hash": "8709faa409bba093",
+   "hash": "bb2217d8422eb0dc",
    "tag": "smc",
    "seed": 0,
    "law": "smc",
@@ -4147,15 +4343,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/8709faa409bba093.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/bb2217d8422eb0dc.csv.part"
    ],
-   "seconds": 1.37,
+   "seconds": 0.96,
    "status": "ran"
   },
   {
    "name": "circle_smc_smc.alpha_-2.8-2.8-2.8-",
    "study": "sensitivity",
-   "hash": "cceae81426683aa6",
+   "hash": "21620b63eb865b01",
    "tag": "smc",
    "seed": 0,
    "law": "smc",
@@ -4202,15 +4398,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/cceae81426683aa6.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/21620b63eb865b01.csv.part"
    ],
-   "seconds": 1.37,
+   "seconds": 1.21,
    "status": "ran"
   },
   {
    "name": "circle_smc_smc.alpha_-11.2-11.2-11.2-",
    "study": "sensitivity",
-   "hash": "8651df1d0bb59987",
+   "hash": "f55a333ea0d68f53",
    "tag": "smc",
    "seed": 0,
    "law": "smc",
@@ -4257,15 +4453,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/8651df1d0bb59987.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/f55a333ea0d68f53.csv.part"
    ],
-   "seconds": 1.36,
+   "seconds": 0.88,
    "status": "ran"
   },
   {
    "name": "circle_smc_smc.alpha_-22.4-22.4-22.4-",
    "study": "sensitivity",
-   "hash": "9624090c16f6cf1f",
+   "hash": "7515914d1787c47d",
    "tag": "smc",
    "seed": 0,
    "law": "smc",
@@ -4312,15 +4508,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/9624090c16f6cf1f.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/7515914d1787c47d.csv.part"
    ],
-   "seconds": 1.37,
+   "seconds": 1.1,
    "status": "ran"
   },
   {
    "name": "circle_smc_smc.tau_bound_0.0035",
    "study": "sensitivity",
-   "hash": "501924eac892cb0a",
+   "hash": "1e4d3b11a8e11394",
    "tag": "smc",
    "seed": 0,
    "law": "smc",
@@ -4367,15 +4563,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/501924eac892cb0a.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/1e4d3b11a8e11394.csv.part"
    ],
-   "seconds": 1.39,
+   "seconds": 0.82,
    "status": "ran"
   },
   {
    "name": "circle_smc_smc.tau_bound_0.00035",
    "study": "sensitivity",
-   "hash": "3b8397c6dad9b861",
+   "hash": "c824dc715f4b57d6",
    "tag": "smc",
    "seed": 0,
    "law": "smc",
@@ -4422,15 +4618,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/3b8397c6dad9b861.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/c824dc715f4b57d6.csv.part"
    ],
-   "seconds": 1.35,
+   "seconds": 0.8,
    "status": "ran"
   },
   {
    "name": "circle_smc_smc.tau_bound_0.00105",
    "study": "sensitivity",
-   "hash": "b44f6f99dddf20c3",
+   "hash": "64325095f8618910",
    "tag": "smc",
    "seed": 0,
    "law": "smc",
@@ -4477,15 +4673,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/b44f6f99dddf20c3.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/64325095f8618910.csv.part"
    ],
-   "seconds": 1.34,
+   "seconds": 0.7,
    "status": "ran"
   },
   {
    "name": "circle_smc_smc.tau_bound_0.0105",
    "study": "sensitivity",
-   "hash": "ba81739855103287",
+   "hash": "304a8678a61b1419",
    "tag": "smc",
    "seed": 0,
    "law": "smc",
@@ -4532,15 +4728,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/ba81739855103287.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/304a8678a61b1419.csv.part"
    ],
-   "seconds": 1.34,
+   "seconds": 0.82,
    "status": "ran"
   },
   {
    "name": "circle_smc_smc.tau_bound_0.035",
    "study": "sensitivity",
-   "hash": "a1eeab134ead1bb6",
+   "hash": "c435e43edd13f25a",
    "tag": "smc",
    "seed": 0,
    "law": "smc",
@@ -4587,9 +4783,9 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/sensitivity/cells/a1eeab134ead1bb6.csv.part"
+    "/ws/data/thesis_eval/tuned/sensitivity/cells/c435e43edd13f25a.csv.part"
    ],
-   "seconds": 1.26,
+   "seconds": 0.72,
    "status": "ran"
   }
  ]
