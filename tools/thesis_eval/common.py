@@ -122,6 +122,73 @@ def at_nominal(df: pd.DataFrame, but: Optional[str] = None) -> pd.DataFrame:
     return df[keep]
 
 
+# ------------------------------------------------------------ tick histogram --
+# Hundreds of runs' per-tick records are too big for git; their tick histogram is
+# not. live/collect.py (standard library) and jetson_bench/compare.py write it as
+# tick_hist.json, on this fixed grid, and the timing figures draw from it when the
+# records themselves are not on the machine.
+#: Bins per decade, and the decades covered: 0.1 us to 100 ms.
+HIST_PER_DECADE = 100
+HIST_LO_EXP, HIST_HI_EXP = -1, 5
+
+
+def hist_edges():
+    import numpy as np
+    k = np.arange(HIST_LO_EXP * HIST_PER_DECADE, HIST_HI_EXP * HIST_PER_DECADE + 1)
+    return 10.0 ** (k / HIST_PER_DECADE)
+
+
+def read_tick_hist(path: str) -> Optional[dict]:
+    """{tag: {"n", "max", "counts" (one per bin)}} from a tick_hist.json, or None."""
+    import json
+    import numpy as np
+    if not os.path.isfile(path):
+        return None
+    raw = json.load(open(path))
+    nb = (HIST_HI_EXP - HIST_LO_EXP) * HIST_PER_DECADE
+    out = {}
+    for tag, h in raw["tags"].items():
+        c = np.zeros(nb)
+        for i, v in h["counts"].items():
+            c[int(i)] = v
+        out[tag] = {"n": h["n"], "max": h["max"], "counts": c}
+    return out
+
+
+def tick_hist_of(ticks) -> dict:
+    """The same histogram from an array of ticks [us] (numpy side)."""
+    import numpy as np
+    t = np.asarray(ticks, dtype=float)
+    t = t[np.isfinite(t) & (t > 0)]
+    e = hist_edges()
+    c, _ = np.histogram(np.clip(t, e[0], e[-1] * 0.999999), bins=e)
+    return {"n": int(len(t)), "max": float(t.max()) if len(t) else float("nan"),
+            "counts": c.astype(float)}
+
+
+def write_tick_hist(path: str, hists: Dict[str, dict]) -> None:
+    import json
+    with open(path, "w") as fh:
+        json.dump({"per_decade": HIST_PER_DECADE, "lo_exp": HIST_LO_EXP,
+                   "hi_exp": HIST_HI_EXP,
+                   "tags": {tag: {"n": h["n"], "max": h["max"],
+                                  "counts": {str(i): int(v) for i, v in
+                                             enumerate(h["counts"]) if v}}
+                            for tag, h in hists.items()}}, fh)
+
+
+def stairs_tick_hist(ax, h: dict, coarsen: int = 4, **kw) -> None:
+    """Draw a tick histogram as a density, coarsened to HIST_PER_DECADE/coarsen
+    bins per decade (25 by default)."""
+    import numpy as np
+    e = hist_edges()
+    c = np.asarray(h["counts"], dtype=float)
+    c = c[: len(c) // coarsen * coarsen].reshape(-1, coarsen).sum(axis=1)
+    ec = e[::coarsen][: len(c) + 1]
+    if h["n"]:
+        ax.stairs(c / (h["n"] * np.diff(ec)), ec, **kw)
+
+
 # Two-sided 95% Student-t quantiles by degrees of freedom; beyond 30, the normal.
 _T95 = {1: 12.706, 2: 4.303, 3: 3.182, 4: 2.776, 5: 2.571, 6: 2.447, 7: 2.365,
         8: 2.306, 9: 2.262, 10: 2.228, 11: 2.201, 12: 2.179, 13: 2.160, 14: 2.145,

@@ -1363,23 +1363,25 @@ def fig_live_timing() -> None:
     if live is None:
         return skip("live_timing", why)
     fig, axes = plt.subplots(1, 2, figsize=(FULL, 2.6), gridspec_kw={"wspace": 0.3})
-    bins = np.logspace(0, 4.5, 140)
     labels, have_series = [], False
+    # The per-tick records if this machine has them; otherwise the histogram
+    # collect.py kept in git (tick_hist.json), the same numbers binned.
+    stored = C.read_tick_hist(os.path.join(C.LIVE_DIR, C.LIVE_RUN, "tick_hist.json"))
     for c in C.CTRL:
         d = live[live["tag"] == c]
         ticks = []
         for h in d["hash"]:
             s = C.live_series(h)
             if s is not None and "tick_us" in s:
-                v = s["tick_us"].to_numpy()
-                ticks.append(v[np.isfinite(v) & (v > 0)])
+                ticks.append(s["tick_us"].to_numpy())
         misses = int(d["deadline_misses"].fillna(0).sum())
         labels.append((c, f"{C.LABEL[c]} ({misses} missed)"))
-        if ticks:
+        hist = C.tick_hist_of(np.concatenate(ticks)) if ticks else \
+            (stored or {}).get(c)
+        if hist is not None and hist["n"]:
             have_series = True
-            t = np.concatenate(ticks)
-            axes[0].hist(t, bins=bins, histtype="step", color=C.COLOUR[c], density=True)
-            axes[0].plot(t.max(), 1.0, marker="v", color=C.COLOUR[c], ms=4, ls="none",
+            C.stairs_tick_hist(axes[0], hist, color=C.COLOUR[c])
+            axes[0].plot(hist["max"], 1.0, marker="v", color=C.COLOUR[c], ms=4, ls="none",
                          transform=axes[0].get_xaxis_transform(), clip_on=False)
         # Right: per trial, the worst tick (filled) over its p99 (hollow).
         k = C.CTRL.index(c)
@@ -1393,6 +1395,7 @@ def fig_live_timing() -> None:
     if have_series:
         axes[0].set_xscale("log")
         axes[0].set_yscale("log")
+        axes[0].set_xlim(0.5, 5e4)
         axes[0].set_xlabel("control tick [µs] (▼ worst recorded)")
         axes[0].set_ylabel("density")
     else:
@@ -1432,6 +1435,11 @@ def fig_live_trace() -> None:
         if r.empty:
             continue
         s = C.live_series(r["hash"].iloc[0])
+        if s is None:
+            # The trace collect.py copied into git for this figure.
+            p = os.path.join(C.LIVE_DIR, C.LIVE_RUN, "plot_series",
+                             f"{c}_rectangle_x1_m1_bd0_tau1x_ekf.csv")
+            s = pd.read_csv(p) if os.path.isfile(p) else None
         if s is None:
             continue
         drawn = True
