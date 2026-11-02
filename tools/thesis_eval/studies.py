@@ -482,14 +482,15 @@ def live_twin_name(v: dict) -> str:
                  f"tau{float(v.get('tau_scale', 1)):g}x", v.get("source", "ekf"))
 
 
-def live_twin(quick: bool) -> List[Cell]:
-    """The live trials' offline twins: each variation the live stack runs, on the
-    bench, with the same state source, sensors, estimator warm-up and knobs. The
-    gap between a live cell and its twin is what the real stack adds (threads,
-    DDS, the 100 Hz estimate hand-over) and nothing else."""
+def _twin_cells(study: str, variations: Sequence[dict], seeds: Sequence[int],
+                series: bool = False, timing: bool = False,
+                tags: Optional[Sequence[str]] = None) -> List[Cell]:
+    """Bench cells for live variations: the same scenario, state source, sensors,
+    estimator warm-up and knobs the live stack ran, one cell per controller and
+    seed. Shared by live_twin and the Jetson comparison, so both are the same
+    scenarios."""
     cells: List[Cell] = []
-    seeds = list(range(1, _n(quick, SEEDS_OBS) + 1))
-    for v in live_variations():
+    for v in variations:
         shape_args = CIRCLE if v["shape"] == "circle" else RECTANGLE
         extra = list(LIVE_SOURCES[v.get("source", "ekf")])
         if float(v.get("speed", 1)) != 1.0:
@@ -503,10 +504,76 @@ def live_twin(quick: bool) -> List[Cell]:
         extra += ["--base-damping", f"{float(v.get('damping', 0)):g}"]
         base = live_twin_name(v)
         for label, law, ctrl_args in active_controllers():
+            if tags and label not in tags:
+                continue
             for seed in seeds:
-                cells.append(Cell("live_twin", _slug(base, label, f"s{seed}"), law, label,
+                cells.append(Cell(study, _slug(base, label, f"s{seed}"), law, label,
                                   tuple(shape_args) + tuple(ctrl_args) + tuple(extra),
-                                  seed=seed))
+                                  seed=seed, series=series, timing=timing))
+    return cells
+
+
+def live_twin(quick: bool) -> List[Cell]:
+    """The live trials' offline twins: each variation the live stack runs, on the
+    bench, with the same state source, sensors, estimator warm-up and knobs. The
+    gap between a live cell and its twin is what the real stack adds (threads,
+    DDS, the 100 Hz estimate hand-over) and nothing else."""
+    return _twin_cells("live_twin", live_variations(),
+                       list(range(1, _n(quick, SEEDS_OBS) + 1)))
+
+
+# ------------------------------------------------------- Jetson comparison --
+# Run on each machine with `run_study.py run ... --results NAME`, the same image
+# and the same build on both, so a difference between machines is the hardware.
+
+#: The live variations the Jetson comparison times: the nominal shapes, the
+#: cells where the NMPCs' solves fail (past their speed limit, under mass error,
+#: a halved torque limit) and the three state sources. A subset of live_twin.
+JETSON_VARIATIONS: Sequence[dict] = (
+    {"shape": "circle"}, {"shape": "rectangle"},
+    {"shape": "circle", "speed": 3}, {"shape": "circle", "speed": 4},
+    {"shape": "rectangle", "speed": 3},
+    {"shape": "circle", "mass_scale": 0.5}, {"shape": "circle", "mass_scale": 2.0},
+    {"shape": "rectangle", "mass_scale": 0.75},
+    {"shape": "rectangle", "tau_scale": 0.5},
+    {"shape": "rectangle", "source": "raw"}, {"shape": "rectangle", "source": "ekf-jkf"},
+)
+JETSON_SEEDS = 3
+
+
+def jetson_timing(quick: bool) -> List[Cell]:
+    """Every controller on JETSON_VARIATIONS, 3 seeds, one process at a time,
+    pinned, with the per-tick record: the tick distribution on each machine, on
+    identical inputs."""
+    return _twin_cells("jetson_timing", JETSON_VARIATIONS,
+                       list(range(1, _n(quick, JETSON_SEEDS, 1) + 1)),
+                       series=True, timing=True)
+
+
+#: A QP tolerance no solve can reach: every QP runs to its iteration cap, fails,
+#: and the cold-start retry runs to the cap again -- the worst-case path, on
+#: every tick. The NMPC solves on every tick whatever its mode (the failure is
+#: handled after the solve), so safe mode does not short-cut it. The summary's
+#: qp_iter_mean, about 2 x the cap, confirms each tick took the full path.
+UNREACHABLE_TOL = "1e-30"
+
+
+def worst_case(quick: bool) -> List[Cell]:
+    """The NMPCs with every solve forced to fail, on the circle and the
+    rectangle at exact state: the worst tick the cap allows, measured on every
+    tick rather than waiting for a scenario to trigger it. Tracking is
+    meaningless here (the arms are in safe mode); the timing is the result."""
+    cells: List[Cell] = []
+    reps = _n(quick, 3, 1)
+    for label, law, ctrl_args in active_controllers():
+        if law != "nmpc":
+            continue
+        for shape, args in SHAPES:
+            for r in range(1, reps + 1):
+                cells.append(Cell("worst_case", _slug("worst", shape, label, f"r{r}"), law,
+                                  label, tuple(args) + tuple(ctrl_args) + PLANT +
+                                  ("--set", f"qp.tol={UNREACHABLE_TOL}"),
+                                  seed=r, series=True, timing=True))
     return cells
 
 
@@ -527,6 +594,8 @@ STUDIES: Dict[str, Callable[[bool], List[Cell]]] = {
     "sensitivity": sensitivity,
     "timing": timing,
     "live_twin": live_twin,
+    "jetson_timing": jetson_timing,
+    "worst_case": worst_case,
 }
 
 

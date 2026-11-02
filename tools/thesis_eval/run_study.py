@@ -160,7 +160,83 @@ def machine_state() -> Dict[str, object]:
         "usb_pd_watts": watts,
         "python": platform.python_version(),
         "date": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
+        **hardware_state(),
     }
+
+
+def _cpu_model() -> Optional[str]:
+    """The CPU, or on a Jetson the board (the device tree says which module)."""
+    dt = read_first("/proc/device-tree/model") or read_first("/sys/firmware/devicetree/base/model")
+    if dt:
+        return dt.replace("\x00", "").strip("\x00").strip()
+    try:
+        for line in open("/proc/cpuinfo"):
+            if line.lower().startswith("model name"):
+                return line.split(":", 1)[1].strip()
+    except OSError:
+        pass
+    return platform.processor() or None
+
+
+def _cpu_freqs() -> Dict[str, Dict[str, int]]:
+    """Per CPU: current, min and max scaling frequency [kHz]. On a Jetson after
+    jetson_clocks, min == max; on a throttled machine, cur < max."""
+    out: Dict[str, Dict[str, int]] = {}
+    for d in sorted(glob.glob("/sys/devices/system/cpu/cpu[0-9]*/cpufreq")):
+        cpu = d.split("/")[-2]
+        v = {}
+        for k, f in (("cur", "scaling_cur_freq"), ("min", "scaling_min_freq"),
+                     ("max", "scaling_max_freq"), ("hw_max", "cpuinfo_max_freq")):
+            try:
+                v[k] = int(open(os.path.join(d, f)).read())
+            except (OSError, ValueError):
+                pass
+        out[cpu] = v
+    return out
+
+
+def _max_temp_c() -> Optional[float]:
+    temps = []
+    for p in glob.glob("/sys/class/thermal/thermal_zone*/temp"):
+        try:
+            temps.append(int(open(p).read()) / 1000.0)
+        except (OSError, ValueError):
+            pass
+    return max(temps) if temps else None
+
+
+def _build_info() -> Dict[str, Optional[str]]:
+    """How the binaries were built: BLASFEO's target (in acados' installed
+    headers), and this workspace's build type and -march/-mcpu flags."""
+    info: Dict[str, Optional[str]] = {"blasfeo_target": None, "build_type": None,
+                                      "pat_arch_flags": None}
+    acados = os.environ.get("ACADOS_SOURCE_DIR", "/opt/acados")
+    for p in glob.glob(os.path.join(acados, "include", "blasfeo", "include",
+                                    "blasfeo_target.h")):
+        try:
+            for line in open(p):
+                if line.startswith("#define TARGET_") and "NEED_FEATURE" not in line:
+                    info["blasfeo_target"] = line.split()[1][len("TARGET_"):]
+                    break
+        except OSError:
+            pass
+    cache = os.path.join(ROOT, "build", "pat_arm_control", "CMakeCache.txt")
+    try:
+        for line in open(cache):
+            if line.startswith("CMAKE_BUILD_TYPE:"):
+                info["build_type"] = line.split("=", 1)[1].strip()
+            elif line.startswith("PAT_ARCH_FLAGS:"):
+                info["pat_arch_flags"] = line.split("=", 1)[1].strip()
+    except OSError:
+        pass
+    return info
+
+
+def hardware_state() -> Dict[str, object]:
+    return {"cpu_model": _cpu_model(), "machine": platform.machine(),
+            "kernel": platform.release(), "n_cpus": os.cpu_count(),
+            "cpu_freq_khz": _cpu_freqs(), "max_temp_c": _max_temp_c(),
+            "image_id": os.environ.get("PAT_IMAGE_ID"), **_build_info()}
 
 
 def git_state() -> Dict[str, object]:
@@ -188,9 +264,18 @@ def timing_allowed(state: Dict[str, object], allow_noisy: bool) -> Optional[str]
 
 # -------------------------------------------------------------------- run --
 
+#: Set by --results NAME: write to data/thesis_eval/machines/NAME/<study> instead,
+#: so a run on another machine (the Jetson comparison) never overwrites the
+#: thesis's own results or another machine's.
+RESULTS: Optional[str] = None
+
+
 def study_dir(study: str) -> str:
     """data/thesis_eval/<study> for the shipped settings, .../tuned/<study> for
-    the tuned ones, so the two never share a summary."""
+    the tuned ones, so the two never share a summary; with --results NAME,
+    data/thesis_eval/machines/NAME/<study>."""
+    if RESULTS:
+        return os.path.join(DATA, "machines", RESULTS, study)
     if studies._variant == "tuned" and study != "tuning":
         return os.path.join(DATA, "tuned", study)
     return os.path.join(DATA, study)
@@ -380,8 +465,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                        default=studies.DEFAULT_VARIANT,
                        help="controller settings: tune.py's result in tuned.json "
                             "(tuned, the default) or the committed YAML (shipped)")
+        p.add_argument("--results", default=None, metavar="NAME",
+                       help="write to data/thesis_eval/machines/NAME/<study>, apart "
+                            "from the thesis results (e.g. dgx, orin_nx)")
     args = ap.parse_args(argv)
     studies.set_variant(getattr(args, "variant", studies.DEFAULT_VARIANT))
+    global RESULTS
+    RESULTS = getattr(args, "results", None)
 
     if args.cmd == "list":
         for name in studies.STUDIES:
