@@ -251,6 +251,13 @@ summary and the collected summary; the per-tick records stay on the machine that
 ran them (`data/thesis_eval/.gitignore`), so `live_timing`'s histogram and
 `live_trace` need that machine.
 
+### On the Jetson
+
+`tools/jetson_bench/QUICKSTART.md`: the controllers' tick timing on the Orin NX
+against the DGX, on the same scenarios with the same binary, and whether each
+NMPC's worst tick fits the period there (`jetson_timing` and `worst_case` studies,
+`run_study.py --results NAME`, `tools/jetson_bench/compare.py`).
+
 ## 2. Make the figures and tables (on the host)
 
 ```bash

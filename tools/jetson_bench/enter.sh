@@ -13,5 +13,5 @@ TTY=()
 [ -t 0 ] && TTY=(-it)
 [ $# -eq 0 ] && set -- bash
 exec docker run --rm "${TTY[@]}" \
-    --user "$(id -u):$(id -g)" -e HOME=/tmp -e PAT_IMAGE_ID="$ID" \
+    --user "$(id -u):$(id -g)" -e HOME=/tmp -e PAT_IMAGE_ID="$ID" -e JOBS -e WORKERS \
     -v "$PWD":/ws -w /ws "$IMG" "$@"
