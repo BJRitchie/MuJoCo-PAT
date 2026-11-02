@@ -1,0 +1,21 @@
+pat_simulation:
+  ros__parameters:
+    chaser_damping:
+    - 0.0
+    - 0.0
+    - 0.0
+    mass_scale_bodies:
+    - link2_L
+    - link3_L
+    - link5_L
+    - link2_R
+    - link3_R
+    - link5_R
+    mass_scale_factors:
+    - 3.0
+    - 3.0
+    - 3.0
+    - 3.0
+    - 3.0
+    - 3.0
+    sensor_seed: 1

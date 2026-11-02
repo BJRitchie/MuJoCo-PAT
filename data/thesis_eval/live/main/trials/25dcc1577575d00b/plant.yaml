@@ -1,0 +1,7 @@
+pat_simulation:
+  ros__parameters:
+    chaser_damping:
+    - 50.0
+    - 50.0
+    - 50.0
+    sensor_seed: 2
