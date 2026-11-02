@@ -124,7 +124,7 @@ def read_first(pattern: str) -> Optional[str]:
     for p in sorted(glob.glob(pattern)):
         try:
             return open(p).read().strip()
-        except OSError:
+        except Exception:
             continue
     return None
 
@@ -134,13 +134,13 @@ def machine_state() -> Dict[str, object]:
     for p in glob.glob("/sys/devices/system/cpu/cpu*/cpufreq/scaling_governor"):
         try:
             governors.add(open(p).read().strip())
-        except OSError:
+        except Exception:
             pass
     ac = None
     for p in glob.glob("/sys/class/power_supply/A[CD]*/online"):
         try:
             ac = open(p).read().strip() == "1"
-        except OSError:
+        except Exception:
             pass
     watts = None
     for d in glob.glob("/sys/class/power_supply/ucsi-source-psy-*/"):
@@ -151,7 +151,7 @@ def machine_state() -> Dict[str, object]:
                 if v > 0 and i > 0:
                     watts = (v // 1_000_000) * (i // 1_000_000)
                     break
-        except (OSError, ValueError):
+        except Exception:
             pass
     return {
         "hostname": platform.node(),
@@ -173,7 +173,7 @@ def _cpu_model() -> Optional[str]:
         for line in open("/proc/cpuinfo"):
             if line.lower().startswith("model name"):
                 return line.split(":", 1)[1].strip()
-    except OSError:
+    except Exception:
         pass
     return platform.processor() or None
 
@@ -189,7 +189,7 @@ def _cpu_freqs() -> Dict[str, Dict[str, int]]:
                      ("max", "scaling_max_freq"), ("hw_max", "cpuinfo_max_freq")):
             try:
                 v[k] = int(open(os.path.join(d, f)).read())
-            except (OSError, ValueError):
+            except Exception:
                 pass
         out[cpu] = v
     return out
@@ -200,7 +200,7 @@ def _max_temp_c() -> Optional[float]:
     for p in glob.glob("/sys/class/thermal/thermal_zone*/temp"):
         try:
             temps.append(int(open(p).read()) / 1000.0)
-        except (OSError, ValueError):
+        except Exception:
             pass
     return max(temps) if temps else None
 
@@ -218,7 +218,7 @@ def _build_info() -> Dict[str, Optional[str]]:
                 if line.startswith("#define TARGET_") and "NEED_FEATURE" not in line:
                     info["blasfeo_target"] = line.split()[1][len("TARGET_"):]
                     break
-        except OSError:
+        except Exception:
             pass
     cache = os.path.join(ROOT, "build", "pat_arm_control", "CMakeCache.txt")
     try:
@@ -227,7 +227,7 @@ def _build_info() -> Dict[str, Optional[str]]:
                 info["build_type"] = line.split("=", 1)[1].strip()
             elif line.startswith("PAT_ARCH_FLAGS:"):
                 info["pat_arch_flags"] = line.split("=", 1)[1].strip()
-    except OSError:
+    except Exception:
         pass
     return info
 
