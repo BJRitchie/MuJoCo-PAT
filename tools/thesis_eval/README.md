@@ -139,7 +139,8 @@ and 262 us (LMPC, N 45), the caps bound the worst tick at about 6.0 and 7.8 ms. 
 cut 0.45% of SQP's converged solves and about 6% of LMPC's, which then fail over to
 replaying the last plan; `live/timing_report.py` measures both. `live/collect.py`
 and `timing_report.py` leave out trials run with settings `tuned.json` no longer has
-(the uncapped first run), unless given `--include-stale`.
+(the uncapped first run), unless given `--include-stale`; `collect.py` writes them
+to `summary_stale.csv` instead, which `fig23_live_cap` compares with the capped run.
 
 ```bash
 python3 tools/thesis_eval/tune.py sqp --jobs 4 --passes 8 \
@@ -244,6 +245,7 @@ matches: 5 s in, as the bench starts it after the approach and ramp.
 | `fig19_live_estimator` | raw sensors, EKF, EKF + joint KF: RMSE, torque change, base position error, live and twin |
 | `fig20_live_timing` | every live control tick, with the worst marked, and each trial's worst and p99 tick; missed deadlines in the legend |
 | `fig21_live_trace` | one live rectangle per controller: error against time, and the path |
+| `fig23_live_cap` | the QP cap, before and after: each NMPC's worst tick per live trial uncapped (the first run) and capped, against the period; and each cell's RMSE capped against uncapped |
 
 `tab_live_accuracy` and `tab_live_timing` hold the same numbers; the timing table's
 worst tick is the maximum over every trial. Git keeps each trial's report and

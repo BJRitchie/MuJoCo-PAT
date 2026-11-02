@@ -79,10 +79,12 @@ SOURCE_LABEL = {"exact": "exact state", "raw": "raw sensors", "ekf": "EKF",
                 "ekf-jkf": "EKF + joint KF"}
 
 
-def live_summary(run: str = LIVE_RUN) -> Optional[pd.DataFrame]:
+def live_summary(run: str = LIVE_RUN, stale: bool = False) -> Optional[pd.DataFrame]:
     """One row per live trial (live/collect.py's summary.csv), with the knobs under
-    the same names as live_twin()'s: shape, speed, mass, damping, tau, source."""
-    path = os.path.join(LIVE_DIR, run, "summary.csv")
+    the same names as live_twin()'s: shape, speed, mass, damping, tau, source.
+    stale=True: the trials run with settings tuned.json no longer has
+    (summary_stale.csv, the uncapped first run)."""
+    path = os.path.join(LIVE_DIR, run, "summary_stale.csv" if stale else "summary.csv")
     if not os.path.isfile(path):
         return None
     df = pd.read_csv(path)

@@ -1456,6 +1456,84 @@ def fig_live_trace() -> None:
     save(fig, "fig21_live_trace")
 
 
+def fig_live_cap() -> None:
+    """What the QP iteration cap bought and what it cost, live: each NMPC's worst
+    tick per trial before (the first run, uncapped: 60 iterations, twice) and
+    after, against the period; and each cell's RMSE after against before."""
+    now = C.live_summary()
+    before = C.live_summary(stale=True)
+    if now is None or before is None:
+        return skip("live_cap", "needs both the capped run and the uncapped one "
+                                "(live/collect.py writes summary_stale.csv)")
+    nmpc = [c for c in ("sqp", "iter") if c in set(now["tag"]) and c in set(before["tag"])]
+    if not nmpc:
+        return skip("live_cap", "no NMPC trials in both runs")
+    fig, axes = plt.subplots(1, 2, figsize=(FULL, 2.9), gridspec_kw={"wspace": 0.32,
+                                                                     "width_ratios": [1.15, 1]})
+    ax = axes[0]
+    rng = np.random.default_rng(0)
+    labels = []
+    for k, c in enumerate(nmpc):
+        for j, (df, cap_label, mfc) in enumerate(((before, "uncapped", "none"),
+                                                   (now, "capped", C.COLOUR[c]))):
+            d = df[df["tag"] == c]
+            def cap_text(v):
+                try:
+                    return str(int(float(v)))
+                except (TypeError, ValueError):
+                    return str(v)
+            caps = sorted({cap_text(v) for v in d["qp_cap"].dropna()}) if "qp_cap" in d else []
+            cap = caps[0] if len(caps) == 1 and caps[0] not in ("", "none", "nan") else None
+            x = 2 * k + j
+            w = d["tick_us_max"].to_numpy() / 1000.0
+            ax.plot(x + (rng.random(len(w)) - 0.5) * 0.45, w, ls="none", marker=C.MARKER[c],
+                    ms=3, color=C.COLOUR[c], mfc=mfc, alpha=0.75)
+            over = int((w > C.PERIOD_US / 1000).sum())
+            ax.text(x, 1.04, f"{over}/{len(w)}\nover", ha="center", va="bottom", fontsize=6,
+                    transform=ax.get_xaxis_transform())
+            labels.append(f"{C.LABEL[c]}\n{'cap ' + cap if cap else cap_label}")
+    ax.axhline(C.PERIOD_US / 1000, color="k", ls=":", lw=0.8)
+    ax.text(len(labels) - 0.5, C.PERIOD_US / 1000 * 1.06, "10 ms period", ha="right",
+            va="bottom", fontsize=6)
+    ax.set_yscale("log")
+    plain_log_y(ax)
+    ax.set_xticks(range(len(labels)))
+    ax.set_xticklabels(labels, fontsize=6.5)
+    ax.set_ylabel("worst tick per live trial [ms]")
+
+    ax = axes[1]
+    lo, hi = np.inf, 0.0
+    safe = False
+    for c in nmpc:
+        b = before[before["tag"] == c].groupby("cell")["rmse_mm"].mean()
+        n = now[now["tag"] == c].groupby("cell")
+        a = n["rmse_mm"].mean()
+        failed_now = n["safe_ticks"].max() > 0 if "safe_ticks" in now else None
+        cells = b.index.intersection(a.index)
+        if not len(cells):
+            continue
+        x, y = b[cells].to_numpy(), a[cells].to_numpy()
+        ratio = float(np.exp(np.mean(np.log(y / x))))
+        ax.plot(x, y, ls="none", marker=C.MARKER[c], ms=3.5, color=C.COLOUR[c],
+                label=f"{C.LABEL[c]}: x{ratio:.2f} (geo. mean)")
+        if failed_now is not None:
+            safe |= mark_safe_at(ax, x, y, list(failed_now[cells]))
+        lo, hi = min(lo, x.min(), y.min()), max(hi, x.max(), y.max())
+    if hi > 0:
+        ax.plot([lo * 0.8, hi * 1.25], [lo * 0.8, hi * 1.25], color="0.5", lw=0.8, ls="--",
+                zorder=0, label="no change")
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    plain_log_y(ax)
+    ax.xaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda v, _: f"{v:g}"))
+    ax.set_xlabel("RMSE per cell, uncapped [mm]")
+    ax.set_ylabel("RMSE per cell, capped [mm]")
+    handles, _ = ax.get_legend_handles_labels()
+    ax.legend(handles=handles + ([safe_handle()] if safe else []), fontsize=6,
+              loc="upper left")
+    save(fig, "fig23_live_cap")
+
+
 FIGURES: Dict[str, Callable[[], None]] = {
     "step": fig_step, "circle": fig_circle, "rectangle": fig_rectangle,
     "dashboard": fig_dashboard, "pareto": fig_pareto, "base": fig_base,
@@ -1465,7 +1543,7 @@ FIGURES: Dict[str, Callable[[], None]] = {
     "estimator": fig_estimator, "tuning": fig_tuning,
     "live_nominal": fig_live_nominal, "live_robustness": fig_live_robustness,
     "live_estimator": fig_live_estimator, "live_timing": fig_live_timing,
-    "live_trace": fig_live_trace,
+    "live_trace": fig_live_trace, "live_cap": fig_live_cap,
 }
 
 
