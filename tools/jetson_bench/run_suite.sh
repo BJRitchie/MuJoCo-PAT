@@ -11,7 +11,10 @@ set -euo pipefail
 NAME=${1:?usage: run_suite.sh NAME [PIN]}
 PIN=${2:-$(( $(nproc) - 1 ))}
 cd /ws
+# ROS's setup scripts read unset variables: not under set -u.
+set +u
 source install/setup.bash
+set -u
 RS=(python3 tools/thesis_eval/run_study.py)
 OUT=data/thesis_eval/machines/$NAME
 mkdir -p "$OUT"
