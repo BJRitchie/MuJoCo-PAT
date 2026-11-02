@@ -213,10 +213,10 @@ def tab_tuned() -> None:
 
 
 def _pm(m: float, h: float) -> str:
-    """mean $\pm$ 95% half-width, the half-width dropped when there is none."""
+    r"""mean $\pm$ 95% half-width, the half-width dropped when there is none."""
     if m is None or (isinstance(m, float) and math.isnan(m)):
         return "--"
-    return fmt(m) if not h else f"{fmt(m)}\,$\pm$\,{fmt(h, 2)}"
+    return fmt(m) if not h else fmt(m) + r"\,$\pm$\," + fmt(h, 2)
 
 
 def tab_live() -> None:
