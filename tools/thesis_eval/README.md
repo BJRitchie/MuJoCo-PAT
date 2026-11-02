@@ -128,6 +128,19 @@ rectangle (the rule is 5%). The earlier, unconstrained SQP and a version capped
 at the others' mean torque are kept as `data/thesis_eval/tuning/sqp_unconstrained.json`
 and `sqp_meancap.json`.
 
+**The QP iteration cap.** Both NMPCs carry a fixed `qp.max_iter` (20 for SQP,
+14 for LMPC; `tune.py`'s `QP_CAP`), added after tuning as the realtime bound. A
+tick runs one QP and, if it fails, one cold-start retry, each up to the cap, so the
+worst tick is about 2 x cap x the worst cost of one iteration. The shipped 60
+allowed 120 iterations: on the first DGX live run every overrunning tick (539 for
+SQP, 2,248 for LMPC, worst 16 and 27 ms) was a failed solve, and no converged SQP
+solve overran. With one failed-solve iteration costing at worst 137 us (SQP, N 24)
+and 262 us (LMPC, N 45), the caps bound the worst tick at about 6.0 and 7.8 ms. They
+cut 0.45% of SQP's converged solves and about 6% of LMPC's, which then fail over to
+replaying the last plan; `live/timing_report.py` measures both. `live/collect.py`
+and `timing_report.py` leave out trials run with settings `tuned.json` no longer has
+(the uncapped first run), unless given `--include-stale`.
+
 ```bash
 python3 tools/thesis_eval/tune.py sqp --jobs 4 --passes 8 \
     --torque-cap-from-others max --beat-others --start-from PREVIOUS_TUNED.json

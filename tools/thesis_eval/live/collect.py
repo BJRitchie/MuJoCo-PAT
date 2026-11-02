@@ -57,10 +57,27 @@ def row_of(trial_dir):
     return out
 
 
-def collect(out_dir):
-    rows = []
+def current_args():
+    """tuned.json's arguments per controller: a trial run with other settings (an
+    earlier tuning, or before the QP cap) is not a result for the current ones."""
+    with open(studies.TUNED_JSON) as fh:
+        return {k: v["args"] for k, v in json.load(fh).items()}
+
+
+def is_current(trial_dir, args=None):
+    spec = json.load(open(os.path.join(trial_dir, "report.json")))["spec"]
+    args = args if args is not None else current_args()
+    return spec.get("tuned_args") == args.get(spec["tag"])
+
+
+def collect(out_dir, include_stale=False):
+    rows, stale = [], 0
+    args = current_args()
     for d in sorted(glob.glob(os.path.join(out_dir, "trials", "*"))):
         if d.endswith(".partial") or not os.path.isfile(os.path.join(d, "report.json")):
+            continue
+        if not include_stale and not is_current(d, args):
+            stale += 1
             continue
         try:
             rows.append(row_of(d))
@@ -71,6 +88,9 @@ def collect(out_dir):
     head = list(rows[0])
     for r in rows[1:]:
         head += [k for k in r if k not in head]
+    if stale:
+        print(f"collect: left out {stale} trials run with settings tuned.json no longer has "
+              "(--include-stale keeps them)", file=sys.stderr)
     rows.sort(key=lambda r: (r["cell"], r["tag"], int(r["repeat"])))
     path = os.path.join(out_dir, "summary.csv")
     with open(path, "w", newline="") as fh:
@@ -83,8 +103,10 @@ def collect(out_dir):
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--out", default=os.path.join("data", "thesis_eval", "live", "main"))
+    ap.add_argument("--include-stale", action="store_true",
+                    help="keep trials run with settings other than tuned.json's")
     a = ap.parse_args()
-    path, rows = collect(a.out)
+    path, rows = collect(a.out, a.include_stale)
     cells = {(r["cell"], r["tag"]) for r in rows}
     misses = sum(int(r["deadline_misses"] or 0) for r in rows)
     print(f"collect: {len(rows)} trials in {len(cells)} cells -> {path}"

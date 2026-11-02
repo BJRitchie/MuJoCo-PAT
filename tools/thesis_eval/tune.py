@@ -97,8 +97,22 @@ def vec(x: Sequence[float]) -> str:
 # [x, y, thetaz]; x and y are tuned together (the task is symmetric in them),
 # thetaz on its own.
 
+#: QP iteration cap per tick, per NMPC: the realtime bound, not a tuning knob.
+#: A tick runs one QP and, if it fails, one cold-start retry, each up to the cap,
+#: so its worst case is about 2 x cap x (worst cost of one iteration) + ~0.5 ms
+#: of other work. Measured on the DGX live run (live/timing_report.py): one
+#: failed-solve iteration costs at worst 137 us for SQP (N 24) and 262 us for
+#: LMPC (N 45), so these caps bound the worst tick at about 6.0 and 7.8 ms against
+#: the 10 ms period. They cut 0.45% of SQP's and ~6% of LMPC's converged solves
+#: (which then fail over to replaying the last plan), almost all in the cells past
+#: the controllers' speed limit. The shipped 60 bounded nothing: 120 iterations,
+#: 16 and 27 ms.
+QP_CAP = {True: 20, False: 14}
+
+
 def nmpc_space(full_nonlinear: bool):
-    fixed = () if full_nonlinear else ("--set", "nmpc.full_nonlinear=false")
+    fixed = (("--set", f"qp.max_iter={QP_CAP[full_nonlinear]}") +
+             (() if full_nonlinear else ("--set", "nmpc.full_nonlinear=false")))
     start = {"qpos_xy": 10.0, "qpos_th": 1.0, "qvel_xy": 1.0, "qvel_th": 3.0,
              "r": 0.1, "N": 30, "Ts": 0.033, "term": 100.0}
     bounds = {"qpos_xy": (0.1, 1e4), "qpos_th": (0.01, 1e3), "qvel_xy": (0.01, 1e3),

@@ -3,6 +3,8 @@
   "law": "nmpc",
   "args": [
    "--set",
+   "qp.max_iter=20",
+   "--set",
    "weights.Q_pos=[4,4,0.0875]",
    "--set",
    "weights.Q_vel=[160,160,0.0229687]",
@@ -116,11 +118,14 @@
     }
    }
   },
-  "evaluations": 112
+  "evaluations": 112,
+  "qp_cap_note": "qp.max_iter added after tuning as the realtime bound (tune.py QP_CAP); the tuned knobs are unchanged"
  },
  "iter": {
   "law": "nmpc",
   "args": [
+   "--set",
+   "qp.max_iter=14",
    "--set",
    "nmpc.full_nonlinear=false",
    "--set",
@@ -237,7 +242,8 @@
     }
    }
   },
-  "evaluations": 137
+  "evaluations": 137,
+  "qp_cap_note": "qp.max_iter added after tuning as the realtime bound (tune.py QP_CAP); the tuned knobs are unchanged"
  },
  "ompc": {
   "law": "ompc",

@@ -25,6 +25,10 @@ import glob
 import json
 import os
 import statistics
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import collect  # noqa: E402
 
 
 def trace_rows(path):
@@ -64,7 +68,11 @@ def main():
     ap.add_argument("--out", default="data/thesis_eval/live/main")
     ap.add_argument("--period-us", type=float, default=10000.0)
     ap.add_argument("--top", type=int, default=8, help="cells to list per controller")
+    ap.add_argument("--include-stale", action="store_true",
+                    help="also trials run with settings other than tuned.json's")
     a = ap.parse_args()
+    current = collect.current_args()
+    stale = 0
 
     per = collections.defaultdict(lambda: collections.Counter())
     worst = collections.defaultdict(lambda: collections.defaultdict(float))
@@ -79,6 +87,9 @@ def main():
         if d.endswith(".partial") or not (os.path.isfile(rep_p) and os.path.isfile(tr_p)):
             continue
         spec = json.load(open(rep_p))["spec"]
+        if not a.include_stale and spec.get("tuned_args") != current.get(spec["tag"]):
+            stale += 1
+            continue
         tag, cell = spec["tag"], cell_of(spec)
         n_trials[tag] += 1
         any_over = False
@@ -105,8 +116,11 @@ def main():
                 by_cell[tag][cell] += 1
         trials_with[tag] += any_over
 
+    if stale:
+        print(f"(left out {stale} trials run with settings tuned.json no longer has; "
+              "--include-stale keeps them)")
     if not per:
-        raise SystemExit(f"no trials with a trace_left.csv under {a.out}/trials")
+        raise SystemExit(f"no current trials with a trace_left.csv under {a.out}/trials")
     order = [t for t in ("sqp", "iter", "ompc", "smc") if t in per] + \
             [t for t in per if t not in ("sqp", "iter", "ompc", "smc")]
     for tag in order:
