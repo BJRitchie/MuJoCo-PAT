@@ -107,7 +107,13 @@ def vec(x: Sequence[float]) -> str:
 #: (which then fail over to replaying the last plan), almost all in the cells past
 #: the controllers' speed limit. The shipped 60 bounded nothing: 120 iterations,
 #: 16 and 27 ms.
-QP_CAP = {True: 20, False: 14}
+#: LMPC was then retuned at SQP's horizon (N 24, `--fix N=24`) with SQP's cap: at
+#: N 45 the cap of 14 cut ~6% of its solves and its live mass-error cells
+#: collapsed into safe mode. An iteration at N 24 costs about what SQP's does,
+#: so 20 keeps its worst tick near SQP's (~6 ms).
+QP_CAP = {True: 20, False: 20}
+#: Knobs held at a value instead of searched (--fix KNOB=VALUE), per run.
+FIXED: Dict[str, float] = {}
 
 
 def nmpc_space(full_nonlinear: bool):
@@ -166,6 +172,12 @@ class Evaluator:
     def __init__(self, ctrl: str, jobs: int):
         self.ctrl = ctrl
         self.law, self.fixed, self.start, self.bounds, self.overrides = SPACES[ctrl]()
+        for k, v in FIXED.items():
+            if k not in self.bounds:
+                raise SystemExit(f"--fix {k}: {ctrl} has no knob {k!r} "
+                                 f"(it has {', '.join(self.bounds)})")
+            # A zero-width bound: candidates() offers nothing, clamp_start pins it.
+            self.bounds[k] = (v, v)
         self.ctx = R.Context(R.find_bench())
         self.pool = cf.ThreadPoolExecutor(max_workers=max(1, jobs))
         self.log: List[dict] = []
@@ -252,10 +264,16 @@ def tune(ctrl: str, passes: int, jobs: int, start: Dict[str, float] = None) -> d
     shipped point is always evaluated too, as the reference."""
     ev = Evaluator(ctrl, jobs)
     _, shipped = ev.evaluate(dict(ev.start))
-    state = clamp_start(ev, start) if start else dict(ev.start)
+    # The shipped point is evaluated as shipped; the search starts inside the
+    # bounds, which pins any --fix knob.
+    state = (clamp_start(ev, start if start else ev.start) if (start or FIXED)
+             else dict(ev.start))
+    if "N" in state:
+        state["N"] = int(state["N"])
     best_score, best = ev.evaluate(state)
-    if start:
-        print(f"{ctrl}: start from {state}", flush=True)
+    if start or FIXED:
+        print(f"{ctrl}: start from {state}" +
+              (f" (fixed: {FIXED})" if FIXED else ""), flush=True)
     print(f"{ctrl}: shipped  score {shipped['score']:.4g}  gmean RMSE "
           f"{shipped['gmean_rmse_mm']:.3f} mm feasible={shipped['feasible']}; start score "
           f"{best_score:.4g}", flush=True)
@@ -277,14 +295,15 @@ def tune(ctrl: str, passes: int, jobs: int, start: Dict[str, float] = None) -> d
            "rule": {
                "scenarios": [s for s, _ in TUNING_SCENARIOS], "rail_max": RAIL_MAX,
                "tick_max_us": TICK_MAX_US, "tau2_cap": dict(TORQUE_CAP),
-               "rmse_cap": dict(RMSE_CAP),
+               "rmse_cap": dict(RMSE_CAP), "fixed": dict(FIXED),
                "objective": "geometric mean of the scenarios' RMSE [mm]"},
            "shipped": shipped, "tuned": best,
            "args": list(ev.fixed) + ev.overrides(best["state"]),
            "evaluations": ev.log}
     d = os.path.join(R.DATA, "tuning")
     os.makedirs(d, exist_ok=True)
-    tag = "" if not start else "_restart"
+    tag = ("" if not start else "_restart") + "".join(
+        f"_fix-{k}{v:g}" for k, v in sorted(FIXED.items()))
     with open(os.path.join(d, f"{ctrl}{tag}.json"), "w") as fh:
         json.dump(out, fh, indent=1)
     return out
@@ -307,7 +326,17 @@ def main(argv=None) -> int:
     ap.add_argument("--beat-others", action="store_true",
                     help="require each tuning scenario's RMSE to be no more than the "
                          "best of the OTHER controllers' tuned RMSE in tuned.json")
+    ap.add_argument("--fix", action="append", default=[], metavar="KNOB=VALUE",
+                    help="hold a knob at a value instead of searching it, e.g. N=24 "
+                         "(repeatable). The search space changes, so the result "
+                         "always replaces the controller's entry.")
     args = ap.parse_args(argv)
+    FIXED.clear()
+    for f in args.fix:
+        k, sep, v = f.partition("=")
+        if not sep:
+            ap.error(f"--fix {f!r}: expected KNOB=VALUE")
+        FIXED[k.strip()] = float(v)
     tuned = {}
     if os.path.isfile(TUNED_JSON):
         with open(TUNED_JSON) as fh:
@@ -334,7 +363,7 @@ def main(argv=None) -> int:
                   flush=True)
         out = tune(c, args.passes, args.jobs, starts.get(c))
         prev = tuned.get(c)
-        changed = args.torque_cap_from_others or args.beat_others
+        changed = args.torque_cap_from_others or args.beat_others or FIXED
         if args.start_from and prev is not None and not changed:
             prev_score = prev["gmean_rmse_mm"]["tuned"] if prev["feasible"] else math.inf
             new_score = out["tuned"]["score"] if out["tuned"]["feasible"] else math.inf
