@@ -69,6 +69,8 @@ def main():
     per = collections.defaultdict(lambda: collections.Counter())
     worst = collections.defaultdict(lambda: collections.defaultdict(float))
     per_iter = collections.defaultdict(list)
+    iters = collections.defaultdict(list)          # converged solves' iteration counts
+    fail_per_iter = collections.defaultdict(list)  # tick us per iteration, failed solves
     by_cell = collections.defaultdict(collections.Counter)
     trials_with = collections.Counter()
     n_trials = collections.Counter()
@@ -93,6 +95,9 @@ def main():
             worst[tag][kind] = max(worst[tag][kind], t)
             if has_qp and not failed and num(r, "qp_iters") > 0 and num(r, "hpipm_us") > 0:
                 per_iter[tag].append(num(r, "hpipm_us") / num(r, "qp_iters"))
+                iters[tag].append(int(num(r, "qp_iters")))
+            if has_qp and failed and num(r, "qp_iters") > 0:
+                fail_per_iter[tag].append(t / num(r, "qp_iters"))
             if t > a.period_us:
                 any_over = True
                 c["overrun"] += 1
@@ -117,6 +122,17 @@ def main():
             it = per_iter[tag]
             print(f"   one QP iteration: median {statistics.median(it):.0f} us, "
                   f"p99 {sorted(it)[int(0.99 * (len(it) - 1))]:.0f} us")
+        if iters[tag]:
+            it = sorted(iters[tag])
+            q = lambda f: it[int(f * (len(it) - 1))]
+            caps = (10, 15, 20, 25, 30, 40)
+            print(f"   converged solves' QP iterations: median {q(0.5)}, p99 {q(0.99)}, "
+                  f"p99.9 {q(0.999)}, max {it[-1]}; would hit a cap of " + ", ".join(
+                      f"{c}: {100 * sum(1 for v in it if v >= c) / len(it):.2f}%" for c in caps))
+        if fail_per_iter[tag]:
+            f = sorted(fail_per_iter[tag])
+            print(f"   failed solves: {statistics.median(f):.0f} us of tick per iteration "
+                  f"(median), {f[-1]:.0f} us worst")
         if by_cell[tag]:
             print("   overruns by cell: " + ", ".join(
                 f"{k} {v}" for k, v in by_cell[tag].most_common(a.top)))
