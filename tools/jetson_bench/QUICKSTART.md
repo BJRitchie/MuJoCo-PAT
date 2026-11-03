@@ -248,6 +248,25 @@ The rerun has its own results name, so the first run is kept. Smaller caps
 mean more solves stop at the cap and fall back to replaying the last plan: the
 rerun's RMSE (Part C) shows what that costs in tracking.
 
+**B6b. Or: cold start only, no retry** (+45-70 min). By default a QP is
+warm-started and, if it fails, retried once cold, so a failing tick costs two
+caps of iterations. With `--cold` every QP starts cold and is never retried: a
+tick costs at most one cap, so about twice the cap fits the same budget, at the
+price of more iterations on an ordinary tick. `quick_check.py` prints the cold
+cap next to the warm one ("N cold, no retry"):
+
+```bash
+tools/jetson_bench/set_caps.sh 17 18 --cold
+tools/jetson_bench/enter.sh tools/jetson_bench/run_suite.sh orin_nano_cold_cap17_18
+tools/jetson_bench/enter.sh python3 tools/jetson_bench/quick_check.py orin_nano_cold_cap17_18
+```
+
+The forced worst case should report iterations per tick equal to the cap (not
+twice it). `set_caps.sh keep keep --warm` puts the warm start back. Compare the
+two runs of the same machine in Part C with
+`compare.py --a orin_nano --b orin_nano_cold_cap17_18`: section 6 gives the
+cost in tracking, cell for cell (RMSE, failed solves, safe mode, iterations).
+
 **B7. Copy the results back** (5 min)
 
 ```bash

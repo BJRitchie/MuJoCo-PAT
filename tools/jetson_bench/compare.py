@@ -11,6 +11,10 @@ with summary.csv, manifest.json and, for the per-tick record, series/). Writes:
   data/thesis_eval/machines/compare_<a>_<b>.txt    the report below, as printed
   docs/assets/thesis/fig22_jetson_timing.{pdf,png} tick distributions, worst case
   docs/assets/thesis/tables/tab_jetson.tex         the numbers, LaTeX
+  docs/assets/thesis/tables/tab_jetson_control_<a>_<b>.tex   what the QP settings
+                                                   cost the control (section 6)
+(fig22 and tab_jetson get a _<a>_vs_<b> suffix unless --a is dgx, so comparing two
+runs of one machine, e.g. warm against cold start, keeps the DGX comparison.)
 
 The report, in order:
   1. the two machines as their manifests recorded them, and anything that makes
@@ -23,7 +27,12 @@ The report, in order:
      ticks over the period;
   4. the forced worst case per NMPC: the worst tick the QP cap allows, the cost
      of one iteration, and the largest cap that keeps the worst tick inside the
-     budget on each machine.
+     budget on each machine;
+  5. the horizon sweep;
+  6. what the settings cost the control, cell for cell: RMSE, failed solves,
+     safe mode, QP iterations. Two runs of one machine at other caps or with
+     cold-start-only QPs (set_caps.sh --cold) are compared this way:
+       compare.py --a orin_nano --b orin_nano_cold_cap17_18
 """
 from __future__ import annotations
 
@@ -87,6 +96,31 @@ def caps_of(manifest: Optional[dict]) -> Dict[str, int]:
     return out
 
 
+def solves_of(manifest: Optional[dict]) -> Dict[str, int]:
+    """QP solves a failing tick can cost, per NMPC: 2 (warm start, then the
+    cold-start retry), or 1 when the run set qp.warm_start=0 (set_caps.sh --cold:
+    every solve cold, never retried)."""
+    out: Dict[str, int] = {}
+    for c in (manifest or {}).get("cells", []):
+        if c.get("tag") in NMPC and c["tag"] not in out:
+            out[c["tag"]] = 1 if "qp.warm_start=0" in c.get("args", []) else 2
+    return out
+
+
+def qp_mode(manifest: Optional[dict]) -> str:
+    caps, solves = caps_of(manifest), solves_of(manifest)
+    return ", ".join(f"{C.LABEL[t]} cap {caps.get(t)} "
+                     f"{'cold, no retry' if solves.get(t) == 1 else 'warm + retry'}"
+                     for t in NMPC if t in caps) or "no NMPC"
+
+
+def pair_suffix(a: str, b: str) -> str:
+    """The DGX-against-a-Jetson comparison keeps the plain names (fig22, tab_jetson);
+    any other pair (two runs of one machine) gets its own, so neither overwrites
+    the other."""
+    return "" if a == "dgx" else f"_{a}_vs_{b}"
+
+
 # ---------------------------------------------------------------- 1. machines --
 
 def describe(out: Out, name: str, man: dict) -> List[str]:
@@ -99,6 +133,7 @@ def describe(out: Out, name: str, man: dict) -> List[str]:
         f"BLASFEO {m.get('blasfeo_target')}, image {str(m.get('image_id'))[:19]}, "
         f"max temp {m.get('max_temp_c')} C, git {man['git']['revision'][:8]}"
         f"{' (dirty)' if man['git']['dirty'] else ''}")
+    out(f"     QP: {qp_mode(man)}")
     problems = []
     if man.get("noisy_timing_allowed"):
         problems.append(f"{name}: timing run with --allow-noisy-timing")
@@ -253,7 +288,8 @@ def ticks_section(out: Out, a: str, b: str, sa, sb) -> Dict[Tuple[str, str], dic
 # ---------------------------------------------------------- 4. worst case --
 
 def worst_section(out: Out, a: str, b: str, budget_us: float) -> Dict[Tuple[str, str], dict]:
-    out(f"4. FORCED WORST CASE (every QP fails: the cap twice per tick); budget "
+    out(f"4. FORCED WORST CASE (every QP fails: the cap once per solve, two solves a "
+        f"tick with the warm start's cold retry, one without); budget "
         f"{budget_us:.0f} us of the {C.PERIOD_US:.0f} us period")
     res = {}
     for name in (a, b):
@@ -261,25 +297,27 @@ def worst_section(out: Out, a: str, b: str, budget_us: float) -> Dict[Tuple[str,
         if summ is None:
             out(f"  {name}: no worst_case study")
             continue
-        caps = caps_of(man)
+        caps, solves = caps_of(man), solves_of(man)
         for tag in NMPC:
             d = summ[summ["tag"] == tag]
             if d.empty:
                 continue
             cap = caps.get(tag)
+            ns = solves.get(tag, 2)
             iters = float(d["qp_iter_mean"].mean())
             worst = float(d["tick_us_max"].max())
             # Cost of one iteration, from the WORST tick: conservative, since it
             # also carries the tick's work outside the QP.
             per_iter = worst / iters if iters > 0 else float("nan")
-            fit = int(budget_us // (2 * per_iter)) if per_iter > 0 else None
-            full = cap and iters >= 0.95 * 2 * cap
-            res[(tag, name)] = {"cap": cap, "iters": iters, "worst": worst,
+            fit = int(budget_us // (ns * per_iter)) if per_iter > 0 else None
+            full = cap and iters >= 0.95 * ns * cap
+            res[(tag, name)] = {"cap": cap, "cold": ns == 1, "iters": iters, "worst": worst,
                                 "mean": float(d["tick_us_mean"].mean()),
                                 "p99": float(d["tick_us_p99"].mean()),
                                 "per_iter": per_iter, "fit": fit}
             verdict = "FITS" if worst <= C.PERIOD_US else "OVER THE PERIOD"
-            out(f"  {C.LABEL[tag]:9s} {name:9s} cap {cap}: {iters:5.1f} iterations/tick "
+            out(f"  {C.LABEL[tag]:9s} {name:9s} cap {cap}{' cold' if ns == 1 else ''}: "
+                f"{iters:5.1f} iterations/tick "
                 f"{'(full path)' if full else '(NOT the full path: see below)'}, worst "
                 f"{worst / 1000:6.2f} ms -> {verdict}; {per_iter:5.0f} us per iteration; "
                 f"largest cap inside the budget: {fit}")
@@ -321,10 +359,12 @@ def figure(a: str, b: str, sa, sb, worst: Dict) -> None:
                            color=[C.COLOUR[t] for t in NMPC], alpha=1.0 if i == 0 else 0.5,
                            edgecolor="k", lw=0.5, hatch=None if i == 0 else "//")
         for rect, tag in zip(bars, NMPC):
-            cap = worst.get((tag, name), {}).get("cap")
+            w = worst.get((tag, name), {})
+            cap = w.get("cap")
             if cap and np.isfinite(rect.get_height()):
                 axes[1].text(rect.get_x() + rect.get_width() / 2, rect.get_height(),
-                             f"{name}\ncap {cap}", ha="center", va="bottom", fontsize=5.5)
+                             f"{name}\ncap {cap}{' cold' if w.get('cold') else ''}",
+                             ha="center", va="bottom", fontsize=5.5)
     axes[1].axhline(C.PERIOD_US / 1000, color="k", ls=":", lw=0.8)
     axes[1].set_xticks(x)
     axes[1].set_xticklabels([C.LABEL[t] for t in NMPC])
@@ -337,7 +377,7 @@ def figure(a: str, b: str, sa, sb, worst: Dict) -> None:
     fig.subplots_adjust(bottom=0.32)
     fig.legend(handles=handles, loc="lower center", ncol=4, frameon=False,
                bbox_to_anchor=(0.5, 0.0))
-    F.save(fig, "fig22_jetson_timing")
+    F.save(fig, "fig22_jetson_timing" + pair_suffix(a, b))
 
 
 def table(a: str, b: str, stats: Dict, worst: Dict) -> None:
@@ -361,9 +401,10 @@ def table(a: str, b: str, stats: Dict, worst: Dict) -> None:
     lines.append(r"\end{tabular}")
     d = os.path.join(C.OUT_ROOT, "tables")
     os.makedirs(d, exist_ok=True)
-    with open(os.path.join(d, "tab_jetson.tex"), "w") as fh:
+    name = f"tab_jetson{pair_suffix(a, b)}.tex"
+    with open(os.path.join(d, name), "w") as fh:
         fh.write("\n".join(lines) + "\n")
-    print("  wrote tables/tab_jetson.tex")
+    print(f"  wrote tables/{name}")
 
 
 def timing_sweep(out: Out, a: str, b: str) -> None:
@@ -386,6 +427,91 @@ def timing_sweep(out: Out, a: str, b: str) -> None:
     out()
 
 
+# ------------------------------------------------------------- 6. accuracy --
+
+def scenario_of(cell: str, tag: str) -> str:
+    return cell.rsplit(f"_{tag}_s", 1)[0]
+
+
+def accuracy_section(out: Out, a: str, b: str, sa, sb) -> Dict[str, dict]:
+    """What the QP settings cost the control, cell for cell on the same scenarios
+    and seeds: two runs of one machine at other caps or warm-start modes, or two
+    machines at the same ones (then this should read "no change")."""
+    out(f"6. CONTROL, jetson_timing, {b} against {a}, cell for cell (same scenario and seed)")
+    out("  RMSE ratio: geometric mean, and the worst cell. Failed solves: tier1_entries "
+        "(a solve that failed, the last plan replayed), summed. Safe mode: ticks, summed.")
+    res: Dict[str, dict] = {}
+    if sa is None or sb is None:
+        out("  needs both runs' jetson_timing summaries")
+        out()
+        return res
+    m = sa.merge(sb, on=["cell", "tag"], suffixes=("_a", "_b"))
+    for tag in C.CTRL:
+        d = m[m["tag"] == tag]
+        if d.empty:
+            continue
+        ra, rb = d["rmse_mm_a"].to_numpy(float), d["rmse_mm_b"].to_numpy(float)
+        ok = (ra > 0) & (rb > 0) & np.isfinite(ra) & np.isfinite(rb)
+        ratio = rb[ok] / ra[ok]
+        g = float(np.exp(np.mean(np.log(ratio)))) if ok.any() else float("nan")
+        i = int(np.argmax(ratio)) if ok.any() else None
+        worst_cell = d["cell"].to_numpy()[ok][i] if i is not None else "-"
+        r = {"n": len(d), "gmean": g, "worst": float(ratio.max()) if ok.any() else float("nan"),
+             "worst_cell": worst_cell,
+             "fail_a": int(d["tier1_entries_a"].sum()), "fail_b": int(d["tier1_entries_b"].sum()),
+             "safe_a": int(d["safe_ticks_a"].sum()), "safe_b": int(d["safe_ticks_b"].sum()),
+             "it_a": float(d["qp_iter_mean_a"].mean()), "it_b": float(d["qp_iter_mean_b"].mean()),
+             "p99_a": float(d["tick_us_p99_a"].mean()), "p99_b": float(d["tick_us_p99_b"].mean()),
+             "max_a": float(d["tick_us_max_a"].max()), "max_b": float(d["tick_us_max_b"].max())}
+        res[tag] = r
+        out(f"  {C.LABEL[tag]:9s} {r['n']:3d} cells: RMSE x{g:.3f} (worst x{r['worst']:.2f}, "
+            f"{worst_cell}); failed solves {r['fail_a']} -> {r['fail_b']}; safe-mode ticks "
+            f"{r['safe_a']} -> {r['safe_b']}")
+        if tag in NMPC:
+            out(f"  {'':9s} QP iterations/tick {r['it_a']:.1f} -> {r['it_b']:.1f}; tick p99 "
+                f"{r['p99_a']:.0f} -> {r['p99_b']:.0f} us, worst {r['max_a']:.0f} -> "
+                f"{r['max_b']:.0f} us")
+        # The scenarios that moved most, so a cost is located, not just averaged.
+        if ok.any() and (r["worst"] > 1.05 or r["fail_a"] != r["fail_b"]):
+            d2 = d[ok].copy().assign(ratio=ratio, scen=[scenario_of(c, tag) for c in d["cell"][ok]])
+            by = d2.groupby("scen").agg(ratio=("ratio", lambda x: float(np.exp(np.mean(np.log(x))))),
+                                        fa=("tier1_entries_a", "sum"),
+                                        fb=("tier1_entries_b", "sum"))
+            for scen, row in by.sort_values("ratio", ascending=False).head(4).iterrows():
+                out(f"  {'':9s}   {scen}: RMSE x{row['ratio']:.2f}, failed solves "
+                    f"{int(row['fa'])} -> {int(row['fb'])}")
+    out()
+    return res
+
+
+def accuracy_table(a: str, b: str, acc: Dict[str, dict]) -> None:
+    if not acc:
+        return
+    esc = lambda n: n.replace("_", chr(92) + "_")
+    lines = [r"\begin{tabular}{lrrrrrr}", r"\toprule",
+             rf" & RMSE ratio & \multicolumn{{2}}{{c}}{{failed solves}} & "
+             rf"\multicolumn{{2}}{{c}}{{QP iter./tick}} & worst tick [ms] \\",
+             r"\cmidrule(lr){3-4}\cmidrule(lr){5-6}",
+             rf" & {esc(b)}/{esc(a)} & {esc(a)} & {esc(b)} & {esc(a)} & {esc(b)} & "
+             rf"{esc(a)} / {esc(b)} \\", r"\midrule"]
+    for tag in C.CTRL:
+        r = acc.get(tag)
+        if not r:
+            continue
+        nm = tag in NMPC
+        lines.append(f"{C.LABEL[tag]} & {r['gmean']:.3f} & {r['fail_a'] if nm else '--'} & "
+                     f"{r['fail_b'] if nm else '--'} & "
+                     f"{T.fmt(r['it_a']) if nm else '--'} & {T.fmt(r['it_b']) if nm else '--'} & "
+                     f"{r['max_a'] / 1000:.2f} / {r['max_b'] / 1000:.2f} \\\\")
+    lines += [r"\bottomrule", r"\end{tabular}"]
+    d = os.path.join(C.OUT_ROOT, "tables")
+    os.makedirs(d, exist_ok=True)
+    name = f"tab_jetson_control_{a}_{b}.tex"
+    with open(os.path.join(d, name), "w") as fh:
+        fh.write("\n".join(lines) + "\n")
+    print(f"  wrote tables/{name}")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--a", default="dgx", help="reference machine (default dgx)")
@@ -406,6 +532,7 @@ def main() -> int:
     stats = ticks_section(out, a.a, a.b, sa, sb)
     worst = worst_section(out, a.a, a.b, a.budget_us)
     timing_sweep(out, a.a, a.b)
+    acc = accuracy_section(out, a.a, a.b, sa, sb)
     path = os.path.join(MACHINES, f"compare_{a.a}_{a.b}.txt")
     os.makedirs(MACHINES, exist_ok=True)
     with open(path, "w") as fh:
@@ -413,6 +540,7 @@ def main() -> int:
     print(f"wrote {path}")
     figure(a.a, a.b, sa, sb, worst)
     table(a.a, a.b, stats, worst)
+    accuracy_table(a.a, a.b, acc)
     return 0
 
 
