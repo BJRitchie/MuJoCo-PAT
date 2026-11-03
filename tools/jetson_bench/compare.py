@@ -158,6 +158,11 @@ def machines_section(out: Out, a: str, b: str, mans: Dict[str, dict]) -> None:
     if mans.get(a) and mans.get(b):
         ma, mb = mans[a]["machine"], mans[b]["machine"]
         for k in ("image_id", "blasfeo_target", "build_type", "pat_arch_flags"):
+            # A field one machine did not record (a packaged workspace carries no
+            # CMakeCache.txt) is unknown, not different: the binary's sha256,
+            # checked below, is what proves the build is the same.
+            if ma.get(k) is None or mb.get(k) is None:
+                continue
             if ma.get(k) != mb.get(k):
                 problems.append(f"{k} differs ({ma.get(k)} vs {mb.get(k)}): not the same "
                                 "build, so a timing difference is not the hardware alone")
