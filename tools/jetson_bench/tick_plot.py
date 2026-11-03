@@ -52,6 +52,21 @@ def hists_of(run: str, study: str) -> dict:
     return out
 
 
+def title_of(run: str, man) -> str:
+    """Two short lines: the machine, then how the NMPCs' QPs ran."""
+    m = (man or {}).get("machine", {})
+    machine = "Jetson Orin Nano" if "orin" in run.lower() else \
+        "DGX" if run.lower().startswith("dgx") else (m.get("cpu_model") or run)
+    caps, solves = K.caps_of(man), K.solves_of(man)
+    if not caps:
+        return f"{machine}\n{K.qp_mode(man)}"
+    cap = "/".join(dict.fromkeys(str(caps[t]) for t in K.NMPC if t in caps))
+    cap = f"cap{'s' if '/' in cap else ''} {cap}"
+    cold = all(solves.get(t) == 1 for t in caps)
+    return f"{machine}\n" + (f"cold start, no retry, {cap}" if cold else
+                             f"warm start + cold retry, {cap}")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("runs", nargs="+", help="machine runs (data/thesis_eval/machines/<run>)")
@@ -71,32 +86,41 @@ def main() -> int:
                              sharex=True, sharey=True, squeeze=False,
                              gridspec_kw={"wspace": 0.08})
     axes = axes[0]
-    for ax, run in zip(axes, a.runs):
+    for i, (ax, run) in enumerate(zip(axes, a.runs)):
         _, man = K.load(run, a.study)
-        for tag in C.CTRL:
+        n_over = 0
+        for tag in F.DRAW_ORDER:              # SQP-NMPC last, on top
             h = data[run].get(tag)
             if not h or not h["n"]:
                 continue
-            C.stairs_tick_hist(ax, h, color=C.COLOUR[tag])
+            C.stairs_tick_hist(ax, h, color=C.COLOUR[tag], lw=F.ctrl_lw(tag, 0.9),
+                               zorder=F.ctrl_z(tag))
             ax.plot(h["max"], 1.0, marker="v", color=C.COLOUR[tag], ms=4, ls="none",
-                    transform=ax.get_xaxis_transform(), clip_on=False)
-            over = int(h["counts"][C.hist_edges()[:-1] >= C.PERIOD_US].sum())
+                    transform=ax.get_xaxis_transform(), clip_on=False, zorder=6)
+        for tag in C.CTRL:                    # the overrun notes, SQP-NMPC first
+            h = data[run].get(tag)
+            over = int(h["counts"][C.hist_edges()[:-1] >= C.PERIOD_US].sum()) if h else 0
             if over:
-                ax.text(0.98, 0.95 - 0.08 * C.CTRL.index(tag),
-                        f"{C.LABEL[tag]}: {over} over", color=C.COLOUR[tag],
-                        ha="right", va="top", fontsize=5.5, transform=ax.transAxes)
+                ax.text(0.97, 0.93 - 0.09 * n_over,
+                        f"{C.LABEL[tag]}: {over:,} of {h['n']:,} > 10 ms",
+                        color=C.COLOUR[tag], ha="right", va="top", fontsize=5.8,
+                        transform=ax.transAxes)
+                n_over += 1
         ax.axvline(C.PERIOD_US, color="k", ls=":", lw=0.8)
         ax.set_xscale("log")
         ax.set_yscale("log")
         ax.set_xlim(5, 3e4)
-        ax.set_xlabel("control tick [µs] (▼ worst recorded)")
-        ax.set_title(f"{run.replace('_', ' ')}\n{K.qp_mode(man)}", fontsize=6)
-    axes[0].set_ylabel("density")
-    fig.subplots_adjust(bottom=0.24)
-    F.legend_below(fig, [plt.Line2D([], [], color=C.COLOUR[c], marker=C.MARKER[c], lw=1.1,
-                                    ms=4, label=C.LABEL[c]) for c in C.CTRL] +
-                   [plt.Line2D([], [], color="k", ls=":", lw=0.8, label="10 ms period")],
-                   ncol=5)
+        ax.set_title(title_of(run, man), fontsize=7)
+        F.panel_label(ax, f"({'abcdefgh'[i]})")
+    axes[0].set_ylabel("density [1/µs]")
+    axes[n // 2].set_xlabel("control tick [µs]")
+    fig.subplots_adjust(bottom=0.24, top=0.83)
+    F.legend_below(fig, [plt.Line2D([], [], color=C.COLOUR[c], lw=F.ctrl_lw(c, 1.0),
+                                    label=C.LABEL[c]) for c in C.CTRL] +
+                   [plt.Line2D([], [], color="0.3", marker="v", ls="none", ms=4,
+                               label="worst tick recorded"),
+                    plt.Line2D([], [], color="k", ls=":", lw=0.8, label="10 ms period")],
+                   ncol=6)
     F.save(fig, f"fig_ticks_{a.study}_" + "_vs_".join(a.runs))
     return 0
 
