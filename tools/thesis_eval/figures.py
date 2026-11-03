@@ -1961,7 +1961,9 @@ def fig_live_twin_agreement() -> None:
                 p = f[(f["tag"] == c) & (f["shape"] == shape)]
                 if p.empty:
                     continue
-                ax.errorbar(p["t"], p["m"], yerr=[p["m"] - p["lo"], p["hi"] - p["m"]],
+                m = p["m"].to_numpy()
+                ax.errorbar(p["t"].to_numpy(), m,
+                            yerr=np.vstack([m - p["lo"].to_numpy(), p["hi"].to_numpy() - m]),
                             ls="none", marker=C.MARKER[c], ms=3.6 if c == "sqp" else 3.0,
                             mfc=C.COLOUR[c] if filled else "white", mec=C.COLOUR[c],
                             ecolor=C.COLOUR[c], elinewidth=0.6, mew=0.9, capsize=0,
