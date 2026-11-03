@@ -1,0 +1,12 @@
+\begin{tabular}{lrrrrrr}
+\toprule
+ & RMSE ratio & \multicolumn{2}{c}{failed solves} & \multicolumn{2}{c}{QP iter./tick} & worst tick [ms] \\
+\cmidrule(lr){3-4}\cmidrule(lr){5-6}
+ & orin\_nano/dgx\_n24 & dgx\_n24 & orin\_nano & dgx\_n24 & orin\_nano & dgx\_n24 / orin\_nano \\
+\midrule
+SQP-NMPC & 1.000 & 118 & 118 & 9.52 & 9.52 & 4.25 / 17.64 \\
+LMPC & 1.000 & 0 & 0 & 9.43 & 9.43 & 3.23 / 13.87 \\
+OMPC & 1.000 & -- & -- & -- & -- & 0.09 / 1.83 \\
+SMC & 1.000 & -- & -- & -- & -- & 0.09 / 0.08 \\
+\bottomrule
+\end{tabular}

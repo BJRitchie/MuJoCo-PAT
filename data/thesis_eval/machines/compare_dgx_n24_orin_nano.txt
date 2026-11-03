@@ -1,0 +1,57 @@
+Jetson comparison: dgx_n24 vs orin_nano
+
+1. MACHINES
+  dgx_n24: aarch64 (aarch64, 20 CPUs), governor performance, pinned to 6
+     build Release -mcpu=cortex-a78, BLASFEO ARMV8A_ARM_CORTEX_A76, image sha256:8fce4120e7fd, max temp 80.5 C, git 086e18c9
+     QP: SQP-NMPC cap 20 warm + retry, LMPC cap 20 warm + retry
+  orin_nano: ARMv8 Processor rev 1 (v8l) (aarch64, 6 CPUs), governor performance, pinned to 5
+     build None (no -march/-mcpu), BLASFEO ARMV8A_ARM_CORTEX_A76, image sha256:8fce4120e7fd, max temp 52.875 C, git fa1dbc27
+     QP: SQP-NMPC cap 20 warm + retry, LMPC cap 20 warm + retry
+  comparison: FAIR
+
+2. SAME INPUTS ON BOTH MACHINES?
+  132 of 132 cells identical tick for tick
+  RMSE, |orin_nano - dgx_n24|: max 0 mm, mean 0 mm over 132 cells
+
+3. CONTROL TICK, jetson_timing (all cells) [us]; period 10000 us (mean and percentiles from the tick histogram, to its 2% bins; worst exact)
+             machine       ticks     mean      p99    p99.9    worst  >period
+  SQP-NMPC   dgx_n24       55998      697     2692     3631     4251        0
+  SQP-NMPC   orin_nano     55998     3042    11749    15488    17641      843
+             orin_nano/dgx_n24             4.36x    4.37x             4.15x
+  LMPC       dgx_n24       55998      550     2455     2818     3231        0
+  LMPC       orin_nano     55998     2425    10965    12303    13868     1234
+             orin_nano/dgx_n24             4.41x    4.47x             4.29x
+  OMPC       dgx_n24       55998        3        4        9       87        0
+  OMPC       orin_nano     55998       15       19       31     1831        0
+             orin_nano/dgx_n24             4.69x    4.79x            21.03x
+  SMC        dgx_n24       55998        3        4        8       86        0
+  SMC        orin_nano     55998       16       20       32       81        0
+             orin_nano/dgx_n24             4.66x    4.90x             0.94x
+
+4. FORCED WORST CASE (every QP fails: the cap once per solve, two solves a tick with the warm start's cold retry, one without); budget 8000 us of the 10000 us period
+  SQP-NMPC  dgx_n24   cap 20:  40.0 iterations/tick (full path), worst   5.11 ms -> FITS;   128 us per iteration; largest cap inside the budget: 31
+  LMPC      dgx_n24   cap 20:  40.0 iterations/tick (full path), worst   4.72 ms -> FITS;   118 us per iteration; largest cap inside the budget: 33
+  SQP-NMPC  orin_nano cap 20:  40.0 iterations/tick (full path), worst  18.30 ms -> OVER THE PERIOD;   458 us per iteration; largest cap inside the budget: 8
+  LMPC      orin_nano cap 20:  40.0 iterations/tick (full path), worst  17.03 ms -> OVER THE PERIOD;   426 us per iteration; largest cap inside the budget: 9
+
+5. HORIZON SWEEP (timing study, 1x circle, exact state) [us]: mean / worst
+  LMPC      N 10: dgx_n24    190 /    323   orin_nano    816 /   1211
+  LMPC      N 20: dgx_n24    388 /    900   orin_nano   1689 /   2084
+  LMPC      N 30: dgx_n24    581 /    982   orin_nano   2592 /   3225
+  LMPC      N 40: dgx_n24    790 /   1628   orin_nano   3523 /   4517
+  LMPC      N 60: dgx_n24   1381 /   3408   orin_nano   5975 /  14412
+  SQP-NMPC  N 10: dgx_n24    242 /    428   orin_nano   1033 /   1551
+  SQP-NMPC  N 20: dgx_n24    483 /    701   orin_nano   2101 /   2556
+  SQP-NMPC  N 30: dgx_n24    732 /   1322   orin_nano   3193 /   4006
+  SQP-NMPC  N 40: dgx_n24    997 /   1747   orin_nano   4365 /   5765
+  SQP-NMPC  N 60: dgx_n24   1678 /   3014   orin_nano   7229 /   8580
+
+6. CONTROL, jetson_timing, orin_nano against dgx_n24, cell for cell (same scenario and seed)
+  RMSE ratio: geometric mean, and the worst cell. Failed solves: tier1_entries (a solve that failed, the last plan replayed), summed. Safe mode: ticks, summed.
+  SQP-NMPC   33 cells: RMSE x1.000 (worst x1.00, circle_x1_m1_bd0_tau1x_ekf_sqp_s1); failed solves 118 -> 118; safe-mode ticks 668 -> 668
+            QP iterations/tick 9.5 -> 9.5; tick p99 1577 -> 6795 us, worst 4251 -> 17641 us
+  LMPC       33 cells: RMSE x1.000 (worst x1.00, circle_x1_m1_bd0_tau1x_ekf_iter_s1); failed solves 0 -> 0; safe-mode ticks 2623 -> 2623
+            QP iterations/tick 9.4 -> 9.4; tick p99 1016 -> 4418 us, worst 3231 -> 13868 us
+  OMPC       33 cells: RMSE x1.000 (worst x1.00, circle_x1_m1_bd0_tau1x_ekf_ompc_s1); failed solves 0 -> 0; safe-mode ticks 0 -> 0
+  SMC        33 cells: RMSE x1.000 (worst x1.00, circle_x1_m1_bd0_tau1x_ekf_smc_s1); failed solves 0 -> 0; safe-mode ticks 0 -> 0
+
