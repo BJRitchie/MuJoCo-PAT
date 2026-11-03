@@ -238,11 +238,26 @@ When a live queue has finished:
 # in the container
 python3 tools/thesis_eval/live/collect.py --out data/thesis_eval/live/main
 python3 tools/thesis_eval/run_study.py run live_twin --jobs 12     # ~10 min
-# on the host
-~/.venvs/thesis_eval/bin/python tools/thesis_eval/figures.py live_nominal \
-    live_robustness live_estimator live_timing live_trace
+# on the host, where the per-tick records are (once per run; commit the result)
+~/.venvs/thesis_eval/bin/python tools/thesis_eval/live/derive.py
+# on any host, from a clone
+~/.venvs/thesis_eval/bin/python tools/thesis_eval/figures.py --all
 ~/.venvs/thesis_eval/bin/python tools/thesis_eval/tables.py
 ```
+
+`live/derive.py` turns the per-tick records git does not keep (each trial's
+`series.csv` and `trace_left.csv`, each machine run's `series/`) into a few MB of
+tables that it does keep, for the figures that draw per-tick data:
+`data/thesis_eval/live/main/derived/` (the nominal cells' tracks, the pooled per-tick
+error distributions as quantiles, the base estimate, and every failed or overrun
+NMPC tick of the uncapped and capped runs with a seeded sample of converged ones,
+plus exact per-stage means) and `data/thesis_eval/machines/derived/` (DGX against
+Orin Nano, tick by tick, as a 2-D histogram). It reads only, and rerunning it on the
+same records writes byte-identical files. Those figures read nothing else, so they
+render from a fresh clone; without the tables they are skipped with
+"run live/derive.py where the raw data is". In the node trace `qp_iters` is the
+tick's total over its solves (the cold retry included) and `qp_iters1` the first
+solve alone, so the total is `qp_iters`, not their sum.
 
 `collect.py` writes the run's `summary.csv`, one row per trial, with the knobs that
 name its cell and its health. `live_twin` is the offline twin of every live cell:
@@ -254,21 +269,39 @@ matches: 5 s in, as the bench starts it after the approach and ramp.
 | Figure | What |
 |---|---|
 | `fig17_live_nominal` | per controller, circle and rectangle: RMSE and torque change per tick, offline exact, offline twin and live |
-| `fig18_live_robustness` | speed, link mass, base damping and torque limit, live points over the twin's curves |
+| `fig18_live_robustness` | speed, link mass, base damping and torque limit, live points over the twin's curves; bottom row: joint-ticks at the torque limit across the speed sweep (replaces bench fig07) |
 | `fig19_live_estimator` | raw sensors, EKF, EKF + joint KF: RMSE, torque change, base position error, live and twin |
 | `fig20_live_timing` | every live control tick, with the worst marked, and each trial's worst and p99 tick; missed deadlines in the legend |
 | `fig21_live_trace` | one live rectangle per controller: error against time, and the path |
 | `fig23_live_cap` | the QP cap, before and after: each NMPC's worst tick per live trial uncapped (the first run) and capped, against the period; and each cell's RMSE capped against uncapped |
+| `fig24_live_exposed` | (derived) every NMPC tick's time against its QP iterations, uncapped and capped, converged or failed, worst tick marked; the mean tick of each kind split by stage (HPIPM, QP set-up, rollout, the rest) |
+| `fig25_live_circle`, `fig26_live_rectangle` | (derived) fig02/fig03 live: the last lap's path and a true-scale zoom, error against time (one repeat per controller, the median one), and the per-tick error of all three repeats as a violin, with each RMSE, the bench exact-state SQP-NMPC RMSE and the EKF's base position error |
+| `fig27_live_twin_agreement` | every live cell's RMSE (mean, min-max) against its twin's, one panel per condition family; the furthest off the line numbered and named |
+| `fig28_live_pareto` | fig05 live: MSE against torque energy at 1-4x speed |
+| `fig29_live_estimate` | (derived) the base estimate's x, y and yaw error against time, raw sensors against the EKF, SQP-NMPC on the rectangle |
+| `fig30_jetson_tick_pairs` | (derived) each Orin Nano tick against the same DGX tick, per controller, with the fitted ratio |
+| `fig31_live_base_yaw` | (derived) base yaw against time on the live nominal cells |
+| `fig08_robustness_bench` | fig08's bench-only panels: joint torque, sensor noise, delay |
 
 `tab_live_accuracy` and `tab_live_timing` hold the same numbers; the timing table's
-worst tick is the maximum over every trial. Git keeps each trial's report and
-summary and the collected summary; the per-tick records stay on the machine that
-ran them (`data/thesis_eval/.gitignore`), so `live_timing`'s histogram and
-`live_trace` need that machine.
+worst tick is the maximum over every trial. `tab_live_degradation` is the live
+rectangle RMSE of SQP-NMPC and the best baseline under each non-ideal condition
+(a cross: safe mode entered); `tab_timing_all` the tick on every platform (bench,
+live, and the Jetson cells on the DGX and on the Orin Nano warm and cold), pooled
+over all ticks; `tab_conditions` every condition and where it ran, read from
+`studies.py` and `live/live_studies.py`. Git keeps each trial's report and summary,
+the collected summary and the derived tables; the per-tick records stay on the
+machine that ran them (`data/thesis_eval/.gitignore`), so `live_timing`'s histogram
+needs that machine (or uses `tick_hist.json`).
+
+The figures follow the AMME/ACFR formatting guide: a serif face (STIX, shipped with
+matplotlib, so every machine renders alike), Okabe-Ito colours, a fine light grid,
+legends off the data, panels labelled (a), (b), ... for the caption to refer to.
+SQP-NMPC is drawn last and heavier in the comparison figures.
 
 ### On the Jetson
 
-`tools/jetson_bench/QUICKSTART.md`: the controllers' tick timing on the Orin NX
+`tools/jetson_bench/QUICKSTART.md`: the controllers' tick timing on the Orin Nano
 against the DGX, on the same scenarios with the same binary, and whether each
 NMPC's worst tick fits the period there (`jetson_timing` and `worst_case` studies,
 `run_study.py --results NAME`, `tools/jetson_bench/compare.py`).
