@@ -1,0 +1,73 @@
+Jetson comparison: orin_nano vs orin_nano_cold_cap17_18
+
+1. MACHINES
+  orin_nano: ARMv8 Processor rev 1 (v8l) (aarch64, 6 CPUs), governor performance, pinned to 5
+     build None (no -march/-mcpu), BLASFEO ARMV8A_ARM_CORTEX_A76, image sha256:8fce4120e7fd, max temp 52.875 C, git fa1dbc27
+     QP: SQP-NMPC cap 20 warm + retry, LMPC cap 20 warm + retry
+  orin_nano_cold_cap17_18: ARMv8 Processor rev 1 (v8l) (aarch64, 6 CPUs), governor performance, pinned to 5
+     build None (no -march/-mcpu), BLASFEO ARMV8A_ARM_CORTEX_A76, image sha256:8fce4120e7fd, max temp 53.093 C, git fa1dbc27
+     QP: SQP-NMPC cap 17 cold, no retry, LMPC cap 18 cold, no retry
+  comparison: FAIR
+
+2. SAME INPUTS ON BOTH MACHINES?
+  111 of 132 cells identical tick for tick
+  differing (cell, ticks a/b, largest state difference):
+    circle_x1_m2_bd0_tau1x_ekf_sqp_s3: 2000/2000 ticks, 2.55e-05
+    circle_x3_m1_bd0_tau1x_ekf_iter_s1: 933/933 ticks, 0.00123
+    circle_x3_m1_bd0_tau1x_ekf_iter_s2: 933/933 ticks, 0.00088
+    circle_x3_m1_bd0_tau1x_ekf_iter_s3: 933/933 ticks, 0.000406
+    circle_x3_m1_bd0_tau1x_ekf_sqp_s1: 933/933 ticks, 0.0224
+    circle_x3_m1_bd0_tau1x_ekf_sqp_s2: 933/933 ticks, 0.0239
+    circle_x3_m1_bd0_tau1x_ekf_sqp_s3: 933/933 ticks, 0.0145
+    circle_x4_m1_bd0_tau1x_ekf_sqp_s1: 800/800 ticks, 0.0345
+    circle_x4_m1_bd0_tau1x_ekf_sqp_s2: 800/800 ticks, 0.031
+    circle_x4_m1_bd0_tau1x_ekf_sqp_s3: 800/800 ticks, 0.0212
+  Not identical means the arithmetic differs (a different build, or a library choosing code by CPU). The timing comparison is then of nearly, not exactly, the same inputs; the RMSE below says how far apart the runs went.
+  RMSE, |orin_nano_cold_cap17_18 - orin_nano|: max 12.5 mm, mean 0.383 mm over 132 cells
+
+3. CONTROL TICK, jetson_timing (all cells) [us]; period 10000 us (mean and percentiles from the tick histogram, to its 2% bins; worst exact)
+             machine       ticks     mean      p99    p99.9    worst  >period
+  SQP-NMPC   orin_nano     55998     3042    11749    15488    17641      843
+  SQP-NMPC   orin_nano_cold_cap17_18    55998     2927     5754     6761     7417        0
+             orin_nano_cold_cap17_18/orin_nano             0.96x    0.49x             0.42x
+  LMPC       orin_nano     55998     2425    10965    12303    13868     1234
+  LMPC       orin_nano_cold_cap17_18    55998     2209     5012     5495     6362        0
+             orin_nano_cold_cap17_18/orin_nano             0.91x    0.46x             0.46x
+  OMPC       orin_nano     55998       15       19       31     1831        0
+  OMPC       orin_nano_cold_cap17_18    55998       15       19       32       71        0
+             orin_nano_cold_cap17_18/orin_nano             1.00x    1.00x             0.04x
+  SMC        orin_nano     55998       16       20       32       81        0
+  SMC        orin_nano_cold_cap17_18    55998       16       20       32       72        0
+             orin_nano_cold_cap17_18/orin_nano             1.00x    0.98x             0.89x
+
+4. FORCED WORST CASE (every QP fails: the cap once per solve, two solves a tick with the warm start's cold retry, one without); budget 8000 us of the 10000 us period
+  SQP-NMPC  orin_nano cap 20:  40.0 iterations/tick (full path), worst  18.30 ms -> OVER THE PERIOD;   458 us per iteration; largest cap inside the budget: 8
+  LMPC      orin_nano cap 20:  40.0 iterations/tick (full path), worst  17.03 ms -> OVER THE PERIOD;   426 us per iteration; largest cap inside the budget: 9
+  SQP-NMPC  orin_nano_cold_cap17_18 cap 17 cold:  17.0 iterations/tick (full path), worst   7.79 ms -> FITS;   458 us per iteration; largest cap inside the budget: 17
+  LMPC      orin_nano_cold_cap17_18 cap 18 cold:  18.0 iterations/tick (full path), worst   7.61 ms -> FITS;   423 us per iteration; largest cap inside the budget: 18
+
+5. HORIZON SWEEP (timing study, 1x circle, exact state) [us]: mean / worst
+  LMPC      N 10: orin_nano    816 /   1211   orin_nano_cold_cap17_18    815 /   1197
+  LMPC      N 20: orin_nano   1689 /   2084   orin_nano_cold_cap17_18   1685 /   2123
+  LMPC      N 30: orin_nano   2592 /   3225   orin_nano_cold_cap17_18   2575 /   3205
+  LMPC      N 40: orin_nano   3523 /   4517   orin_nano_cold_cap17_18   3500 /   4443
+  LMPC      N 60: orin_nano   5975 /  14412   orin_nano_cold_cap17_18   5974 /  14322
+  SQP-NMPC  N 10: orin_nano   1033 /   1551   orin_nano_cold_cap17_18   1032 /   1526
+  SQP-NMPC  N 20: orin_nano   2101 /   2556   orin_nano_cold_cap17_18   2099 /   2875
+  SQP-NMPC  N 30: orin_nano   3193 /   4006   orin_nano_cold_cap17_18   3193 /   4257
+  SQP-NMPC  N 40: orin_nano   4365 /   5765   orin_nano_cold_cap17_18   4346 /   5603
+  SQP-NMPC  N 60: orin_nano   7229 /   8580   orin_nano_cold_cap17_18   7181 /   8537
+
+6. CONTROL, jetson_timing, orin_nano_cold_cap17_18 against orin_nano, cell for cell (same scenario and seed)
+  RMSE ratio: geometric mean, and the worst cell. Failed solves: tier1_entries (a solve that failed, the last plan replayed), summed. Safe mode: ticks, summed.
+  SQP-NMPC   33 cells: RMSE x0.954 (worst x1.01, rectangle_x1_m1_bd0_tau0.5x_ekf_sqp_s1); failed solves 118 -> 229; safe-mode ticks 668 -> 600
+            QP iterations/tick 9.5 -> 8.8; tick p99 6795 -> 4762 us, worst 17641 -> 7417 us
+              circle_x1_m0.5_bd0_tau1x_ekf: RMSE x1.00, failed solves 0 -> 0
+              circle_x1_m1_bd0_tau1x_ekf: RMSE x1.00, failed solves 0 -> 0
+              rectangle_x1_m1_bd0_tau1x_ekf: RMSE x1.00, failed solves 2 -> 2
+              rectangle_x1_m1_bd0_tau1x_ekf-jkf: RMSE x1.00, failed solves 4 -> 4
+  LMPC       33 cells: RMSE x1.000 (worst x1.00, circle_x1_m1_bd0_tau1x_ekf_iter_s1); failed solves 0 -> 0; safe-mode ticks 2623 -> 2629
+            QP iterations/tick 9.4 -> 8.0; tick p99 4418 -> 3199 us, worst 13868 -> 6362 us
+  OMPC       33 cells: RMSE x1.000 (worst x1.00, circle_x1_m1_bd0_tau1x_ekf_ompc_s1); failed solves 0 -> 0; safe-mode ticks 0 -> 0
+  SMC        33 cells: RMSE x1.000 (worst x1.00, circle_x1_m1_bd0_tau1x_ekf_smc_s1); failed solves 0 -> 0; safe-mode ticks 0 -> 0
+

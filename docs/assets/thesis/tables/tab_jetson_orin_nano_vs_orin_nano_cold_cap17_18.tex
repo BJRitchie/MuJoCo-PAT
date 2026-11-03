@@ -1,0 +1,19 @@
+\begin{tabular}{llrrrrrr}
+\toprule
+ & & \multicolumn{4}{c}{control tick [\textmu s]} & \multicolumn{2}{c}{forced worst case} \\
+\cmidrule(lr){3-6}\cmidrule(lr){7-8}
+ & machine & mean & p99 & worst & $>$10\,ms & QP cap & worst [ms] \\
+\midrule
+SQP-NMPC & orin\_nano & 3042 & 11749 & 17641 & 843 & 20 & 18.3 \\
+ & orin\_nano\_cold\_cap17\_18 & 2927 & 5754 & 7417 & 0 & 17 & 7.79 \\
+\addlinespace
+LMPC & orin\_nano & 2425 & 10965 & 13868 & 1234 & 20 & 17 \\
+ & orin\_nano\_cold\_cap17\_18 & 2209 & 5012 & 6362 & 0 & 18 & 7.61 \\
+\addlinespace
+OMPC & orin\_nano & 15.4 & 19.1 & 1831 & 0 & -- & -- \\
+ & orin\_nano\_cold\_cap17\_18 & 15.3 & 19.1 & 70.8 & 0 & -- & -- \\
+\addlinespace
+SMC & orin\_nano & 16 & 20.4 & 80.9 & 0 & -- & -- \\
+ & orin\_nano\_cold\_cap17\_18 & 16 & 20 & 72.2 & 0 & -- & -- \\
+\bottomrule
+\end{tabular}
