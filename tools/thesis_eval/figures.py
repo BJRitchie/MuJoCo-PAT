@@ -1470,6 +1470,12 @@ def fig_live_cap() -> None:
     after, against the period; and each cell's RMSE after against before."""
     now = C.live_summary()
     before = C.live_summary(stale=True)
+    if before is not None and "qp_cap" in before:
+        # summary_stale.csv holds every superseded setting (LMPC's cap 14 at N 45
+        # since its retune): "before" is the uncapped first run only.
+        cap = before["qp_cap"].astype(str).str.strip().str.lower()
+        before = before[before["law"].ne("nmpc") | cap.isin(("none", "nan", ""))]
+        before = before if len(before) else None
     if now is None or before is None:
         return skip("live_cap", "needs both the capped run and the uncapped one "
                                 "(live/collect.py writes summary_stale.csv)")

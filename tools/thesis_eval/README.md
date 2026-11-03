@@ -142,6 +142,19 @@ and `timing_report.py` leave out trials run with settings `tuned.json` no longer
 (the uncapped first run), unless given `--include-stale`; `collect.py` writes them
 to `summary_stale.csv` instead, which `fig23_live_cap` compares with the capped run.
 
+**LMPC at N 24, cap 20.** Capped at 14, LMPC (N 45) collapsed into safe mode in the
+live mass-error cells and lost ~1.9x RMSE live. It was retuned at SQP's horizon
+with SQP's cap: `QP_CAP` is 20 for both, and
+
+```bash
+python3 tools/thesis_eval/tune.py iter --fix N=24 --start-from tools/thesis_eval/tuned.json --jobs 3
+```
+
+searches every other knob with N held at 24 (`--fix` always replaces the entry;
+the log is `tuning/iter_restart_fix-N24.json`). Its earlier live trials (N 45,
+cap 14) then go to `summary_stale.csv` with the uncapped run; `fig23_live_cap`
+reads only the uncapped ones from there.
+
 ```bash
 python3 tools/thesis_eval/tune.py sqp --jobs 4 --passes 8 \
     --torque-cap-from-others max --beat-others --start-from PREVIOUS_TUNED.json

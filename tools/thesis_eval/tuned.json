@@ -125,36 +125,36 @@
   "law": "nmpc",
   "args": [
    "--set",
-   "qp.max_iter=14",
+   "qp.max_iter=20",
    "--set",
    "nmpc.full_nonlinear=false",
    "--set",
-   "weights.Q_pos=[1,1,1000]",
+   "weights.Q_pos=[0.25,0.25,1000]",
    "--set",
-   "weights.Q_vel=[1.4,1.4,0.1875]",
+   "weights.Q_vel=[5.6,5.6,0.1875]",
    "--set",
    "weights.R=[0.07,0.07,0.07]",
    "--set",
-   "nmpc.N=45",
+   "nmpc.N=24",
    "--set",
-   "nmpc.Ts=0.033",
+   "nmpc.Ts=0.0462",
    "--set",
-   "nmpc.terminal_cost_multiplier=200"
+   "nmpc.terminal_cost_multiplier=280"
   ],
   "state": {
-   "qpos_xy": 1.0,
+   "qpos_xy": 0.25,
    "qpos_th": 1000.0,
-   "qvel_xy": 1.4,
+   "qvel_xy": 5.6,
    "qvel_th": 0.1875,
    "r": 0.06999999999999999,
-   "N": 45,
-   "Ts": 0.033,
-   "term": 200.0
+   "N": 24,
+   "Ts": 0.0462,
+   "term": 280.0
   },
   "feasible": true,
   "gmean_rmse_mm": {
    "shipped": 5.526343338463261,
-   "tuned": 6.626248462589661
+   "tuned": 7.776650654968076
   },
   "per_scenario": {
    "shipped": {
@@ -162,7 +162,7 @@
      "rmse_mm": 0.310887704,
      "rail_frac": 0.0,
      "safe_ticks": 0.0,
-     "tick_us_max": 1748.236,
+     "tick_us_max": 1898.084,
      "tau2_int_win": 0.0151348417,
      "err_var_mm2": 0.00843613924
     },
@@ -170,7 +170,7 @@
      "rmse_mm": 11.037275,
      "rail_frac": 0.0,
      "safe_ticks": 0.0,
-     "tick_us_max": 1591.248,
+     "tick_us_max": 887.362,
      "tau2_int_win": 0.0728069964,
      "err_var_mm2": 34.9867588
     },
@@ -178,7 +178,7 @@
      "rmse_mm": 29.1938351,
      "rail_frac": 0.0,
      "safe_ticks": 0.0,
-     "tick_us_max": 1088.428,
+     "tick_us_max": 1735.78,
      "tau2_int_win": 0.00810178516,
      "err_var_mm2": 572.495806
     },
@@ -186,7 +186,7 @@
      "rmse_mm": 0.651908187,
      "rail_frac": 0.0,
      "safe_ticks": 0.0,
-     "tick_us_max": 1004.762,
+     "tick_us_max": 1599.347,
      "tau2_int_win": 0.110472773,
      "err_var_mm2": 0.0483406199
     },
@@ -194,56 +194,55 @@
      "rmse_mm": 78.9307666,
      "rail_frac": 0.159275155,
      "safe_ticks": 171.0,
-     "tick_us_max": 4307.404,
-     "tau2_int_win": 0.30259909,
-     "err_var_mm2": 1365.50154
+     "tick_us_max": 3310.519,
+     "tau2_int_win": 0.302599087,
+     "err_var_mm2": 1365.50153
     }
    },
    "tuned": {
     "circle": {
-     "rmse_mm": 0.485268244,
+     "rmse_mm": 0.631039071,
      "rail_frac": 0.0,
      "safe_ticks": 0.0,
-     "tick_us_max": 1724.553,
-     "tau2_int_win": 0.0151756159,
-     "err_var_mm2": 0.0194707002
+     "tick_us_max": 1337.026,
+     "tau2_int_win": 0.0151495215,
+     "err_var_mm2": 0.037658037
     },
     "rectangle": {
-     "rmse_mm": 19.6004934,
+     "rmse_mm": 21.1252046,
      "rail_frac": 0.0,
      "safe_ticks": 0.0,
-     "tick_us_max": 1427.493,
-     "tau2_int_win": 0.0533732885,
-     "err_var_mm2": 46.0139857
+     "tick_us_max": 1285.059,
+     "tau2_int_win": 0.0520885129,
+     "err_var_mm2": 45.0378314
     },
     "step6": {
-     "rmse_mm": 37.0410818,
+     "rmse_mm": 56.852315,
      "rail_frac": 0.0,
      "safe_ticks": 0.0,
-     "tick_us_max": 2198.618,
-     "tau2_int_win": 0.00190444914,
-     "err_var_mm2": 657.877187
+     "tick_us_max": 1236.786,
+     "tau2_int_win": 0.000351331569,
+     "err_var_mm2": 194.154846
     },
     "circle2x": {
-     "rmse_mm": 0.783094155,
+     "rmse_mm": 0.880278533,
      "rail_frac": 0.0,
      "safe_ticks": 0.0,
-     "tick_us_max": 5628.003,
-     "tau2_int_win": 0.109581894,
-     "err_var_mm2": 0.088161513
+     "tick_us_max": 1245.219,
+     "tau2_int_win": 0.109072217,
+     "err_var_mm2": 0.0944382439
     },
     "rectangle2x": {
-     "rmse_mm": 46.3011803,
-     "rail_frac": 0.0400572246,
+     "rmse_mm": 42.6321771,
+     "rail_frac": 0.0476871722,
      "safe_ticks": 0.0,
-     "tick_us_max": 2360.712,
-     "tau2_int_win": 0.223470757,
-     "err_var_mm2": 153.896888
+     "tick_us_max": 1264.883,
+     "tau2_int_win": 0.184572433,
+     "err_var_mm2": 256.882772
     }
    }
   },
-  "evaluations": 137,
-  "qp_cap_note": "qp.max_iter added after tuning as the realtime bound (tune.py QP_CAP); the tuned knobs are unchanged"
+  "evaluations": 76
  },
  "ompc": {
   "law": "ompc",

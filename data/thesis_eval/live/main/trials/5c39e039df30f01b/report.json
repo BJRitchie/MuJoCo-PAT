@@ -1,0 +1,82 @@
+{
+ "spec": {
+  "tag": "iter",
+  "law": "nmpc",
+  "tuned_args": [
+   "--set",
+   "qp.max_iter=20",
+   "--set",
+   "nmpc.full_nonlinear=false",
+   "--set",
+   "weights.Q_pos=[0.25,0.25,1000]",
+   "--set",
+   "weights.Q_vel=[5.6,5.6,0.1875]",
+   "--set",
+   "weights.R=[0.07,0.07,0.07]",
+   "--set",
+   "nmpc.N=24",
+   "--set",
+   "nmpc.Ts=0.0462",
+   "--set",
+   "nmpc.terminal_cost_multiplier=280"
+  ],
+  "shape": "rectangle",
+  "speed": 1.0,
+  "repeat": 3,
+  "duration": 20.0,
+  "nav_warmup": 15.0,
+  "damping": 0.0,
+  "partner": "hold",
+  "state": "ekf",
+  "mass_scale": 0.75
+ },
+ "hash": "5c39e039df30f01b",
+ "health": {
+  "deadline_misses": 0,
+  "skipped_periods": 0,
+  "nav_overruns": 0,
+  "rows": 2000,
+  "rows_expected": 2000,
+  "rows_short": 0,
+  "trace_lines": 4400,
+  "torque_msgs": 2518,
+  "rt_threads": {
+   "nav": [
+    {
+     "policy": "FIFO",
+     "priority": 80,
+     "cpus": "5"
+    }
+   ],
+   "left": [
+    {
+     "policy": "FIFO",
+     "priority": 80,
+     "cpus": "6"
+    }
+   ],
+   "right": [
+    {
+     "policy": "FIFO",
+     "priority": 80,
+     "cpus": "7"
+    }
+   ]
+  },
+  "resources": {
+   "mem_avail_min_kb": 115169036,
+   "swap_used_max_kb": 0,
+   "temp_max_c": null,
+   "rss_max_kb": 690184
+  }
+ },
+ "machine": {
+  "hostname": "thinkstationpgx-f66e",
+  "cpu_governor": "performance",
+  "on_mains": null,
+  "usb_pd_watts": null,
+  "python": "3.10.12",
+  "date": "2026-11-02T14:39:09+00:00"
+ },
+ "finished": "2026-11-02T14:39:09+0000"
+}
