@@ -1,0 +1,19 @@
+\begin{tabular}{p{2.3cm}p{6.6cm}ll}
+\toprule
+condition & levels & testbench & live \\
+\midrule
+reference & 6 and 12\,cm steps & yes & -- \\
+ & circle (6\,cm radius, 8\,s lap); rectangle (12$\times$10\,cm, 5.5\,cm/s) & yes & 3 repeats \\
+speed & circle 1, 2, 3, 4$\times$; rectangle 1, 2, 3$\times$ & yes & same, 3 repeats \\
+link mass & 0.5, 0.75, 1, 1.5, 2, 3$\times$ model & yes & 0.5, 0.75, 1, 1.5, 2, 3$\times$ \\
+base damping & 0, 0.05, 0.5, 5, 50\,N\,s/m & yes & 0, 0.05, 0.5, 5, 50 \\
+torque limit & 0.5, 0.75, 1, 1.5, 2$\times$ 0.25\,N\,m & yes & 0.5, 0.75, 1, 1.5, 2$\times$ \\
+joint torque & 0, 0.025, 0.05, 0.1\,N\,m & yes & -- (body wrench only) \\
+partner arm & holds; mirrors; same direction & yes & holds \\
+state source & exact; raw flight sensors; EKF; EKF + joint KF & exact; others 10 seeds & raw, EKF, EKF + joint KF \\
+sensor noise & 0.5, 1, 2, 4, 8$\times$ flight profile & 20 seeds & flight profile \\
+state delay & 0, 1, 2, 3, 5 ticks & 5 seeds & real latency \\
+estimator warm-up & 60\,s (bench), 15\,s (live, twins) & yes & yes \\
+tick timing & DGX pinned; live \texttt{SCHED\_FIFO} 80; Orin Nano & 5 runs & all trials \\
+\bottomrule
+\end{tabular}

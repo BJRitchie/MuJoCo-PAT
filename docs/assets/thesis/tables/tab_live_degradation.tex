@@ -1,0 +1,15 @@
+\begin{tabular}{lrlr}
+\toprule
+condition (live, rectangle) & SQP-NMPC [mm] & best baseline [mm] & ratio \\
+\midrule
+nominal & 2.6 & 21 (LMPC) & 8.0 \\
+2$\times$ speed & 2.9$^\times$ & 41 (LMPC) & 14 \\
+link mass $0.5\times$ & 7.0 & 26 (SMC) & 3.8 \\
+link mass $2\times$ & 9.0 & 41 (SMC) & 4.5 \\
+link mass $3\times$ & 15 & 48 (SMC) & 3.2 \\
+base damping 0.5\,N\,s/m & 7.7 & 32 (SMC) & 4.1 \\
+base damping 5\,N\,s/m & 15 & 44 (SMC) & 2.9 \\
+torque limit $0.5\times$ & 2.7$^\times$ & 26$^\times$ (LMPC) & 9.4 \\
+raw sensors (no EKF) & 3.0 & 24$^\times$ (LMPC) & 8.1 \\
+\bottomrule
+\end{tabular}

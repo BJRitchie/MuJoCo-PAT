@@ -1,0 +1,37 @@
+\begin{tabular}{lrrrrr}
+\toprule
+ & \multicolumn{3}{c}{control tick [\textmu s]} & worst / & ticks \\
+\cmidrule(lr){2-4}
+ & mean & p99 & worst & period & over 10\,ms \\
+\midrule
+\multicolumn{6}{l}{\emph{bench: DGX, pinned, simulated time waits (1$\times$ circle, 5 runs)}} \\
+SQP-NMPC & 581 & 646 & 846 & 8.5\,\% & 0 \\
+LMPC & 459 & 522 & 785 & 7.8\,\% & 0 \\
+OMPC & 3.35 & 3.55 & 18 & 0.2\,\% & 0 \\
+SMC & 3.61 & 3.91 & 19.6 & 0.2\,\% & 0 \\
+\midrule
+\multicolumn{6}{l}{\emph{live: DGX, \texttt{SCHED\_FIFO} 80, real time (444 trials, 37 cells)}} \\
+SQP-NMPC & 813 & 2729 & 4244 & 42\,\% & 0 \\
+LMPC & 715 & 2619 & 3697 & 37\,\% & 0 \\
+OMPC & 28.8 & 104 & 260 & 2.6\,\% & 0 \\
+SMC & 32.3 & 118 & 286 & 2.9\,\% & 0 \\
+\midrule
+\multicolumn{6}{l}{\emph{DGX, Jetson cells: warm start, cold retry, cap 20 (11 scenarios $\times$ 3 seeds)}} \\
+SQP-NMPC & 697 & 2687 & 4251 & 43\,\% & 0 \\
+LMPC & 550 & 2453 & 3231 & 32\,\% & 0 \\
+OMPC & 3.28 & 3.9 & 87 & 0.9\,\% & 0 \\
+SMC & 3.43 & 4.13 & 85.9 & 0.9\,\% & 0 \\
+\midrule
+\multicolumn{6}{l}{\emph{Orin Nano: warm start, cold retry, cap 20 (11 scenarios $\times$ 3 seeds)}} \\
+SQP-NMPC & 3039 & 11664 & 17641 & 176\,\% & 843 \\
+LMPC & 2425 & 10862 & 13868 & 139\,\% & 1234 \\
+OMPC & 15.4 & 18.8 & 1831 & 18\,\% & 0 \\
+SMC & 16 & 20.2 & 80.9 & 0.8\,\% & 0 \\
+\midrule
+\multicolumn{6}{l}{\emph{Orin Nano: cold start, no retry, caps 17/18 (11 scenarios $\times$ 3 seeds)}} \\
+SQP-NMPC & 2925 & 5676 & 7417 & 74\,\% & 0 \\
+LMPC & 2209 & 4924 & 6362 & 64\,\% & 0 \\
+OMPC & 15.3 & 18.9 & 70.8 & 0.7\,\% & 0 \\
+SMC & 16 & 19.6 & 72.2 & 0.7\,\% & 0 \\
+\bottomrule
+\end{tabular}
