@@ -1740,7 +1740,7 @@ def _live_track(shape: str, name: str, corner_zoom: bool) -> None:
                   zorder=6)
         ax_v.text(k + 0.4, r, f"{r:.1f}" if r < 10 else f"{r:.0f}", va="center", ha="left",
                   fontsize=6.5, color=C.COLOUR[c], fontweight="bold" if c == "sqp" else "normal",
-                  zorder=6)
+                  zorder=6, bbox=dict(fc="white", ec="none", pad=0.4, alpha=0.9))
         if int(d["safe_ticks"].iloc[0]) > 0:
             safe |= mark_safe_at(ax_v, [k], [float(d["err_mm"].max()) * 1.3], [True])
     floors = []
