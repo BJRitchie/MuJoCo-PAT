@@ -32,11 +32,25 @@ import common as C  # noqa: E402
 FULL = 6.3     # inches: text width of an A4 page with 2.5 cm margins
 HALF = 3.1
 
+# The house style, after the AMME/ACFR formatting guide (formatting_tips-tricks,
+# python/format_figures.py): a serif face to sit with the thesis text (STIX, which
+# ships with matplotlib, so every machine renders the same glyphs, Unicode
+# included), the Okabe-Ito colour cycle, thin axes, a fine light grid on every
+# graph, legends kept off the data with a white edge, vector PDF for the thesis.
+# Captions carry the description; panels carry (a), (b), ... and only the short
+# titles that say which condition a panel is.
 plt.rcParams.update({
+    "font.family": "serif", "font.serif": ["STIXGeneral", "DejaVu Serif"],
+    "mathtext.fontset": "stix",
     "font.size": 8, "axes.titlesize": 8, "axes.labelsize": 8, "legend.fontsize": 7,
     "xtick.labelsize": 7, "ytick.labelsize": 7, "lines.linewidth": 1.1,
-    "axes.grid": True, "grid.alpha": 0.25, "grid.linewidth": 0.5,
+    "axes.linewidth": 0.6, "xtick.major.width": 0.6, "ytick.major.width": 0.6,
+    "axes.prop_cycle": matplotlib.cycler(color=["#0072B2", "#E69F00", "#009E73", "#CC79A7",
+                                                "#56B4E9", "#D55E00", "#F0E442", "#000000"]),
+    "axes.grid": True, "axes.grid.which": "major", "grid.alpha": 0.5, "grid.linewidth": 0.3,
+    "grid.color": "0.7",
     "axes.spines.top": False, "axes.spines.right": False,
+    "legend.framealpha": 0.8, "legend.edgecolor": "white", "legend.fancybox": False,
     "pdf.fonttype": 42, "ps.fonttype": 42, "savefig.bbox": "tight",
     "savefig.pad_inches": 0.02, "figure.dpi": 100,
 })
@@ -179,6 +193,30 @@ def _path_deviation(ref: np.ndarray, ee: np.ndarray) -> np.ndarray:
 LAP_S = 8.0
 
 
+def _zoom_box(ref: np.ndarray, paths, corner_zoom: bool):
+    """(centre, half-width) [m] of a true-scale zoom on where the paths
+    [(tag, ee, deviation)] differ most from the reference."""
+    c_w, ee_w, dev_w = max(paths, key=lambda p: p[2].max())
+    k = int(dev_w.argmax())
+    if corner_zoom:
+        # Zoom on the reference corner nearest the worst deviation, sized to how
+        # far the paths stray from the reference within 3 cm of that corner (so
+        # each controller's corner is in view), between 8 mm and 40 mm.
+        lo, hi = ref.min(axis=0), ref.max(axis=0)
+        corners = np.array([[lo[0], lo[1]], [lo[0], hi[1]], [hi[0], lo[1]], [hi[0], hi[1]]])
+        centre = corners[int(((corners - ee_w[k]) ** 2).sum(axis=1).argmin())]
+        dev_near = [dev[np.linalg.norm(ee - centre, axis=1) < 0.03]
+                    for _, ee, dev in paths]
+        stray = max((d.max() for d in dev_near if d.size), default=0.0)
+        half = min(max(1.5 * stray, 8e-3), 0.04)
+    else:
+        # Zoom on the EE point furthest off the path, over every controller.
+        nearest = ref[int(((ref - ee_w[k]) ** 2).sum(axis=1).argmin())]
+        centre = (nearest + ee_w[k]) / 2.0
+        half = max(1.6 * dev_w[k], 1.5e-3)
+    return centre, half
+
+
 def _trajectory(scen: str, name: str, title: str, corner_zoom: bool = False) -> None:
     """The last lap's path at true scale, a true-scale zoom on where the paths
     differ most, the error against time, and its distribution.
@@ -217,24 +255,7 @@ def _trajectory(scen: str, name: str, title: str, corner_zoom: bool = False) -> 
         plt.close(fig)
         return skip(name, f"no {scen} series")
 
-    c_w, ee_w, dev_w = max(paths, key=lambda p: p[2].max())
-    k = int(dev_w.argmax())
-    if corner_zoom:
-        # Zoom on the reference corner nearest the worst deviation, sized to how
-        # far the paths stray from the reference within 3 cm of that corner (so
-        # each controller's corner is in view), between 8 mm and 40 mm.
-        lo, hi = ref.min(axis=0), ref.max(axis=0)
-        corners = np.array([[lo[0], lo[1]], [lo[0], hi[1]], [hi[0], lo[1]], [hi[0], hi[1]]])
-        centre = corners[int(((corners - ee_w[k]) ** 2).sum(axis=1).argmin())]
-        dev_near = [dev[np.linalg.norm(ee - centre, axis=1) < 0.03]
-                    for _, ee, dev in paths]
-        stray = max((d.max() for d in dev_near if d.size), default=0.0)
-        half = min(max(1.5 * stray, 8e-3), 0.04)
-    else:
-        # Zoom on the EE point furthest off the path, over every controller.
-        nearest = ref[int(((ref - ee_w[k]) ** 2).sum(axis=1).argmin())]
-        centre = (nearest + ee_w[k]) / 2.0
-        half = max(1.6 * dev_w[k], 1.5e-3)
+    centre, half = _zoom_box(ref, paths, corner_zoom)
 
     ax_xy.plot(ref[:, 0], ref[:, 1], color="k", ls="--", lw=0.8)
     ax_z.plot((ref[:, 0] - centre[0]) * 1e3, (ref[:, 1] - centre[1]) * 1e3,
@@ -1267,7 +1288,9 @@ def fig_live_robustness() -> None:
         return skip("live_robustness", why)
     live = live[live["source"] == "ekf"]
     twin = twin[twin["source"] == "ekf"] if twin is not None else None
-    fig, axes = plt.subplots(2, 4, figsize=(FULL, 3.9))
+    fig = plt.figure(figsize=(FULL, 5.5))
+    gs = fig.add_gridspec(3, 4, height_ratios=[1, 1, 0.95], hspace=0.42, wspace=0.36)
+    axes = np.array([[fig.add_subplot(gs[i, j]) for j in range(4)] for i in range(2)])
     safe = False
     for i, shape in enumerate(("circle", "rectangle")):
         for j, (knob, xl, symlog) in enumerate(LIVE_SWEEPS):
@@ -1303,11 +1326,40 @@ def fig_live_robustness() -> None:
                 ax.set_xlabel(xl)
             if j == 0:
                 ax.set_ylabel(f"{shape} RMSE [mm]")
-    fig.tight_layout(rect=(0, 0.06, 1, 1))
+    # Bottom row: how often the speed sweep drove a joint to its torque limit
+    # (bench fig07's second row, live), circle and rectangle.
+    for j, shape in enumerate(("circle", "rectangle")):
+        ax = fig.add_subplot(gs[2, j])
+        lv = C.at_nominal(live[live["shape"] == shape], but="speed")
+        tw = C.at_nominal(twin[twin["shape"] == shape], but="speed") if twin is not None else None
+        for c in DRAW_ORDER:
+            if tw is not None:
+                d = tw[tw["tag"] == c]
+                pts = sorted(d["speed"].unique())
+                if pts:
+                    m, h = map(np.array, zip(*(C.ci95(100 * d[d["speed"] == v]["rail_frac"])
+                                               for v in pts)))
+                    ax.plot(pts, m, color=C.COLOUR[c], **TWIN_STYLE)
+                    ax.fill_between(pts, m - h, m + h, color=C.COLOUR[c], alpha=0.15, lw=0)
+            d = lv[lv["tag"] == c]
+            pts = sorted(d["speed"].unique())
+            if pts:
+                m, h = map(np.array, zip(*(C.ci95(100 * d[d["speed"] == v]["rail_frac"])
+                                           for v in pts)))
+                ax.errorbar(pts, m, yerr=h, color=C.COLOUR[c], marker=C.MARKER[c], mfc="none",
+                            **LIVE_STYLE)
+                safe |= mark_safe_at(ax, pts, m, [_live_failed(d[d["speed"] == v]) for v in pts])
+        mark_nominal(ax, 1.0)
+        ax.set_xticks(sorted(lv["speed"].unique()))
+        ax.set_xlabel("speed factor")
+        ax.text(0.04, 0.96, shape, transform=ax.transAxes, ha="left", va="top", fontsize=7)
+        if j == 0:
+            ax.set_ylabel("joint-ticks at\ntorque limit [%]")
     handles = ctrl_handles() + live_handles() + [nominal_handle()] + \
         ([safe_handle()] if safe else [])
-    fig.legend(handles=handles, loc="lower center", ncol=4, frameon=False,
-               bbox_to_anchor=(0.5, 0.0), fontsize=6.5)
+    ax_leg = fig.add_subplot(gs[2, 2:])
+    ax_leg.axis("off")
+    ax_leg.legend(handles=handles, loc="center", ncol=2, frameon=False, fontsize=6.5)
     save(fig, "fig18_live_robustness")
 
 
@@ -1548,6 +1600,628 @@ def fig_live_cap() -> None:
     save(fig, "fig23_live_cap")
 
 
+# ------------------------------------------------------- live, per tick --
+# The figures below that need per-tick data read live/derive.py's small tables
+# (data/thesis_eval/live/main/derived/, machines/derived/), which are in git, so
+# they render from a clone. The comparison the reader must see first is SQP-NMPC
+# against the baselines: it is drawn last, on top, with a heavier line.
+
+#: Drawing order: the baselines first, SQP-NMPC last (on top).
+DRAW_ORDER = ["smc", "ompc", "iter", "sqp"]
+NO_DERIVED = "no derived table: run live/derive.py where the raw data is"
+FAILED_COLOUR = "#D55E00"        # Okabe-Ito vermillion: a failed QP solve
+CONVERGED_COLOUR = "0.55"
+
+
+def ctrl_lw(c: str, base: float = 0.8) -> float:
+    return base * 1.6 if c == "sqp" else base
+
+
+def ctrl_z(c: str) -> int:
+    return 4 if c == "sqp" else 3
+
+
+def derived(name: str, where: str = "live"):
+    base = os.path.join(C.LIVE_DIR, C.LIVE_RUN, "derived") if where == "live" else \
+        os.path.join(C.DATA_ROOT, "machines", "derived")
+    p = os.path.join(base, name)
+    return pd.read_csv(p) if os.path.isfile(p) else None
+
+
+def panel_label(ax, text: str) -> None:
+    """(a), (b), ... just above the panel's top-left corner, where the caption
+    refers to it."""
+    ax.annotate(text, xy=(0, 1), xycoords="axes fraction", xytext=(-2, 4),
+                textcoords="offset points", ha="right", va="bottom", fontweight="bold")
+
+
+def quantile_violin(ax, pos: float, q, v, colour, width: float = 0.75,
+                    floor: float = 1e-3, sigma_dec: float = 0.03) -> None:
+    """A violin on a log axis, drawn from a distribution's quantiles (q, v): the
+    density of log10(v) is the derivative of the quantile function's inverse,
+    lightly smoothed, so the shape is the data's and not a kernel guess in
+    linear space. A bar from the minimum to the maximum and a median tick."""
+    q, v = np.asarray(q, float), np.maximum(np.asarray(v, float), floor)
+    z = np.maximum.accumulate(np.log10(v))
+    if z[-1] - z[0] < 1e-9:
+        return
+    zg = np.linspace(z[0], z[-1], 500)
+    dens = np.gradient(np.interp(zg, z, q), zg)
+    sig = max(sigma_dec / (zg[1] - zg[0]), 1.0)
+    k = np.arange(-int(4 * sig), int(4 * sig) + 1)
+    kern = np.exp(-0.5 * (k / sig) ** 2)
+    dens = np.convolve(np.pad(dens, len(k) // 2, mode="edge"), kern / kern.sum(), "valid")
+    dens = dens / dens.max() * width / 2
+    y = 10.0 ** zg
+    ax.fill_betweenx(y, pos - dens, pos + dens, color=colour, alpha=0.5, lw=0, zorder=2)
+    ax.plot(np.r_[pos - dens, (pos + dens)[::-1]], np.r_[y, y[::-1]], color=colour, lw=0.6,
+            zorder=2)
+    ax.plot([pos, pos], [v[0], v[-1]], color="0.25", lw=0.5, zorder=2)
+    med = float(np.interp(0.5, q, v))
+    ax.plot([pos - width * 0.22, pos + width * 0.22], [med, med], color="0.15", lw=0.9, zorder=3)
+
+
+def _live_track(shape: str, name: str, corner_zoom: bool) -> None:
+    """Live tracking on one shape, flight sensing through the EKF: the last lap's
+    path (one repeat per controller, the one with the median RMSE of three) and a
+    true-scale zoom on where the paths differ most; that repeat's error against
+    time; and the per-tick error pooled over all three repeats' scoring windows,
+    with each controller's RMSE (mean of three) and the floors it is judged by."""
+    tr, dist = derived(f"track_{shape}.csv"), derived("errdist.csv")
+    if tr is None or dist is None:
+        return skip(name, NO_DERIVED)
+    dist = dist[dist["shape"] == shape]
+    fig = plt.figure(figsize=(FULL, 4.5))
+    gs = fig.add_gridspec(2, 2, width_ratios=[1.0, 1.55], wspace=0.32, hspace=0.42)
+    ax_xy, ax_z = fig.add_subplot(gs[0, 0]), fig.add_subplot(gs[1, 0])
+    ax_t, ax_v = fig.add_subplot(gs[0, 1]), fig.add_subplot(gs[1, 1])
+    paths, ref, safe, w0 = [], None, False, None
+    for c in DRAW_ORDER:
+        s = tr[tr["tag"] == c]
+        if s.empty:
+            continue
+        lap = s[s["t_s"] >= s["t_s"].iloc[-1] - LAP_S]
+        if ref is None or c == "sqp":
+            ref = lap[["ref_x", "ref_y"]].to_numpy()
+        ee = lap[["ee_x", "ee_y"]].to_numpy()
+        paths.append((c, ee, _path_deviation(ref, ee)))
+        e = s["err_m"].to_numpy() * 1e3
+        ax_t.plot(s["t_s"], e, color=C.COLOUR[c], lw=ctrl_lw(c, 0.6), zorder=ctrl_z(c))
+        safe |= mark_safe_series(ax_t, s, s["t_s"], e)
+        w0 = float(s["window_start_s"].iloc[0])
+    if not paths:
+        plt.close(fig)
+        return skip(name, f"no {shape} tracks")
+    paths = [(c, ee, _path_deviation(ref, ee)) for c, ee, _ in paths]
+    # The lap is cut out of a longer run: keep the zoom off its cut ends.
+    trim = [(c, ee[10:-10], dev[10:-10]) for c, ee, dev in paths]
+    centre, half = _zoom_box(ref, trim, corner_zoom)
+    mm = 1e3
+    ax_xy.plot(ref[:, 0] * mm, ref[:, 1] * mm, color="k", ls=":", lw=0.9, zorder=5)
+    ax_z.plot((ref[:, 0] - centre[0]) * mm, (ref[:, 1] - centre[1]) * mm, color="k", ls=":",
+              lw=1.0, zorder=5)
+    for c, ee, _ in paths:
+        ax_xy.plot(ee[:, 0] * mm, ee[:, 1] * mm, color=C.COLOUR[c], lw=ctrl_lw(c, 0.7),
+                   zorder=ctrl_z(c))
+        ax_z.plot((ee[:, 0] - centre[0]) * mm, (ee[:, 1] - centre[1]) * mm, color=C.COLOUR[c],
+                  lw=ctrl_lw(c, 0.8), zorder=ctrl_z(c))
+    ax_xy.add_patch(plt.Rectangle((centre - half) * mm, 2 * half * mm, 2 * half * mm,
+                                  fill=False, ec="k", lw=0.7, zorder=6))
+    ax_xy.annotate("(b)", ((centre[0] - half) * mm, (centre[1] + half) * mm), xytext=(0, 1.5),
+                   textcoords="offset points", fontsize=6, ha="left", va="bottom")
+    ax_xy.set_aspect("equal", adjustable="datalim")
+    ax_xy.set_xlabel("x [mm]")
+    ax_xy.set_ylabel("y [mm]")
+    ax_z.set_xlim(-half * mm, half * mm)
+    ax_z.set_ylim(-half * mm, half * mm)
+    ax_z.set_aspect("equal")
+    ax_z.set_xlabel(r"$x - x_0$ [mm]")
+    ax_z.set_ylabel(r"$y - y_0$ [mm]")
+
+    if w0 is not None:
+        ax_t.axvline(w0, **NOMINAL_STYLE)
+    ax_t.set_yscale("log")
+    plain_log_y(ax_t)
+    ax_t.set_xlim(0, float(tr["t_s"].max()))
+    ax_t.set_xticks(np.arange(0, float(tr["t_s"].max()) + 0.1, 5.0))
+    ax_t.set_xlabel("time [s]")
+    ax_t.set_ylabel("EE error [mm]")
+
+    # The distribution: every tick of three repeats' scoring windows.
+    exact = C.summary("nominal")
+    live = C.live_summary()
+    for k, c in enumerate(C.CTRL):
+        d = dist[dist["tag"] == c]
+        if d.empty:
+            continue
+        quantile_violin(ax_v, k, d["q"], d["err_mm"], C.COLOUR[c])
+        r = float(d["rmse_mean_of_repeats_mm"].iloc[0])
+        ax_v.plot(k, r, marker="D", ms=4.5, mfc="white", mec=C.COLOUR[c], mew=1.2, ls="none",
+                  zorder=6)
+        ax_v.text(k + 0.4, r, f"{r:.1f}" if r < 10 else f"{r:.0f}", va="center", ha="left",
+                  fontsize=6.5, color=C.COLOUR[c], fontweight="bold" if c == "sqp" else "normal",
+                  zorder=6)
+        if int(d["safe_ticks"].iloc[0]) > 0:
+            safe |= mark_safe_at(ax_v, [k], [float(d["err_mm"].max()) * 1.3], [True])
+    floors = []
+    if exact is not None:
+        e = exact[exact["cell"] == f"{shape}_sqp"]
+        if len(e):
+            ax_v.axhline(float(e["rmse_mm"].iloc[0]), color=C.COLOUR["sqp"], ls="--", lw=0.8,
+                         zorder=1)
+            floors.append(plt.Line2D([], [], color=C.COLOUR["sqp"], ls="--", lw=0.8,
+                                     label=f"{C.LABEL['sqp']} RMSE, bench exact state"))
+    if live is not None:
+        nav = C.at_nominal(live[(live["source"] == "ekf") & (live["shape"] == shape)])
+        if len(nav):
+            ax_v.axhline(float(nav["est_pos_rms_mm"].mean()), color="0.2", ls="-.", lw=0.8,
+                         zorder=1)
+            floors.append(plt.Line2D([], [], color="0.2", ls="-.", lw=0.8,
+                                     label="EKF base position error (rms)"))
+    ax_v.set_yscale("log")
+    plain_log_y(ax_v)
+    ax_v.set_xticks(range(len(C.CTRL)))
+    ax_v.set_xticklabels([C.LABEL[c] for c in C.CTRL])
+    ax_v.set_xlim(-0.6, len(C.CTRL) - 0.25)
+    ax_v.set_ylabel("EE error per tick [mm]")
+    ax_v.grid(axis="x", visible=False)
+    for ax, lab in ((ax_xy, "(a)"), (ax_z, "(b)"), (ax_t, "(c)"), (ax_v, "(d)")):
+        panel_label(ax, lab)
+    handles = [plt.Line2D([], [], color=C.COLOUR[c], lw=ctrl_lw(c, 1.0), label=C.LABEL[c])
+               for c in C.CTRL]
+    handles += [plt.Line2D([], [], color="k", ls=":", lw=0.9, label="reference"),
+                plt.Line2D([], [], label="scoring starts", **NOMINAL_STYLE),
+                plt.Line2D([], [], ls="none", marker="D", ms=4.5, mfc="white", mec="0.2",
+                           mew=1.2, label="RMSE, mean of 3 repeats"),
+                plt.Line2D([], [], color="0.15", lw=0.9, label="median")] + floors
+    if safe:
+        handles.append(safe_handle())
+    legend_below(fig, handles, ncol=4)
+    save(fig, name)
+
+
+def fig_live_rectangle() -> None:
+    _live_track("rectangle", "fig26_live_rectangle", corner_zoom=True)
+
+
+def fig_live_circle() -> None:
+    _live_track("circle", "fig25_live_circle", corner_zoom=False)
+
+
+#: Node stages, grouped for the "where the time goes" bars: (label, grey).
+STAGE_GROUPS = (("QP solve (HPIPM)", "0.15"), ("QP set-up", "0.45"),
+                ("rollout", "0.68"), ("model and the rest", "0.88"))
+
+
+def _stage_split(r) -> List[float]:
+    """[ms] of one exposed_stages row, in STAGE_GROUPS order; they sum to the
+    mean tick."""
+    hp = r["hpipm_us"]
+    setup = max(r["qpsolve"] - hp, 0.0)
+    roll = r["rollout_dynamics"] + r["rollout_integrate"]
+    rest = r["tick_us"] - hp - setup - roll
+    return [v / 1000.0 for v in (hp, setup, roll, rest)]
+
+
+def fig_live_exposed() -> None:
+    """What the live runs exposed: every NMPC tick's time against the QP
+    iterations it took, before the cap (60 per solve, a failed solve retried
+    cold) and after it (20); and where a converged and a failed tick's time goes."""
+    t, st = derived("exposed_ticks.csv"), derived("exposed_stages.csv")
+    if t is None or st is None:
+        return skip("live_exposed", NO_DERIVED)
+    runs = (("uncapped", "before: 60 iterations, retried"), ("capped", "after: cap 20"))
+    fig = plt.figure(figsize=(FULL, 4.6))
+    outer = fig.add_gridspec(2, 1, height_ratios=[1.25, 1.0], hspace=0.5)
+    top = outer[0].subgridspec(1, 4, wspace=0.1)
+    axes = [fig.add_subplot(top[0, 0])]
+    axes += [fig.add_subplot(top[0, i], sharex=axes[0], sharey=axes[0]) for i in (1, 2, 3)]
+    period_ms = C.PERIOD_US / 1000
+    k = 0
+    for c in ("sqp", "iter"):
+        for run, title in runs:
+            ax = axes[k]
+            d = t[(t["run"] == run) & (t["tag"] == c)]
+            s = st[(st["run"] == run) & (st["tag"] == c)].set_index("kind")
+            for failed, colour, z in ((0, CONVERGED_COLOUR, 2), (1, FAILED_COLOUR, 3)):
+                p = d[d["failed"] == failed]
+                ax.plot(p["qp_iters"] + (np.random.default_rng(k).random(len(p)) - 0.5) * 0.6,
+                        p["tick_us"] / 1000, ls="none", marker=C.MARKER[c], ms=1.6, mew=0,
+                        color=colour, alpha=0.35 if failed == 0 else 0.5, zorder=z,
+                        rasterized=True)
+            worst = float(s["tick_us_max"].max())
+            over = int(s["over_period"].sum())
+            n = int(s["ticks"].sum())
+            nf = int(s.loc["failed", "ticks"]) if "failed" in s.index else 0
+            wrow = d.loc[d["tick_us"].idxmax()]
+            ax.plot(wrow["qp_iters"], worst / 1000, marker="v", ms=4.5, color="k", ls="none",
+                    zorder=5)
+            ax.axhline(period_ms, color="k", ls=":", lw=0.8, zorder=4)
+            ax.text(0.97, 0.03, f"worst {worst / 1000:.1f} ms\n{over:,} of {n:,} ticks > 10 ms\n"
+                    f"{100 * nf / n:.1f}% failed", transform=ax.transAxes, ha="right",
+                    va="bottom", fontsize=5.8, linespacing=1.15,
+                    bbox=dict(fc="white", ec="none", alpha=0.8, pad=1.0))
+            ax.set_title(f"{C.LABEL[c]}\n{title}", fontsize=7)
+            ax.set_xlabel("QP iterations in the tick")
+            if k:
+                ax.tick_params(axis="y", which="both", labelleft=False)
+            k += 1
+    axes[0].set_yscale("log")
+    plain_log_y(axes[0])
+    axes[0].set_ylim(0.2, 40)
+    axes[0].set_xlim(-4, 126)
+    axes[0].set_xticks([0, 20, 40, 60, 120])
+    axes[0].set_ylabel("control tick [ms]")
+    panel_label(axes[0], "(a)")
+
+    # Where the time goes: the mean tick of each kind, split by stage.
+    ax = fig.add_subplot(outer[1])
+    rows, labels = [], []
+    for run, title in runs:
+        for c in ("sqp", "iter"):
+            for kind in ("converged", "failed"):
+                r = st[(st["run"] == run) & (st["tag"] == c) & (st["kind"] == kind)]
+                if r.empty:
+                    continue
+                r = r.iloc[0]
+                rows.append(_stage_split(r))
+                labels.append(f"{title.split(':')[0]}, {C.LABEL[c]}, {kind} "
+                              f"({100 * r['ticks'] / st[(st['run'] == run) & (st['tag'] == c)]['ticks'].sum():.1f}%)")
+    y = np.arange(len(rows))[::-1].astype(float)
+    y[: len(rows) // 2] += 0.5          # a gap between before and after
+    left = np.zeros(len(rows))
+    vals = np.array(rows)
+    for j, (lab, grey) in enumerate(STAGE_GROUPS):
+        ax.barh(y, vals[:, j], left=left, height=0.72, color=grey, ec="0.1", lw=0.3, label=lab)
+        left += vals[:, j]
+    for yi, tot in zip(y, left):
+        ax.text(tot + 0.12, yi, f"{tot:.2f} ms", va="center", fontsize=6)
+    ax.axvline(period_ms, color="k", ls=":", lw=0.8)
+    ax.set_yticks(y)
+    ax.set_yticklabels(labels, fontsize=6.5)
+    ax.set_xlim(0, period_ms * 1.12)
+    ax.set_xlabel("mean control tick [ms], by stage")
+    ax.grid(axis="y", visible=False)
+    panel_label(ax, "(b)")
+    ax.legend(loc="lower right", fontsize=6, ncol=2)
+    handles = [plt.Line2D([], [], ls="none", marker="o", ms=4, color=CONVERGED_COLOUR,
+                          label="QP converged"),
+               plt.Line2D([], [], ls="none", marker="o", ms=4, color=FAILED_COLOUR,
+                          label="QP failed (cap reached / retried)"),
+               plt.Line2D([], [], ls="none", marker="v", ms=4.5, color="k", label="worst tick"),
+               plt.Line2D([], [], color="k", ls=":", lw=0.8, label="10 ms period")]
+    fig.legend(handles=handles, loc="lower center", bbox_to_anchor=(0.5, 0.965), ncol=4,
+               frameon=False)
+    save(fig, "fig24_live_exposed")
+
+
+#: Condition families of the live cells, in panel order: (key, title).
+FAMILIES = (("nominal", "nominal"), ("speed", "speed 2-4×"), ("mass", "link mass 0.5-3×"),
+            ("damping", "base damping"), ("tau", "torque limit 0.5-2×"),
+            ("sensing", "raw sensors / EKF + joint KF"))
+
+
+def _family(r) -> str:
+    if r["source"] != "ekf":
+        return "sensing"
+    for k, nominal in C.LIVE_KNOBS.items():
+        if abs(float(r[k]) - nominal) > 1e-9:
+            return k
+    return "nominal"
+
+
+def _cell_label(r) -> str:
+    out = [r["shape"][:4] + "."]
+    fam = _family(r)
+    if fam == "speed":
+        out.append(f"{float(r['speed']):g}×")
+    elif fam == "mass":
+        out.append(f"m {float(r['mass']):g}×")
+    elif fam == "damping":
+        out.append(f"b {float(r['damping']):g}")
+    elif fam == "tau":
+        out.append(f"τ {float(r['tau']):g}×")
+    elif fam == "sensing":
+        out.append(r["source"])
+    return " ".join(out) + f", {C.LABEL[r['tag']].replace('-NMPC', '')}"
+
+
+KNOB_COLS = ["shape", "speed", "mass", "damping", "tau", "source", "tag"]
+
+
+def fig_live_twin_agreement() -> None:
+    """Every live cell's RMSE (mean of three repeats, bars: min to max) against
+    its bench twin's (mean of ten sensor-noise seeds), one panel per condition
+    family. On the line, the real-time stack changes nothing."""
+    live, twin, why = _live_frames()
+    if live is None or twin is None:
+        return skip("live_twin_agreement", why or "no live_twin study")
+    lv = live.groupby(KNOB_COLS).agg(m=("rmse_mm", "mean"), lo=("rmse_mm", "min"),
+                                     hi=("rmse_mm", "max"), safe=("safe_ticks", "max"),
+                                     n=("rmse_mm", "size")).reset_index()
+    tw = twin.groupby(KNOB_COLS).agg(t=("rmse_mm", "mean"),
+                                     tsafe=("safe_ticks", "max")).reset_index()
+    d = lv.merge(tw, on=KNOB_COLS, how="inner")
+    if d.empty:
+        return skip("live_twin_agreement", "no live cell matches a twin")
+    d["family"] = d.apply(_family, axis=1)
+    d["ratio"] = d["m"] / d["t"]
+    lo = min(d["lo"].min(), d["t"].min()) * 0.7
+    hi = max(d["hi"].max(), d["t"].max()) * 1.4
+    fig, axes = plt.subplots(2, 3, figsize=(FULL, 4.5), sharex=True, sharey=True,
+                             gridspec_kw={"wspace": 0.08, "hspace": 0.28})
+    safe = False
+    for ax, (fam, title), lab in zip(axes.flat, FAMILIES, "abcdef"):
+        f = d[d["family"] == fam]
+        ax.plot([lo, hi], [lo, hi], color="0.3", lw=0.8, zorder=1)
+        for fac in (0.5, 2.0):
+            ax.plot([lo, hi], [lo * fac, hi * fac], color="0.6", lw=0.6, ls="--", zorder=1)
+        for c in DRAW_ORDER:
+            for shape, filled in (("circle", False), ("rectangle", True)):
+                p = f[(f["tag"] == c) & (f["shape"] == shape)]
+                if p.empty:
+                    continue
+                ax.errorbar(p["t"], p["m"], yerr=[p["m"] - p["lo"], p["hi"] - p["m"]],
+                            ls="none", marker=C.MARKER[c], ms=3.6 if c == "sqp" else 3.0,
+                            mfc=C.COLOUR[c] if filled else "white", mec=C.COLOUR[c],
+                            ecolor=C.COLOUR[c], elinewidth=0.6, mew=0.9, capsize=0,
+                            zorder=ctrl_z(c))
+                safe |= mark_safe_at(ax, p["t"], p["m"], list(p["safe"] > 0))
+        # The cells furthest off the line, named (at most three per panel).
+        off = f.assign(dev=np.abs(np.log(f["ratio"])))
+        off = off[off["dev"] > np.log(1.6)].nlargest(3, "dev")
+        # Numbered on the plot and named in a key in the panel's empty corner
+        # below the line (the points sit on or above it).
+        key = []
+        for i, (_, r) in enumerate(off.sort_values("m", ascending=False).iterrows(), 1):
+            ax.annotate(str(i), (r["t"], r["m"]), xytext=(-5, 4), textcoords="offset points",
+                        ha="right", va="bottom", fontsize=6, fontweight="bold", color="0.1")
+            key.append(f"{i}  {_cell_label(r)}")
+        if key:
+            ax.text(0.97, 0.03, "\n".join(key), transform=ax.transAxes, ha="right",
+                    va="bottom", fontsize=5.5, linespacing=1.25,
+                    bbox=dict(fc="white", ec="0.8", lw=0.4, alpha=0.9, pad=1.5))
+        within = float((np.abs(np.log(f["ratio"])) <= np.log(1.5)).mean()) if len(f) else 0
+        ax.text(0.03, 0.97, f"{len(f)} cells, {100 * within:.0f}% within ×1.5",
+                transform=ax.transAxes, ha="left", va="top", fontsize=6,
+                bbox=dict(fc="white", ec="none", alpha=0.8, pad=0.8))
+        ax.set_title(title, fontsize=7)
+        ax.set_xscale("log")
+        ax.set_yscale("log")
+        ax.set_xlim(lo, hi)
+        ax.set_ylim(lo, hi)
+        ax.set_aspect("equal")
+        plain_log_y(ax)
+        ax.xaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda v, _: f"{v:g}"))
+        panel_label(ax, f"({lab})")
+    for ax in axes[1]:
+        ax.set_xlabel("bench twin RMSE [mm]")
+    for ax in axes[:, 0]:
+        ax.set_ylabel("live RMSE [mm]")
+    within = float((np.abs(np.log(d["ratio"])) <= np.log(1.5)).mean())
+    print(f"    live/twin: {len(d)} cells, {100 * within:.0f}% within x1.5, "
+          f"median ratio {d['ratio'].median():.2f}")
+    handles = [plt.Line2D([], [], ls="none", marker=C.MARKER[c], color=C.COLOUR[c], ms=4,
+                          label=C.LABEL[c]) for c in C.CTRL]
+    handles += [plt.Line2D([], [], ls="none", marker="o", mfc="white", mec="0.3", ms=4,
+                           label="circle"),
+                plt.Line2D([], [], ls="none", marker="o", color="0.3", ms=4, label="rectangle"),
+                plt.Line2D([], [], color="0.3", lw=0.8, label="live = twin"),
+                plt.Line2D([], [], color="0.6", lw=0.6, ls="--", label="×2, ×½")]
+    if safe:
+        handles.append(safe_handle())
+    legend_below(fig, handles, ncol=5)
+    save(fig, "fig27_live_twin_agreement")
+
+
+def fig_live_pareto() -> None:
+    """fig05 on the live speed cells: MSE against torque energy in the scoring
+    window, mean of three repeats, the speed as the marker's size and label."""
+    live, _, why = _live_frames(need_twin=False)
+    if live is None:
+        return skip("live_pareto", why)
+    sp = C.at_nominal(live[live["source"] == "ekf"], but="speed")
+    fig, axes = plt.subplots(1, 2, figsize=(FULL, 2.8), gridspec_kw={"wspace": 0.28})
+    size = {1: 3.0, 2: 4.5, 3: 6.0, 4: 7.5}
+    safe = False
+    for ax, shape, lab in zip(axes, ("circle", "rectangle"), "ab"):
+        sub = sp[sp["shape"] == shape]
+        for c in DRAW_ORDER:
+            d = sub[sub["tag"] == c].groupby("speed").agg(
+                x=("tau2_int_win", "mean"), y=("mse_mm2", "mean"),
+                safe=("safe_ticks", "max")).reset_index().sort_values("speed")
+            if d.empty:
+                continue
+            ax.plot(d["x"], d["y"], color=C.COLOUR[c], lw=ctrl_lw(c, 0.8), zorder=ctrl_z(c))
+            for _, r in d.iterrows():
+                ax.plot(r["x"], r["y"], color=C.COLOUR[c], marker=C.MARKER[c],
+                        ms=size[int(r["speed"])], mec="k", mew=0.3, ls="none",
+                        zorder=ctrl_z(c) + 1)
+                ax.annotate(f"{r['speed']:g}×", (r["x"], r["y"]), xytext=(4, -1),
+                            textcoords="offset points", fontsize=5.5, color=C.COLOUR[c],
+                            ha="left", va="top")
+            safe |= mark_safe_at(ax, d["x"], d["y"], list(d["safe"] > 0))
+        ax.set_xscale("log")
+        ax.set_yscale("log")
+        plain_log_y(ax)
+        ax.set_xlabel(r"$\int\|\tau\|^2 dt$ in window [N$^2$m$^2$s]")
+        ax.set_ylabel("MSE [mm²]")
+        ax.set_title(shape, fontsize=7)
+        panel_label(ax, f"({lab})")
+    speeds = [plt.Line2D([], [], ls="none", marker="o", color="0.6", mec="k", mew=0.3,
+                         ms=size[v], label=f"{v}× speed") for v in sorted(size)]
+    fig.subplots_adjust(bottom=0.2)
+    legend_below(fig, ctrl_handles() + speeds + ([safe_handle()] if safe else []), ncol=5)
+    save(fig, "fig28_live_pareto")
+
+
+def fig_live_estimate() -> None:
+    """The base estimate's error against time, raw flight sensors against the
+    EKF, SQP-NMPC on the live rectangle (one repeat each, the median one)."""
+    est = derived("estimate.csv")
+    if est is None:
+        return skip("live_estimate", NO_DERIVED)
+    fig, axes = plt.subplots(3, 1, figsize=(FULL, 3.8), sharex=True,
+                             gridspec_kw={"hspace": 0.3})
+    styles = {"raw": dict(color=EST_SHADE["raw"], lw=0.8),
+              "ekf": dict(color=EST_SHADE["ekf"], lw=0.9)}
+    names = {"raw": "raw sensors (last 5 Hz fix, held)", "ekf": "EKF (500 Hz IMU, fixes fused)"}
+    handles = []
+    for src in ("raw", "ekf"):
+        s = est[est["source"] == src]
+        if s.empty:
+            continue
+        yaw = np.remainder(s["est_yaw"].to_numpy() + np.pi, 2 * np.pi) - np.pi
+        for ax, v in zip(axes, (s["est_x"] * 1e3, s["est_y"] * 1e3, yaw * 1e3)):
+            ax.plot(s["t_s"], v, zorder=3 if src == "ekf" else 2, **styles[src])
+        handles.append(plt.Line2D([], [], **styles[src],
+                                  label=f"{names[src]}: position error "
+                                        f"{float(s['est_pos_rms_mm'].iloc[0]):.1f} mm rms"))
+        w0 = float(s["window_start_s"].iloc[0])
+    for ax, lab, p in zip(axes, ("x error [mm]", "y error [mm]", "yaw error [mrad]"), "abc"):
+        ax.axhline(0, color="0.4", lw=0.5)
+        ax.axvline(w0, **NOMINAL_STYLE)
+        ax.set_ylabel(lab)
+        panel_label(ax, f"({p})")
+    axes[-1].set_xlabel("time [s]")
+    axes[-1].set_xlim(0, float(est["t_s"].max()))
+    axes[-1].set_xticks(np.arange(0, float(est["t_s"].max()) + 0.1, 5.0))
+    fig.align_ylabels(axes)
+    legend_below(fig, handles + [plt.Line2D([], [], label="scoring starts", **NOMINAL_STYLE)],
+                 ncol=2)
+    save(fig, "fig29_live_estimate")
+
+
+def fig_live_base_yaw() -> None:
+    """The base's yaw against time on the live nominal cells (partner held), one
+    repeat per controller: what the arm's reaction does to the bus."""
+    fig, axes = plt.subplots(1, 2, figsize=(FULL, 2.4), sharey=True,
+                             gridspec_kw={"wspace": 0.08})
+    drawn = False
+    for ax, shape, lab in zip(axes, ("circle", "rectangle"), "ab"):
+        tr = derived(f"track_{shape}.csv")
+        if tr is None:
+            continue
+        for c in DRAW_ORDER:
+            s = tr[tr["tag"] == c]
+            if s.empty:
+                continue
+            yaw = np.unwrap(s["base_yaw"].to_numpy())
+            ax.plot(s["t_s"], (yaw - yaw[0]) * 1e3, color=C.COLOUR[c], lw=ctrl_lw(c, 0.7),
+                    zorder=ctrl_z(c))
+            drawn = True
+        ax.set_title(shape, fontsize=7)
+        ax.set_xlabel("time [s]")
+        panel_label(ax, f"({lab})")
+    if not drawn:
+        plt.close(fig)
+        return skip("live_base_yaw", NO_DERIVED)
+    axes[0].set_ylabel(r"base yaw $\psi - \psi_0$ [mrad]")
+    fig.subplots_adjust(bottom=0.24)
+    legend_below(fig, ctrl_handles(), ncol=4)
+    save(fig, "fig31_live_base_yaw")
+
+
+def fig_jetson_tick_pairs() -> None:
+    """Each Orin Nano control tick against the same tick on the DGX (the runs are
+    bit-identical, so they pair row by row), per controller: a 2-D histogram on
+    log axes, the fitted ratio and the 10 ms period."""
+    a, b = "dgx_n24", "orin_nano"
+    h = derived(f"tick_pairs_{a}_{b}.csv", where="machines")
+    st = derived(f"tick_pairs_{a}_{b}_stats.csv", where="machines")
+    if h is None or st is None:
+        return skip("jetson_tick_pairs", NO_DERIVED)
+    fig, axes = plt.subplots(1, 4, figsize=(FULL, 1.95), gridspec_kw={"wspace": 0.45})
+    vmax = h["count"].max()
+    norm = matplotlib.colors.LogNorm(vmin=1, vmax=vmax)
+    for ax, c, lab in zip(axes, C.CTRL, "abcd"):
+        d = h[h["tag"] == c]
+        s = st[st["tag"] == c]
+        for _, r in d.iterrows():
+            ax.add_patch(plt.Rectangle((r["a_lo_us"] / 1000, r["b_lo_us"] / 1000),
+                                       (r["a_hi_us"] - r["a_lo_us"]) / 1000,
+                                       (r["b_hi_us"] - r["b_lo_us"]) / 1000,
+                                       color=plt.cm.Greys(0.25 + 0.75 * norm(r["count"])), lw=0))
+        # The NMPCs' ticks are ms, the closed forms' us: each its own range, up
+        # to past the period so the deadline is on every panel.
+        lo = 0.2 if c in ("sqp", "iter") else 1e-3
+        x = np.array([lo, 30.0])
+        ax.plot(x, x, color="0.5", lw=0.6, ls="--")
+        if len(s):
+            k = float(s["ratio_gmean"].iloc[0])
+            ax.plot(x, k * x, color=C.COLOUR[c], lw=1.0)
+            mx_a, mx_b = float(s[f"{a}_max_us"].iloc[0]), float(s[f"{b}_max_us"].iloc[0])
+            ax.text(0.97, 0.12, f"Nano/DGX ×{k:.2f}\nNano worst {mx_b / 1000:.1f} ms",
+                    transform=ax.transAxes, ha="right", va="bottom", fontsize=5.8,
+                    color=C.COLOUR[c])
+            ax.plot(mx_a / 1000, 0.0, marker="^", ms=4, color=C.COLOUR[c], ls="none",
+                    transform=ax.get_xaxis_transform(), clip_on=False, zorder=6)
+            ax.plot(0.0, mx_b / 1000, marker=">", ms=4, color=C.COLOUR[c], ls="none",
+                    transform=ax.get_yaxis_transform(), clip_on=False, zorder=6)
+        ax.axhline(C.PERIOD_US / 1000, color="k", ls=":", lw=0.8)
+        ax.set_xscale("log")
+        ax.set_yscale("log")
+        ax.set_xlim(lo, 30)
+        ax.set_ylim(lo, 30)
+        ax.set_aspect("equal")
+        ax.set_title(C.LABEL[c], fontsize=7)
+        ax.set_xlabel("DGX tick [ms]")
+        panel_label(ax, f"({lab})")
+    for ax in axes:
+        ax.xaxis.set_major_locator(matplotlib.ticker.LogLocator(numticks=6))
+        ax.xaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda v, _: f"{v:g}"))
+        ax.yaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda v, _: f"{v:g}"))
+    for ax in axes:
+        ax.set_ylabel("Orin Nano tick [ms]", labelpad=1)
+    fig.subplots_adjust(bottom=0.34, top=0.87)
+    handles = [plt.Line2D([], [], color="0.3", lw=1.0, label="geometric-mean ratio"),
+               plt.Line2D([], [], color="0.5", lw=0.6, ls="--", label="same speed"),
+               plt.Line2D([], [], color="k", ls=":", lw=0.8, label="10 ms period"),
+               plt.Line2D([], [], ls="none", marker="^", color="0.3", ms=4,
+                          label="worst tick (on each axis)"),
+               plt.Rectangle((0, 0), 1, 1, color=plt.cm.Greys(0.7), label="ticks (log count)")]
+    # Square panels shrink to fit the width: hang the legend from where they end.
+    fig.canvas.draw()
+    y0 = min(ax.get_position().y0 for ax in axes)
+    fig.legend(handles=handles, loc="upper center", ncol=5, frameon=False,
+               bbox_to_anchor=(0.5, y0 - 0.42 / fig.get_figheight()))
+    save(fig, "fig30_jetson_tick_pairs")
+
+
+def fig_robustness_bench() -> None:
+    """fig08's panels that have no live equivalent: an unmodelled joint torque,
+    the sensor noise and the state delay (bench, rectangle, flight sensing for
+    the last two), so the live fig18 and this cover the conditions between them."""
+    panels = []
+    for study, xl, col, nominal in (("disturbance", "unmodelled joint torque [N m]",
+                                     "disturb_torque", 0.0),
+                                    ("noise", "flight sensor error (× profile)", "noise_scale",
+                                     1.0),
+                                    ("delay", "extra state delay [ticks]", "delay_ticks", 0.0)):
+        df = C.summary(study)
+        if df is not None:
+            df = df[df["scenario"] == SCORE_SHAPE]
+            if not df.empty:
+                panels.append((xl, df, col, nominal))
+    if not panels:
+        return skip("robustness_bench", "no disturbance, noise or delay study")
+    fig, axes = plt.subplots(1, len(panels), figsize=(FULL, 2.3), squeeze=False,
+                             gridspec_kw={"wspace": 0.32})
+    safe = False
+    for ax, (xl, df, x, nominal), lab in zip(axes[0], panels, "abc"):
+        safe |= _seeded(ax, df, x)
+        mark_nominal(ax, nominal)
+        ax.set_yscale("log")
+        plain_log_y(ax)
+        ax.set_xlabel(xl)
+        panel_label(ax, f"({lab})")
+    axes[0, 0].set_ylabel(f"{SCORE_SHAPE} RMSE [mm]")
+    handles = ctrl_handles() + [nominal_handle()] + ([safe_handle()] if safe else [])
+    fig.subplots_adjust(bottom=0.26)
+    legend_below(fig, handles, ncol=len(handles))
+    save(fig, "fig08_robustness_bench")
+
+
 FIGURES: Dict[str, Callable[[], None]] = {
     "step": fig_step, "circle": fig_circle, "rectangle": fig_rectangle,
     "dashboard": fig_dashboard, "pareto": fig_pareto, "base": fig_base,
@@ -1558,6 +2232,11 @@ FIGURES: Dict[str, Callable[[], None]] = {
     "live_nominal": fig_live_nominal, "live_robustness": fig_live_robustness,
     "live_estimator": fig_live_estimator, "live_timing": fig_live_timing,
     "live_trace": fig_live_trace, "live_cap": fig_live_cap,
+    "live_exposed": fig_live_exposed, "live_circle": fig_live_circle,
+    "live_rectangle": fig_live_rectangle, "live_twin_agreement": fig_live_twin_agreement,
+    "live_pareto": fig_live_pareto, "live_estimate": fig_live_estimate,
+    "jetson_tick_pairs": fig_jetson_tick_pairs, "live_base_yaw": fig_live_base_yaw,
+    "robustness_bench": fig_robustness_bench,
 }
 
 
