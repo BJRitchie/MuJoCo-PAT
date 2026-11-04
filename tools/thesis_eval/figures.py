@@ -176,6 +176,7 @@ def fig_step() -> None:
     axes[0, 1].legend(handles=ctrl_handles() + ([safe_handle()] if safe else []),
                       loc="upper right")
     fig.align_ylabels(axes[:, 0])
+    label_panels(axes)
     save(fig, "fig01_step")
 
 
@@ -305,6 +306,7 @@ def _trajectory(scen: str, name: str, title: str, corner_zoom: bool = False) -> 
         handles.append(safe_handle())
     fig.legend(handles=handles, loc="lower center", bbox_to_anchor=(0.5, 0.98),
                ncol=len(handles), frameon=False)
+    label_panels([ax_xy, ax_z, ax_v, ax_t])
     save(fig, name)
 
 
@@ -383,6 +385,7 @@ def fig_dashboard() -> None:
     cb.set_label("log10(value / best)")
     if safe:
         fig.text(0.02, 0.01, "× safe mode entered", fontsize=7)
+    label_panels(axes)
     save(fig, "fig04_dashboard")
 
 
@@ -420,6 +423,7 @@ def fig_pareto() -> None:
                loc="upper center", bbox_to_anchor=(0.5, 0.02), ncol=5, frameon=False)
     fig.legend(handles=speeds, loc="upper center", bbox_to_anchor=(0.5, -0.06), ncol=4,
                frameon=False)
+    label_panels(axes)
     save(fig, "fig05_pareto")
 
 
@@ -577,6 +581,7 @@ def fig_speed() -> None:
     axes[0, 0].set_ylabel("RMSE [mm]")
     axes[1, 0].set_ylabel("joint-ticks at limit [%]")
     legend_below(fig, ctrl_handles() + [safe_handle(), nominal_handle()], ncol=6)
+    label_panels(axes)
     save(fig, "fig07_speed")
 
 
@@ -660,6 +665,7 @@ def fig_robustness() -> None:
     handles = ctrl_handles() + [nominal_handle()] + ([safe_handle()] if safe else [])
     fig.legend(handles=handles, loc="lower center", ncol=len(handles),
                frameon=False, bbox_to_anchor=(0.5, 0.0))
+    label_panels(list(axes.flat)[:len(panels)])
     save(fig, "fig08_robustness")
 
 
@@ -745,6 +751,7 @@ def fig_sensitivity() -> None:
                                   label="safe mode entered (off scale)"))
     fig.legend(handles=handles, loc="lower center", bbox_to_anchor=(0.5, 0.94),
                ncol=len(handles), frameon=False, fontsize=6)
+    label_panels(axes)
     save(fig, "fig09_sensitivity")
 
 
@@ -815,6 +822,7 @@ def fig_timing() -> None:
     own_n.set_label(f"{C.VARIANT} N")
     axes[1].legend(handles=handles + [own_n] + ([safe_handle()] if safe else []),
                    fontsize=5.5)
+    label_panels(axes)
     save(fig, "fig10_timing")
 
 
@@ -875,6 +883,7 @@ def fig_constraint() -> None:
     legend_ctrl(axes[0, 0], loc="upper left", fontsize=6)
     axes[1, 2].legend(handles=[safe_handle()], loc="upper left", fontsize=6)
     fig.align_ylabels(axes[:, 0])
+    label_panels(axes)
     save(fig, "fig11_constraint")
 
 
@@ -944,6 +953,7 @@ def fig_observer() -> None:
     if safe:
         fig.legend(handles=[safe_handle()], loc="upper center", bbox_to_anchor=(0.5, 0.02),
                    frameon=False)
+    label_panels(axes)
     save(fig, "fig12_observer")
 
 
@@ -1017,6 +1027,7 @@ def fig_ffgain() -> None:
                                 for _, l in SRC], fontsize=6)
     extra = [safe_handle()] if safe else []
     legend_below(fig, ctrl_handles() + [nominal_handle()] + extra, ncol=6)
+    label_panels(axes)
     save(fig, "fig13_ffgain")
 
 
@@ -1041,7 +1052,7 @@ def fig_estimator() -> None:
     d = df[df["scenario"] == SCORE_SHAPE]
     fig = plt.figure(figsize=(FULL, 5.4))
     outer = fig.add_gridspec(2, 1, height_ratios=[1.25, 1.15], hspace=0.38)
-    top = outer[0].subgridspec(2, 3, hspace=0.12, wspace=0.42)
+    top = outer[0].subgridspec(2, 3, hspace=0.3, wspace=0.42)
     bottom = outer[1].subgridspec(1, 3, wspace=0.42)
     ax_x = fig.add_subplot(top[0, :2])
     ax_y = fig.add_subplot(top[1, :2], sharex=ax_x)
@@ -1126,6 +1137,7 @@ def fig_estimator() -> None:
             ax.set_yscale("log")
             plain_log_y(ax)
     legend_below(fig, ctrl_handles() + ([safe_handle()] if safe else []), ncol=5)
+    label_panels([ax_x, ax_y, ax_w, ax_e, ax_r, ax_u])
     save(fig, "fig14_estimator")
 
 
@@ -1169,6 +1181,7 @@ def fig_warmup() -> None:
             for s in ("raw", "ekf")]
     extra = [safe_handle()] if safe else []
     legend_below(fig, ctrl_handles() + srcs + [nominal_handle()] + extra, ncol=5)
+    label_panels(axes)
     save(fig, "fig16_warmup")
 
 
@@ -1254,6 +1267,7 @@ def fig_tuning() -> None:
     if safe:
         handles.append(safe_handle())
     legend_below(fig, handles, ncol=6 if safe else 5)
+    label_panels(axes)
     out_dir = C.OUT
     C.OUT = C.OUT_ROOT       # the comparison belongs with the thesis's (tuned) figures
     save(fig, "fig15_shipped_vs_tuned")
@@ -1340,6 +1354,7 @@ def fig_live_nominal() -> None:
                plt.Line2D([], [], color="0.3", marker="o", mfc="none", ls="none", ms=4.5,
                           label="live (EKF), mean and repeats")]
     legend_below(fig, handles + ([safe_handle()] if safe else []), ncol=4)
+    label_panels(axes)
     save(fig, "fig17_live_nominal")
 
 
@@ -1394,8 +1409,10 @@ def fig_live_robustness() -> None:
                 ax.set_ylabel(f"{shape} RMSE [mm]")
     # Bottom row: how often the speed sweep drove a joint to its torque limit
     # (bench fig07's second row, live), circle and rectangle.
+    rail_axes = []
     for j, shape in enumerate(("circle", "rectangle")):
         ax = fig.add_subplot(gs[2, j])
+        rail_axes.append(ax)
         lv = C.at_nominal(live[live["shape"] == shape], but="speed")
         tw = C.at_nominal(twin[twin["shape"] == shape], but="speed") if twin is not None else None
         for c in DRAW_ORDER:
@@ -1426,6 +1443,7 @@ def fig_live_robustness() -> None:
     ax_leg = fig.add_subplot(gs[2, 2:])
     ax_leg.axis("off")
     ax_leg.legend(handles=handles, loc="center", ncol=2, frameon=False, fontsize=6.5)
+    label_panels(list(axes.flat) + rail_axes)
     save(fig, "fig18_live_robustness")
 
 
@@ -1471,6 +1489,7 @@ def fig_live_estimator() -> None:
                    label="live (mean, 95% CI)"),
         plt.Line2D([], [], color="0.3", ls="--", lw=1.0, label="offline twin")]
     legend_below(fig, handles + ([safe_handle()] if safe else []), ncol=4)
+    label_panels(axes)
     save(fig, "fig19_live_estimator")
 
 
@@ -1533,6 +1552,7 @@ def fig_live_timing() -> None:
     fig.subplots_adjust(bottom=0.33)
     fig.legend(handles=handles, loc="lower center", ncol=4, frameon=False,
                bbox_to_anchor=(0.5, 0.0))
+    label_panels(axes)
     save(fig, "fig20_live_timing")
 
 
@@ -1579,6 +1599,7 @@ def fig_live_trace() -> None:
     handles = ctrl_handles() + [plt.Line2D([], [], color="k", ls=":", lw=0.8, label="reference"),
                                 plt.Line2D([], [], label="scoring starts", **NOMINAL_STYLE)]
     legend_below(fig, handles + ([safe_handle()] if safe else []), ncol=6)
+    label_panels(axes)
     save(fig, "fig21_live_trace")
 
 
@@ -1663,6 +1684,7 @@ def fig_live_cap() -> None:
     handles, _ = ax.get_legend_handles_labels()
     ax.legend(handles=handles + ([safe_handle()] if safe else []), fontsize=6,
               loc="upper left")
+    label_panels(axes)
     save(fig, "fig23_live_cap")
 
 
@@ -1699,6 +1721,12 @@ def panel_label(ax, text: str) -> None:
     refers to it."""
     ax.annotate(text, xy=(0, 1), xycoords="axes fraction", xytext=(-2, 4),
                 textcoords="offset points", ha="right", va="bottom", fontweight="bold")
+
+
+def label_panels(axes, start: int = 0) -> None:
+    """(a), (b), ... on each panel in the order given (row by row for a grid)."""
+    for k, ax in enumerate(np.ravel(axes)):
+        panel_label(ax, f"({chr(ord('a') + start + k)})")
 
 
 def quantile_violin(ax, pos: float, q, v, colour, width: float = 0.75,
@@ -1879,7 +1907,7 @@ def fig_live_exposed() -> None:
     runs = (("uncapped", "before: 60 iterations, retried"), ("capped", "after: cap 20"))
     fig = plt.figure(figsize=(FULL, 4.6))
     outer = fig.add_gridspec(2, 1, height_ratios=[1.25, 1.0], hspace=0.5)
-    top = outer[0].subgridspec(1, 4, wspace=0.1)
+    top = outer[0].subgridspec(1, 4, wspace=0.22)
     axes = [fig.add_subplot(top[0, 0])]
     axes += [fig.add_subplot(top[0, i], sharex=axes[0], sharey=axes[0]) for i in (1, 2, 3)]
     period_ms = C.PERIOD_US / 1000
@@ -1907,7 +1935,8 @@ def fig_live_exposed() -> None:
                     f"{100 * nf / n:.1f}% failed", transform=ax.transAxes, ha="right",
                     va="bottom", fontsize=5.8, linespacing=1.15,
                     bbox=dict(fc="white", ec="none", alpha=0.8, pad=1.0))
-            ax.set_title(f"{C.LABEL[c]}\n{title}", fontsize=7)
+            when, what = title.split(": ")
+            ax.set_title(f"{C.LABEL[c]}, {when}\n{what}", fontsize=7)
             ax.set_xlabel("QP iterations in the tick")
             if k:
                 ax.tick_params(axis="y", which="both", labelleft=False)
@@ -1918,7 +1947,7 @@ def fig_live_exposed() -> None:
     axes[0].set_xlim(-4, 126)
     axes[0].set_xticks([0, 20, 40, 60, 120])
     axes[0].set_ylabel("control tick [ms]")
-    panel_label(axes[0], "(a)")
+    label_panels(axes)
 
     # Where the time goes: the mean tick of each kind, split by stage.
     ax = fig.add_subplot(outer[1])
@@ -1948,7 +1977,7 @@ def fig_live_exposed() -> None:
     ax.set_xlim(0, period_ms * 1.12)
     ax.set_xlabel("mean control tick [ms], by stage")
     ax.grid(axis="y", visible=False)
-    panel_label(ax, "(b)")
+    panel_label(ax, "(e)")
     ax.legend(loc="lower right", fontsize=6, ncol=2)
     handles = [plt.Line2D([], [], ls="none", marker="o", ms=4, color=CONVERGED_COLOUR,
                           label="QP converged"),
