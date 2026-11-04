@@ -430,8 +430,8 @@ def fig_base() -> None:
     df = C.summary("balanced")
     if df is None:
         return skip("base", "no balanced study")
-    fig = plt.figure(figsize=(FULL, 4.0))
-    gs = fig.add_gridspec(2, 3, height_ratios=[1, 1.05], hspace=0.55, wspace=0.42)
+    fig = plt.figure(figsize=(FULL, 4.8))
+    gs = fig.add_gridspec(2, 3, height_ratios=[1, 1.05], hspace=0.75, wspace=0.42)
     titles = {"hold": "partner holds", "mirror": "partner mirrors", "same": "partner same"}
     safe = False
     for j, p in enumerate(("hold", "mirror", "same")):
@@ -464,7 +464,9 @@ def fig_base() -> None:
         ax.set_title(f"circle, {titles[p]}")
         ax.set_xlabel("time [s]")
         ax.set_ylabel(rf"base yaw $\psi$ [{unit}]")
-    ax = fig.add_subplot(gs[1, :])
+        panel_label(ax, f"({'abc'[j]})")
+    bottom = gs[1, :].subgridspec(1, 3, width_ratios=[1.35, 1, 1], wspace=0.6)
+    ax = fig.add_subplot(bottom[0])
     groups = [(shape, p) for shape in ("circle", "rectangle") for p in ("hold", "mirror", "same")]
     w = 0.2
     for k, c in enumerate(C.CTRL):
@@ -478,11 +480,68 @@ def fig_base() -> None:
         safe |= mark_safe_at(ax, xs, [y * 2.0 for y in ys], bad)
     ax.set_yscale("log")
     ax.set_xticks(range(len(groups)))
-    ax.set_xticklabels([f"{s}\n{titles[p]}" for s, p in groups])
+    ax.set_xticklabels([p for _, p in groups], rotation=90)
+    for i, shape in enumerate(("circle", "rectangle")):
+        ax.annotate(shape, xy=(1 + 3 * i, 0), xycoords=("data", "axes fraction"),
+                    xytext=(0, -36), textcoords="offset points", ha="center", va="top")
+    ax.axvline(2.5, color="0.6", lw=0.5)
     ax.set_ylabel(r"$\int\psi^2 dt$ [rad$^2$s]")
-    ax.legend(handles=ctrl_handles() + ([safe_handle()] if safe else []),
-              loc="lower center", bbox_to_anchor=(0.5, 1.0), ncol=5, frameon=False)
+    panel_label(ax, "(d)")
+    fig.legend(handles=ctrl_handles() + ([safe_handle()] if safe else []),
+               loc="center", bbox_to_anchor=(0.5, 0.51), ncol=5, frameon=False)
+    fig.legend(handles=[plt.Line2D([], [], color=C.COLOUR["sqp"], ls=ls, lw=1.0,
+                                   label=f"partner {p}") for p, ls in PARTNER_LS.items()],
+               loc="center", bbox_to_anchor=(0.5, 0.475), ncol=3, frameon=False,
+               handlelength=2.2)
+    _base_reaction(fig, bottom[1], bottom[2])
     save(fig, "fig06_base_attitude")
+
+
+#: The partner cases in the reaction panels, told apart by line style.
+PARTNER_LS = {"hold": "-", "same": "--", "mirror": ":"}
+
+
+def _base_reaction(fig, spec_tau, spec_mom) -> None:
+    """The arm's reaction on the bus, in the units an actuator is rated in: the
+    torque it must cancel [N m] and the momentum it must absorb [N m s], for
+    SQP-NMPC on the circle. The table is frictionless and nothing else acts on
+    the bus, so the torque is the tick-mean d(bus_lz)/dt, exactly (impulse over
+    the 10 ms tick); bus_lz is about the chaser's centre of mass, whose total
+    momentum is conserved."""
+    ax_t, ax_m = fig.add_subplot(spec_tau), fig.add_subplot(spec_mom)
+    peaks = {}
+    for p, ls in PARTNER_LS.items():
+        s = C.series("balanced", f"circle_p-{p}_sqp")
+        if s is None or "bus_lz" not in s:
+            continue
+        t, lz = s["t_s"].to_numpy(), s["bus_lz"].to_numpy()
+        tau = np.diff(lz) / np.diff(t)
+        tm = 0.5 * (t[1:] + t[:-1])
+        kw = dict(color=C.COLOUR["sqp"], ls=ls, lw=1.0 if p != "mirror" else 1.2)
+        ax_t.plot(tm, tau, **kw)
+        ax_m.plot(t, lz, **kw)
+        peaks[p] = (np.abs(tau).max(), np.abs(lz).max())
+    if not peaks:
+        for ax in (ax_t, ax_m):
+            ax.text(0.5, 0.5, "no momentum series", transform=ax.transAxes,
+                    ha="center", va="center")
+        return
+    for ax, k, unit, label in ((ax_t, 0, r"N$\,$m", r"reaction torque $\tau_z$ [N$\,$m]"),
+                               (ax_m, 1, r"N$\,$m$\,$s", r"bus momentum $L_z$ [N$\,$m$\,$s]")):
+        ax.axhline(0, color="0.6", lw=0.5)
+        ax.set_xlabel("time [s]")
+        ax.set_ylabel(label)
+        top = max(v[k] for v in peaks.values())
+        ax.set_ylim(-1.25 * top, 2.0 * top)
+        ax.text(0.03, 0.97, "peak [{}]:  ".format(unit)
+                + ",  ".join(f"{p} {v[k]:.2g}" for p, v in peaks.items() if p != "mirror")
+                + (f"\nmirror {peaks['mirror'][k]:.1e}" if "mirror" in peaks else ""),
+                transform=ax.transAxes, ha="left", va="top", fontsize=5.8,
+                bbox=dict(fc="white", ec="none", alpha=0.85, pad=1))
+    ax_t.set_title("circle, SQP-NMPC", fontsize=7)
+    ax_m.set_title("circle, SQP-NMPC", fontsize=7)
+    panel_label(ax_t, "(e)")
+    panel_label(ax_m, "(f)")
 
 
 # ------------------------------------------------------------------ speed --
