@@ -435,7 +435,7 @@ def fig_base() -> None:
     if df is None:
         return skip("base", "no balanced study")
     fig = plt.figure(figsize=(FULL, 4.8))
-    gs = fig.add_gridspec(2, 3, height_ratios=[1, 1.05], hspace=0.75, wspace=0.42)
+    gs = fig.add_gridspec(2, 3, height_ratios=[1, 1.05], hspace=0.55, wspace=0.42)
     titles = {"hold": "partner holds", "mirror": "partner mirrors", "same": "partner same"}
     safe = False
     for j, p in enumerate(("hold", "mirror", "same")):
@@ -498,11 +498,13 @@ def fig_base() -> None:
     ax.axvline(2.5, color="0.6", lw=0.5)
     ax.set_ylabel(r"$\int\psi^2 dt$ [rad$^2$s]")
     panel_label(ax, "(d)")
+    # Both legends above the top row: the controllers, then the partner line
+    # styles of panels (e) and (f).
     fig.legend(handles=ctrl_handles() + ([safe_handle()] if safe else []),
-               loc="center", bbox_to_anchor=(0.5, 0.51), ncol=5, frameon=False)
+               loc="lower center", bbox_to_anchor=(0.5, 0.945), ncol=5, frameon=False)
     fig.legend(handles=[plt.Line2D([], [], color=C.COLOUR["sqp"], ls=ls, lw=1.0,
                                    label=f"partner {p}") for p, ls in PARTNER_LS.items()],
-               loc="center", bbox_to_anchor=(0.5, 0.475), ncol=3, frameon=False,
+               loc="lower center", bbox_to_anchor=(0.5, 0.91), ncol=3, frameon=False,
                handlelength=2.2)
     _base_reaction(fig, bottom[1], bottom[2])
     save(fig, "fig06_base_attitude")
