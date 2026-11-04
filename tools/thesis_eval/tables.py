@@ -232,6 +232,11 @@ def _exact(v) -> str:
     return s
 
 
+def _read(path: str) -> str:
+    with open(path, encoding="utf-8") as fh:
+        return fh.read()
+
+
 def _set_args(args: Sequence[str]) -> dict:
     """{key: value} from a `--set key=value ...` argument list."""
     return dict(a.split("=", 1) for a in args[1::2])
@@ -240,7 +245,7 @@ def _set_args(args: Sequence[str]) -> dict:
 def _yaml_scalar(path: str, section: str, key: str) -> str:
     """One `key:` under `section:` in a law's YAML, without a YAML library."""
     import re
-    text = open(path, encoding="utf-8").read()
+    text = _read(path)
     m = re.search(rf"^\s+{section}:\s*\n((?:\s+.*\n)*?)\s+{key}:\s*([^\s#]+)", text, re.M)
     return m.group(2) if m else "?"
 
@@ -604,9 +609,426 @@ def tab_conditions() -> None:
     write("tab_conditions", lines)
 
 
+# ------------------------------------------------------- settings tables --
+# One table per component: what every study ran with, read from the committed
+# config and model files when the table is written, so it cannot drift from
+# them. Each row: the key (as it appears in its file), what it does, the value.
+# tab_tuned holds the tuned controller knobs; tab_conditions what each study
+# varies; these hold everything else.
+
+REPO = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+
+
+def _src(*parts: str) -> str:
+    return os.path.join(REPO, "src", *parts)
+
+
+def _flow(s: str, i: int = 0):
+    """Parse one YAML flow value ([..], {..} or a scalar) at s[i]: (value, next i)."""
+    while s[i] == " ":
+        i += 1
+    if s[i] in "[{":
+        close, out = ("]", []) if s[i] == "[" else ("}", {})
+        i += 1
+        while True:
+            while s[i] in " ,\n":
+                i += 1
+            if s[i] == close:
+                return out, i + 1
+            if close == "]":
+                v, i = _flow(s, i)
+                out.append(v)
+            else:
+                j = s.index(":", i)
+                key = s[i:j].strip()
+                v, i = _flow(s, j + 1)
+                out[key] = v
+    j = i
+    while j < len(s) and s[j] not in ",]}":
+        j += 1
+    return _scalar(s[i:j]), j
+
+
+def _scalar(t: str):
+    t = t.strip()
+    if len(t) >= 2 and t[0] == t[-1] and t[0] in "\"'":
+        return t[1:-1]
+    if t in ("true", "false"):
+        return t == "true"
+    for cast in (int, float):
+        try:
+            return cast(t)
+        except ValueError:
+            pass
+    return t
+
+
+def _yaml(path: str) -> dict:
+    """The block-mapping YAML subset the repo's config files use (nested maps,
+    flow lists and dicts, possibly over several lines), without a YAML library."""
+    import re
+    lines = []
+    for raw in _read(path).splitlines():
+        line = re.sub(r"\s+#.*$", "", raw.rstrip("\n"))
+        if line.strip() and not line.lstrip().startswith("#"):
+            lines.append(line)
+    root: dict = {}
+    stack = [(-1, root)]
+    k = 0
+    while k < len(lines):
+        line = lines[k]
+        ind = len(line) - len(line.lstrip())
+        key, _, rest = line.strip().partition(":")
+        rest = rest.strip()
+        while rest.count("[") + rest.count("{") > rest.count("]") + rest.count("}"):
+            k += 1
+            rest += " " + lines[k].strip()
+        while stack[-1][0] >= ind:
+            stack.pop()
+        parent = stack[-1][1]
+        key = key.strip().strip("\"'")
+        if rest:
+            parent[key] = _flow(rest)[0]
+        else:
+            parent[key] = {}
+            stack.append((ind, parent[key]))
+        k += 1
+    return root
+
+
+def _get(d: dict, *path: str):
+    for p in path:
+        d = d[p]
+    return d
+
+
+def _val(v, unit: str = "") -> str:
+    """A setting's value for the table: numbers as run, lists bracketed."""
+    if isinstance(v, bool):
+        return r"\texttt{" + str(v).lower() + "}"
+    u = rf"\,{unit}" if unit else ""
+    if isinstance(v, (list, tuple)):
+        if len(v) > 1 and len(set(map(str, v))) == 1:
+            return _val(v[0]) + u + " (each)"
+        return "[" + ", ".join(_val(x) for x in v) + "]" + u
+    if isinstance(v, str):
+        return r"\texttt{" + v.replace("_", r"\_") + "}"
+    if isinstance(v, int):
+        return str(v) + u                    # a count or a seed, never 2.0e7
+    return _exact(v) + u
+
+
+def _settings_table(name: str, sections: Sequence[Tuple[str, Sequence[Tuple[str, str, str]]]],
+                    note: str = "") -> None:
+    """sections: (heading, [(key, description, value), ...]). A key is set as code
+    and breaks after a dot; one starting with @ is a plain-text name (not a key in
+    any file). The description wraps."""
+    lines = [r"\begin{tabular}{@{}p{4.3cm}p{7.2cm}r@{}}", r"\toprule",
+             r"setting & what it does & value \\", r"\midrule"]
+    for heading, rows in sections:
+        lines.append(r"\multicolumn{3}{@{}l}{\textbf{" + heading + r"}} \\")
+        for key, desc, value in rows:
+            k = key[1:] if key.startswith("@") else \
+                r"\texttt{" + key.replace("_", r"\_").replace(".", r".\allowbreak ") + "}"
+            lines.append(f"{k} & {desc} & {value} \\\\")
+        lines.append(r"\addlinespace")
+    lines[-1] = r"\bottomrule" if not note else r"\midrule"
+    if note:
+        lines += [r"\multicolumn{3}{@{}p{\linewidth}@{}}{\footnotesize " + note + r"} \\",
+                  r"\bottomrule"]
+    lines.append(r"\end{tabular}")
+    write(name, lines)
+
+
+def _xacro_attr(path: str, pattern: str) -> List[str]:
+    import re
+    return re.findall(pattern, _read(path), re.S)
+
+
+def tab_settings_sim() -> None:
+    """The plant: MuJoCo, the scene, the simulator node, and the chaser model. The
+    bench steps the same scene MJCF, so these hold for both."""
+    sim = _get(_yaml(_src("pat_simulation", "config", "simulation.yaml")),
+               "pat_simulation", "ros__parameters")
+    flight = _get(_yaml(_src("pat_simulation", "config", "sensors_flight.yaml")),
+                  "pat_simulation", "ros__parameters")
+    scene = _src("pat_simulation", "models", "environment", "air_bearing_table.xacro")
+    arm = _src("pat_platform_description", "xacro", "piper_planar_arm.xacro")
+    bus = _src("pat_platform_description", "xacro", "pat_platform_bus.xacro")
+    import re
+    otag = re.search(r"<option[^>]*>", _read(scene)).group(0)
+    opt = dict(re.findall(r'(\w+)="([^"]+)"', otag))
+    bus_mass, bus_inertia = _xacro_attr(bus, r'<inertial[^>]*?mass="([^"]+)"\s*'
+                                             r'fullinertia="([^"]+)"')[0]
+    izz = float(bus_inertia.split()[2])
+    links = _xacro_attr(arm, r'<body name="link(\d)_\$\{side\}".*?mass="([^"]+)"')
+    moving = sum(float(m) for n, m in links if int(n) >= 2)     # link1 is welded
+    pos = dict(_xacro_attr(arm, r'<body name="link(\d)_\$\{side\}" pos="([^"]+)"'))
+    seg = [float(pos["3"].split()[0]),
+           math.hypot(*map(float, pos["4"].split()[:2])),
+           math.hypot(*map(float, pos["6"].split()[:2]))]
+    rng = dict(_xacro_attr(arm, r'<joint name="joint(\d)_\$\{side\}"[^>]*?range="([^"]+)"'))
+    tgt = _xacro_attr(scene, r'<body name="target"[^>]*>.*?<inertial[^>]*?mass="([^"]+)"')[0]
+    ctrl = [dict(_xacro_attr(scene, r'<motor name="motor(\d)_L"[^>]*?ctrlrange="([^"]+)"'))[j]
+            for j in "235"]
+    common = _get(_yaml(_src("pat_arm_control", "config", "arm_common.yaml")),
+                  "/**", "ros__parameters")
+    deg = lambda r: f"{math.degrees(r):.0f}"  # noqa: E731
+    q0 = sim["initial_arm_qpos"][:3]
+    _settings_table("tab_settings_sim", [
+        ("Physics (MuJoCo, scene MJCF)", [
+            ("option timestep", "physics step, the same in the live simulator and the bench",
+             _val(float(opt["timestep"]), "s")),
+            ("option integrator", "numerical integrator", _val(opt["integrator"])),
+            ("option gravity", "off: the air-bearing table as a planar microgravity analogue",
+             _val(opt["gravity"].replace(" ", ", "))),
+            ("sim_rate_hz", "physics rate of the live simulator", _val(sim["sim_rate_hz"], "Hz")),
+            ("pub_rate_hz", "rate the joint states, the odometry and \\texttt{/clock} are "
+             "published", _val(sim["pub_rate_hz"], "Hz")),
+            ("imu_rate_hz", "rate the IMU is sampled and published (flight overlay)",
+             _val(flight["imu_rate_hz"], "Hz")),
+            ("control_hz", "arm control rate (live and bench: 10\\,ms ticks)",
+             _val(common["control_hz"], "Hz")),
+        ]),
+        ("Table and plant", [
+            ("chaser_damping", r"table drag on $x$, $y$, yaw [N\,s/m, N\,m\,s/rad]; every study "
+             "sets 0 (frictionless) except the damping study", _val(sim["chaser_damping"])),
+            ("chaser_frictionloss", "dry friction on the same three axes",
+             _val(sim["chaser_frictionloss"])),
+            ("arm_torque_timeout", "an arm command older than this is zeroed, as a motor "
+             "driver's watchdog would", _val(sim["arm_torque_timeout"], "s")),
+            ("initial_arm_qpos", rf"start pose of joints 2, 3, 5, each arm: {deg(q0[0])}, "
+             rf"{deg(q0[1])}, {deg(q0[2])}\,deg", _val([round(v, 4) for v in q0], "rad")),
+            ("sensor_seed", "noise seed; the live runs and the bench set it per repeat",
+             _val(sim["sensor_seed"])),
+        ]),
+        ("Chaser model (xacro)", [
+            ("@bus mass", "the PAT servicer bus", _val(float(bus_mass), "kg")),
+            ("@bus $I_{zz}$", "yaw inertia of the bus about its centre",
+             _val(izz, r"kg\,m$^2$")),
+            ("@arm joints", "two planar arms, three revolute joints each (2, 3, 5 of the "
+             "Piper; 1, 4, 6 welded)", "3 per arm"),
+            ("@arm segments", "joint 2 to 3, joint 3 to 5, joint 5 to EE",
+             _val([round(v, 3) for v in seg], "m")),
+            ("@arm moving mass", "mass that joint 2 carries, each arm", _val(round(moving, 3), "kg")),
+            ("@joint range", "MJCF limits of joints 2, 3, 5 (the controllers keep 0.05 rad "
+             "inside them)", "[" + "; ".join(rng[j].replace(" ", ", ") for j in "235")
+             + r"]\,rad"),
+            ("@motor ctrlrange", "MJCF actuator limit of joints 2, 3, 5; the controllers "
+             "clamp to \\texttt{model\\_tau\\_max} (0.25\\,N\\,m)",
+             "[" + ", ".join(_val(float(r.split()[1])) for r in ctrl) + r"]\,N\,m"),
+            ("@target mass", "the client mock-up, its centre 0.9\\,m ahead of the chaser's",
+             _val(float(tgt), "kg")),
+        ]),
+    ])
+
+
+def tab_settings_sensors() -> None:
+    """The flight sensors (sensors_flight.yaml + the encoder overlay): every channel
+    with an error. The bench reads the same files for its raw and EKF sources."""
+    fl = _get(_yaml(_src("pat_simulation", "config", "sensors_flight.yaml")),
+              "pat_simulation", "ros__parameters")
+    enc = _get(_yaml(_src("pat_simulation", "config", "sensors_flight_encoders.yaml")),
+               "pat_simulation", "ros__parameters", "sensors")
+    what = {"imu_accel_x": (r"accelerometer $x$", r"m/s$^2$"),
+            "imu_accel_y": (r"accelerometer $y$", r"m/s$^2$"),
+            "imu_gyro_z": ("gyro yaw rate", "rad/s"),
+            "nav_x": ("relative position, along the line of sight", "m"),
+            "nav_y": ("relative position, across it", "m"),
+            "star_yaw": ("star-tracker yaw", "rad")}
+    lines = [r"\begin{tabular}{@{}p{4.6cm}lrrrrr@{}}", r"\toprule",
+             r"channel & unit & noise $\sigma$ & bias & bias walk $\sigma$ & rate [Hz] & "
+             r"delay [s] \\", r"\midrule"]
+    rate = lambda c: _val(c["rate_hz"]) if c["rate_hz"] else str(int(fl["imu_rate_hz"]))  # noqa
+    for ch, (desc, unit) in what.items():
+        c = fl["sensors"][ch]
+        lines.append(f"{desc} \\newline \\texttt{{{ch.replace('_', chr(92) + '_')}}} & {unit} & "
+                     f"{_val(c['noise_std'])} & {_val(c['bias'])} & {_val(c['bias_walk_std'])} & "
+                     f"{rate(c)} & {_val(c['delay_s'])} \\\\")
+    for grp, desc, unit in (("joint_pos", "joint encoder angle", "rad"),
+                            ("joint_vel", "joint encoder velocity", "rad/s")):
+        c = next(iter(enc[grp].values()))
+        lines.append(f"{desc} (every joint) \\newline \\texttt{{{grp.replace('_', chr(92) + '_')}}}"
+                     f" & {unit} & {_val(c['noise_std'])} & {_val(c['bias'])} & "
+                     f"{_val(c['bias_walk_std'])} & 100 & {_val(c['delay_s'])} \\\\")
+    lines += [r"\midrule",
+              r"\multicolumn{7}{@{}p{\linewidth}@{}}{\footnotesize Every other channel error "
+              r"(scale error, quantisation, dropout) is zero. Noise $\sigma$ is per sample at "
+              r"the channel's rate; the bias walk is a density, unit/$\sqrt{\mathrm{s}}$. The "
+              r"encoders are read once per control tick. The noise study scales noise, bias "
+              r"and bias walk together. File: \texttt{pat\_simulation/config/sensors\_flight.yaml}"
+              r" and \texttt{sensors\_flight\_encoders.yaml}.} \\",
+              r"\bottomrule", r"\end{tabular}"]
+    write("tab_settings_sensors", lines)
+
+
+def tab_settings_estimation() -> None:
+    """The base estimator (pat_gnc's ImuEkf, nav_flight.yaml) and the joint encoder
+    Kalman filter (arm_common.yaml)."""
+    nav = _get(_yaml(_src("pat_gnc", "config", "nav_flight.yaml")), "pat_nav", "ros__parameters")
+    common = _get(_yaml(_src("pat_arm_control", "config", "arm_common.yaml")),
+                  "/**", "ros__parameters")
+    e = lambda k: nav["imu_ekf." + k]  # noqa: E731
+    _settings_table("tab_settings_estimation", [
+        ("Base estimator: IMU error-state EKF (\\texttt{pat\\_gnc})", [
+            ("navigator", "the estimator the flight-sensing runs use", _val(nav["navigator"])),
+            ("nav_hz", "filter rate: one IMU propagation per sample", _val(nav["nav_hz"], "Hz")),
+            ("publish_hz", "rate the estimate is published to the arm controllers",
+             _val(nav["publish_hz"], "Hz")),
+            ("imu_ekf.gyro_noise_std", "gyro noise the filter assumes", _val(e("gyro_noise_std"), "rad/s")),
+            ("imu_ekf.accel_noise_std", "accelerometer noise it assumes",
+             _val(e("accel_noise_std"), r"m/s$^2$")),
+            ("imu_ekf.gyro_bias_walk", r"gyro bias random-walk density (the bias is a state) "
+             r"[rad/s/$\sqrt{\mathrm{s}}$]", _val(e("gyro_bias_walk"))),
+            ("imu_ekf.accel_bias_walk", r"accelerometer bias random-walk density "
+             r"[m/s$^2$/$\sqrt{\mathrm{s}}$]", _val(e("accel_bias_walk"))),
+            ("imu_ekf.yaw_meas_std", "star-tracker noise it assumes", _val(e("yaw_meas_std"), "rad")),
+            ("imu_ekf.pos_meas_std", "relative-position noise it assumes, both axes "
+             "(the larger, along-sight figure)", _val(e("pos_meas_std"), "m")),
+            ("imu_ekf.use_position", "fuse the relative-position fixes", _val(e("use_position"))),
+            ("imu_ekf.use_twist", "fuse a velocity measurement (none in flight)", _val(e("use_twist"))),
+            ("imu_ekf.latency_pos", "age of a position fix, placed by state-history replay",
+             _val(e("latency_pos"), "s")),
+            ("imu_ekf.latency_yaw", "age of a star-tracker reading", _val(e("latency_yaw"), "s")),
+            ("imu_ekf.history_len", "IMU samples kept for the replay", _val(e("history_len"))),
+            ("imu_ekf.gate_pos", r"$\chi^2$ gate on a position fix (2 dof, 0.1\,\%)", _val(e("gate_pos"))),
+            ("imu_ekf.gate_yaw", r"$\chi^2$ gate on a yaw reading (1 dof, 0.1\,\%)", _val(e("gate_yaw"))),
+            ("imu_ekf.init_pos_std", "initial position uncertainty", _val(e("init_pos_std"), "m")),
+            ("imu_ekf.init_yaw_std", "initial yaw uncertainty", _val(e("init_yaw_std"), "rad")),
+            ("imu_ekf.init_vel_std", "initial velocity uncertainty", _val(e("init_vel_std"), "m/s")),
+            ("imu_ekf.init_gyro_bias_std", "initial gyro-bias uncertainty",
+             _val(e("init_gyro_bias_std"), "rad/s")),
+            ("imu_ekf.init_accel_bias_std", "initial accelerometer-bias uncertainty",
+             _val(e("init_accel_bias_std"), r"m/s$^2$")),
+            ("imu_ekf.max_imu_gap", "a longer IMU gap restarts the propagation",
+             _val(e("max_imu_gap"), "s")),
+        ]),
+        ("Joint encoder Kalman filter (\\texttt{pat\\_arm\\_control})", [
+            ("joint_filter", r"off by default; \texttt{kalman} in the EKF + joint KF runs",
+             _val(common["joint_filter"])),
+            ("joint_kf.accel_psd", r"process noise: white joint acceleration [rad$^2$/s$^3$]",
+             _val(common["joint_kf.accel_psd"])),
+            ("joint_kf.pos_meas_std", "encoder angle noise it assumes (the bench tells it "
+             "the true value)", _val(common["joint_kf.pos_meas_std"], "rad")),
+            ("joint_kf.vel_meas_std", "encoder velocity noise it assumes",
+             _val(common["joint_kf.vel_meas_std"], "rad/s")),
+            ("joint_kf.init_vel_std", "initial velocity uncertainty",
+             _val(common["joint_kf.init_vel_std"], "rad/s")),
+        ]),
+    ], note=r"Warm-up before each arm task: 60\,s on the bench, 15\,s live. Files: "
+            r"\texttt{pat\_gnc/config/nav\_flight.yaml}, "
+            r"\texttt{pat\_arm\_control/config/arm\_common.yaml}.")
+
+
+def tab_settings_arm() -> None:
+    """What every arm controller shares (arm_common.yaml and each law's per-arm
+    block) and the settings of each law that were not tuned (tab_tuned has those)."""
+    cfg = lambda f: _yaml(_src("pat_arm_control", "config", f))  # noqa: E731
+    common = _get(cfg("arm_common.yaml"), "/**", "ros__parameters")
+    nm = cfg("nmpc.yaml")
+    n = _get(nm, "/**", "ros__parameters")
+    left = _get(nm, "pat_arm_nmpc_left", "ros__parameters", "limits")
+    om = _get(cfg("ompc.yaml"), "/**", "ros__parameters", "ompc")
+    sm = _get(cfg("smc.yaml"), "/**", "ros__parameters", "smc")
+    sf = common["safe_mode"]
+    _settings_table("tab_settings_arm", [
+        ("Shared by every controller", [
+            ("control_hz", "control rate", _val(common["control_hz"], "Hz")),
+            ("model_tau_max", "torque limit of every arm joint", _val(common["model_tau_max"], r"N\,m")),
+            ("limits.q_min", "lower joint limits (joints 2, 3, 5), 0.05\\,rad inside the MJCF",
+             _val(left["q_min"], "rad")),
+            ("limits.q_max", "upper joint limits", _val(left["q_max"], "rad")),
+            ("limits.qd_max", "joint speed limits", _val(left["qd_max"], "rad/s")),
+            ("safe_mode.damping_frac", r"safe mode commands joint damping $-k_d\dot q$, "
+             r"$k_d$ = this $\times\,\tau_{\max}/\dot q_{\max}$", _val(sf["damping_frac"])),
+            ("safe_mode.recovery_ticks", "good ticks needed to leave safe mode",
+             _val(sf["recovery_ticks"])),
+            ("safe_mode.tier3_latch_after_ticks", "ticks of unbroken safe mode after which "
+             "it latches, with no automatic recovery", _val(sf["tier3_latch_after_ticks"])),
+            ("observer", "disturbance observer (studied separately)", _val(common["observer"])),
+            ("observer.ff_gain", "observer feedforward into the command", _val(common["observer.ff_gain"])),
+        ]),
+        ("NMPC, both formulations (not tuned)", [
+            ("nmpc.sqp_iters", "SQP iterations per tick (SQP-NMPC)", _val(n["nmpc"]["sqp_iters"])),
+            ("nmpc.reference_preview", "score each horizon node against the reference at its "
+             "own time, so the trajectory is seen coming", _val(n["nmpc"]["reference_preview"])),
+            ("nmpc.terminal_velocity_constraint", "hard constraint: zero EE velocity error at "
+             "the horizon's end", _val(n["nmpc"]["terminal_velocity_constraint"])),
+            ("nmpc.du_max_frac", "SQP trust region, as a fraction of the reachable wrench",
+             _val(n["nmpc"]["du_max_frac"])),
+            ("nmpc.rollout_v_clamp_mult", "rollout joint-speed clamp, in multiples of "
+             "\\texttt{qd\\_max}", _val(n["nmpc"]["rollout_v_clamp_mult"])),
+            ("safe_mode.tier1_max_replay_ticks", "ticks a failed solve may replay the last "
+             "plan before safe mode", _val(n["safe_mode"]["tier1_max_replay_ticks"])),
+            ("qp.tol", "QP (HPIPM) convergence tolerance", _val(n["qp"]["tol"])),
+            ("qp.warm_start", "0 cold, 1 primal, 2 primal and dual; a failed warm solve "
+             "retries cold", _val(n["qp"]["warm_start"])),
+            ("qp.reg_prim", "primal regularisation", _val(n["qp"]["reg_prim"])),
+            ("qp.soft_joint_limits", "joint box as a soft constraint", _val(n["qp"]["soft_joint_limits"])),
+            ("qp.soft_torque_limits", "torque rows as a soft constraint", _val(n["qp"]["soft_torque_limits"])),
+            ("qp.joint_slack_linear", "linear penalty on joint-box slack",
+             _val(n["qp"]["joint_slack_linear"])),
+            ("qp.joint_slack_quadratic", "quadratic penalty on joint-box slack",
+             _val(n["qp"]["joint_slack_quadratic"])),
+            ("qp.relax_box_to_contain_x0", "widen a hard box to the current state "
+             "(hard box only)", _val(n["qp"]["relax_box_to_contain_x0"])),
+        ]),
+        ("OMPC (not tuned)", [
+            ("ompc.R", "weight on the task-space force; only Q/R matters", _val(om["R"])),
+            ("ompc.damping", r"added to $J H_g^{-1} J^\top$ near a singularity", _val(om["damping"])),
+        ]),
+        ("SMC (not tuned)", [
+            ("smc.pi_bound", r"bound on the model-error ratio in $\rho$", _val(sm["pi_bound"])),
+            ("smc.b2", r"second gain of $\rho$'s robustness term", _val(sm["b2"])),
+            ("smc.lambda_damping", "damping of the task-space inertia inverse",
+             _val(sm["lambda_damping"])),
+        ]),
+    ], note=r"The tuned settings are in the tuned-settings table. Files: "
+            r"\texttt{pat\_arm\_control/config/arm\_common.yaml}, \texttt{nmpc.yaml}, "
+            r"\texttt{ompc.yaml}, \texttt{smc.yaml}; the right arm's limits equal the left's.")
+
+
+def tab_settings_reference() -> None:
+    """The reference generator (ee_target_publisher, ee_targets.yaml): the shapes the
+    arms follow, live and on the bench (which uses the same library and defaults)."""
+    r = _get(_yaml(_src("pat_arm_control", "config", "ee_targets.yaml")),
+             "ee_target_publisher", "ros__parameters")
+    c, q = r["circle"], r["rectangle"]
+    _settings_table("tab_settings_reference", [
+        ("Circle", [
+            ("circle.center_dx", "centre, ahead of the arm's start EE position",
+             _val(c["center_dx"], "m")),
+            ("circle.radius", "radius", _val(c["radius"], "m")),
+            ("circle.period", r"lap time at 1$\times$ speed (the speed study divides it)",
+             _val(c["period"], "s")),
+            ("circle.ramp_s", "speed ramp from rest", _val(c["ramp_s"], "s")),
+            ("circle.ccw", "direction: counter-clockwise", _val(c["ccw"])),
+        ]),
+        ("Rectangle", [
+            ("rectangle.center_dx", "centre, ahead of the arm's start EE position",
+             _val(q["center_dx"], "m")),
+            ("rectangle.width", "size along $x$", _val(q["width"], "m")),
+            ("rectangle.height", "size along $y$", _val(q["height"], "m")),
+            ("rectangle.speed", r"edge speed at 1$\times$ (the speed study multiplies it)",
+             _val(q["speed"], "m/s")),
+        ]),
+        ("Trajectory windows", [
+            ("approach_s", "move from the start pose onto the shape", _val(r["approach_s"], "s")),
+            ("trajectory_hz", "rate a new window is published", _val(r["trajectory_hz"], "Hz")),
+            ("window_s", "length of each window", _val(r["window_s"], "s")),
+            ("sample_dt", "spacing of the samples in a window", _val(r["sample_dt"], "s")),
+            ("window_lookback_s", "how far each window starts before now",
+             _val(r["window_lookback_s"], "s")),
+        ]),
+    ], note=r"A run is the approach, two laps and 1\,s; scoring starts at 5\,s. File: "
+            r"\texttt{pat\_arm\_control/config/ee\_targets.yaml}.")
+
+
 TABLES: List[Callable[[], None]] = [tab_nominal, tab_step, tab_timing, tab_sensitivity,
                                     tab_observer, tab_tuned, tab_live, tab_live_degradation,
-                                    tab_timing_all, tab_conditions]
+                                    tab_timing_all, tab_conditions, tab_settings_sim,
+                                    tab_settings_sensors, tab_settings_estimation,
+                                    tab_settings_arm, tab_settings_reference]
 
 if __name__ == "__main__":
     import argparse
