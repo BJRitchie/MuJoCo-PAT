@@ -481,9 +481,16 @@ def fig_base() -> None:
     ax.set_yscale("log")
     ax.set_xticks(range(len(groups)))
     ax.set_xticklabels([p for _, p in groups], rotation=90)
+    # A bracket under each shape's three groups, below the rotated tick labels.
+    import matplotlib.transforms as mtrans
+    under = mtrans.blended_transform_factory(ax.transData, ax.transAxes) + \
+        mtrans.ScaledTranslation(0, -33 / 72, fig.dpi_scale_trans)
     for i, shape in enumerate(("circle", "rectangle")):
-        ax.annotate(shape, xy=(1 + 3 * i, 0), xycoords=("data", "axes fraction"),
-                    xytext=(0, -36), textcoords="offset points", ha="center", va="top")
+        x0, x1 = 3 * i - 0.4, 3 * i + 2.4
+        ax.plot([x0, x0, x1, x1], [0.035, 0, 0, 0.035], color="0.25", lw=0.7,
+                transform=under, clip_on=False)
+        ax.annotate(shape, xy=(1 + 3 * i, 0), xycoords=under, xytext=(0, -2),
+                    textcoords="offset points", ha="center", va="top")
     ax.axvline(2.5, color="0.6", lw=0.5)
     ax.set_ylabel(r"$\int\psi^2 dt$ [rad$^2$s]")
     panel_label(ax, "(d)")
