@@ -182,8 +182,95 @@ def tab_observer() -> None:
         write(name, lines)
 
 
+#: Each tuning knob: the YAML key it sets (and which [x, y, thetaz] components),
+#: and what it does. The family is the law (both NMPCs share theirs).
+TUNED_KNOBS = {
+    "nmpc": {
+        "qpos_xy": (r"weights.Q_pos", "x, y", "weight on the EE position error"),
+        "qpos_th": (r"weights.Q_pos", r"$\theta_z$", "weight on the EE orientation error"),
+        "qvel_xy": (r"weights.Q_vel", "x, y", "weight on the EE velocity error"),
+        "qvel_th": (r"weights.Q_vel", r"$\theta_z$", "weight on the EE angular-velocity error"),
+        "r": (r"weights.R", "all", "weight on the task-space force (control effort)"),
+        "N": (r"nmpc.N", "", "prediction horizon [steps]"),
+        "Ts": (r"nmpc.Ts", "", r"horizon step [s]; the horizon spans $N\,T_s$ "
+               "(the control period stays 10 ms)"),
+        "term": (r"nmpc.terminal_cost_multiplier", "",
+                 r"terminal weight, as a multiple of $Q$"),
+    },
+    "ompc": {
+        "Ts": (r"ompc.Ts", "", "how far ahead the error is predicted [s]; sets how hard "
+               "the law pushes, not the control period"),
+        "q_xy": (r"ompc.Q", "x, y", r"weight on the predicted EE error (against \texttt{ompc.R} = 1)"),
+        "q_th": (r"ompc.Q", r"$\theta_z$", "weight on the predicted orientation error"),
+    },
+    "smc": {
+        "lam_xy": (r"smc.lam", "x, y", r"sliding-surface slope $\lambda$ [1/s]: the error's decay "
+                   "rate once on the surface"),
+        "lam_th": (r"smc.lam", r"$\theta_z$", r"sliding-surface slope $\lambda$ for orientation [1/s]"),
+        "alpha": (r"smc.alpha", "all", r"floor of the switching gain $\rho$ [m/s$^2$, rad/s$^2$]"),
+        "epsilon": (r"smc.epsilon", "", r"boundary-layer width [units of $\sigma$]: linear "
+                    "instead of sign() inside it"),
+        "tau_bound": (r"smc.tau_bound", "", r"force bound in $\rho$'s robustness term "
+                      r"[N\,m]; 0 = the torque limit (0.25)"),
+        "k2": (r"smc.k2", "", r"gain of $\rho$'s robustness term (model-error bound)"),
+    },
+}
+
+
+def _exact(v) -> str:
+    """A setting as the bench was given it (tune.py writes 6 significant figures),
+    so the table reproduces the run rather than rounding it."""
+    if isinstance(v, str):
+        return r"\texttt{" + v + "}"
+    s = f"{v:.6g}"
+    if abs(v) >= 1e5 and "e" not in s:          # 100000 as 1e5, like 1.6e6
+        s = f"{v:e}"
+    if "e" in s:
+        m, e = s.split("e")
+        m = m.rstrip("0").rstrip(".")
+        return f"${m}\\times10^{{{int(e)}}}$"
+    return s
+
+
+def _set_args(args: Sequence[str]) -> dict:
+    """{key: value} from a `--set key=value ...` argument list."""
+    return dict(a.split("=", 1) for a in args[1::2])
+
+
+def _yaml_scalar(path: str, section: str, key: str) -> str:
+    """One `key:` under `section:` in a law's YAML, without a YAML library."""
+    import re
+    text = open(path, encoding="utf-8").read()
+    m = re.search(rf"^\s+{section}:\s*\n((?:\s+.*\n)*?)\s+{key}:\s*([^\s#]+)", text, re.M)
+    return m.group(2) if m else "?"
+
+
+def _broken(tuned: dict) -> str:
+    """Which tuning constraint each infeasible tuned setting breaks, and where."""
+    import tune
+    out = []
+    for c in C.CTRL:
+        if c not in tuned or tuned[c]["feasible"]:
+            continue
+        for scen, m in tuned[c]["per_scenario"]["tuned"].items():
+            name = scen.replace("2x", r" 2$\times$").replace("step6", "6 cm step")
+            if m["rail_frac"] > tune.RAIL_MAX:
+                out.append(f"{C.LABEL[c]}: {100 * m['rail_frac']:.1f}\\,\\% of joint-ticks at "
+                           f"the torque limit on the {name} (limit "
+                           f"{100 * tune.RAIL_MAX:.0f}\\,\\%)")
+            if m["safe_ticks"] > 0:
+                out.append(f"{C.LABEL[c]}: {m['safe_ticks']:.0f} safe-mode ticks on the {name}")
+            if m["tick_us_max"] > tune.TICK_MAX_US:
+                out.append(f"{C.LABEL[c]}: a {m['tick_us_max'] / 1000:.1f}\\,ms tick on the {name}")
+    return " (" + "; ".join(out) + ")" if out else ""
+
+
 def tab_tuned() -> None:
-    """What the tuning changed: every knob, shipped and tuned, and the objective."""
+    """Every controller setting the studies run with that differs from or is
+    chosen against the committed YAML: the tuned knobs, the solver path and the
+    QP cap, each with its YAML key, what it does, the shipped and tuned values (as
+    run, unrounded), and the tuning objective. Everything else is the committed
+    config, stated in the table's last row."""
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tuned.json")
     if not os.path.isfile(path):
         return
@@ -191,20 +278,51 @@ def tab_tuned() -> None:
     with open(path) as fh:
         tuned = json.load(fh)
     import tune
-    lines = [r"\begin{tabular}{llrr}", r"\toprule",
-             r"controller & knob & shipped & tuned \\", r"\midrule"]
+    cfg = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "src",
+                       "pat_arm_control", "config")
+    shipped_args = {c: _set_args(a) for c, _, a in C.studies.CONTROLLERS}
+
+    def row(key: str, comp: str, desc: str, shipped, new) -> str:
+        k = r"\texttt{" + key.replace("_", r"\_").replace(".", r".\allowbreak ") + "}"
+        return f"{k}{' ' + comp if comp else ''} & {desc} & {_exact(shipped)} & {_exact(new)} \\\\"
+
+    lines = [r"\begin{tabular}{@{}p{4.8cm}p{6.0cm}rr@{}}", r"\toprule",
+             r"setting & what it does & shipped & tuned \\", r"\midrule"]
     for c in C.CTRL:
         if c not in tuned:
             continue
+        law = tuned[c]["law"]
         start = tune.SPACES[c]()[2]
+        args = _set_args(tuned[c]["args"])
+        lines.append(r"\multicolumn{4}{@{}l}{\textbf{" + C.LABEL[c] + r"}} \\")
+        if law == "nmpc":
+            fn_ship = shipped_args[c].get("nmpc.full_nonlinear",
+                                          _yaml_scalar(os.path.join(cfg, "nmpc.yaml"),
+                                                       "nmpc", "full_nonlinear"))
+            lines.append(row("nmpc.full_nonlinear", "", "solver: true = multiple-shooting "
+                             "SQP, false = one QP linearised about the last plan (LMPC)",
+                             fn_ship, args.get("nmpc.full_nonlinear", fn_ship)))
         for knob, v in tuned[c]["state"].items():
-            lines.append(f"{C.LABEL[c]} & \\texttt{{{knob.replace('_', chr(92) + '_')}}} & "
-                         f"{fmt(start[knob])} & {fmt(v)} \\\\")
+            key, comp, desc = TUNED_KNOBS[law][knob]
+            lines.append(row(key, comp, desc, start[knob], float(f"{v:.6g}")))
+        if "qp.max_iter" in args:
+            lines.append(row("qp.max_iter", "", "QP iterations allowed per solve: the "
+                             "realtime bound, set after tuning, not tuned",
+                             int(_yaml_scalar(os.path.join(cfg, "nmpc.yaml"), "qp", "max_iter")),
+                             int(args["qp.max_iter"])))
         g = tuned[c]["gmean_rmse_mm"]
-        lines.append(f" & \\emph{{objective [mm]}} & {fmt(g['shipped'])} & "
-                     f"{fmt(g['tuned'])}{'' if tuned[c]['feasible'] else ' (infeasible)'} \\\\")
+        mark = "" if tuned[c]["feasible"] else r"$^\dagger$"
+        lines.append(r"\emph{objective} & geometric-mean EE RMSE over the tuning scenarios "
+                     f"[mm] & {fmt(g['shipped'])} & {fmt(g['tuned'])}{mark} \\\\")
         lines.append(r"\addlinespace")
-    lines[-1] = r"\bottomrule"
+    lines[-1] = r"\midrule"
+    lines.append(r"\multicolumn{4}{@{}p{\linewidth}@{}}{\footnotesize Every other setting is "
+                 r"the committed \texttt{arm\_common.yaml} and the law's own YAML in "
+                 r"\texttt{pat\_arm\_control/config/}, among them the 100\,Hz control rate, "
+                 r"the 0.25\,N\,m torque limit and the joint limits. A component not listed "
+                 r"keeps its shipped value. $^\dagger$ broke a tuning constraint in the tuning run"
+                 + _broken(tuned) + r".} \\")
+    lines.append(r"\bottomrule")
     lines.append(r"\end{tabular}")
     d = os.path.join(C.OUT_ROOT, "tables")
     os.makedirs(d, exist_ok=True)
