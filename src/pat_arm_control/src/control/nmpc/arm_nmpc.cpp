@@ -196,8 +196,16 @@ Eigen::VectorXd ArmNMPC::controlLawImpl(
         x_aug.head<3>()     = e;
         x_aug.segment<3>(3) = edot;
         x_aug(6) = 1.0;
-        // Δq/qdot rows of x_aug stay 0 — see controlLawPositionOnly's identical
-        // comment on why.
+        // Joint rows, as the SQP path seeds its node 0. Δq_0 = 0 exactly: the
+        // box is written on Δq = q - q0 (buildJointBoxBounds). qdot_0 is the
+        // measured joint velocity: the velocity box is absolute, so a zero here
+        // would bound only the velocity the control adds, and the Δq rows would
+        // lose the k*Ts*qdot_0 coast toward a limit. The cost weights only the
+        // task rows, so while no joint bound is active this changes nothing.
+        for (int i = 0; i < n_owned; ++i) {
+            const int j = ownedJointInds[static_cast<std::size_t>(i)];
+            x_aug(7 + n_owned + i) = v(6 + j);
+        }
 
         Eigen::VectorXd lbx_j, ubx_j;
         buildJointBoxBounds(q0, lbx_j, ubx_j);
