@@ -279,6 +279,7 @@ TEST(Smc, TheShippedFileLoadsForBothArms)
         const ArmJoints joints = loadArmJoints(src);
         const SMCParams p = loadSmcParams(src, joints);
         loadObserverConfig(src);
+        loadJointFilterConfig(src);
         loadBaseAnchor(src);
         src.getString("mjcf_path", "");
 

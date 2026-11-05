@@ -187,6 +187,7 @@ TEST(Ompc, TheShippedFileLoadsForBothArms)
         const OMPCParams p = loadOmpcParams(src, joints);
         // The rest of what every law's node reads from the shared file.
         loadObserverConfig(src);
+        loadJointFilterConfig(src);
         loadBaseAnchor(src);
         src.getString("mjcf_path", "");
 
