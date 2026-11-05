@@ -382,7 +382,7 @@ def tab_live() -> None:
     lines = [r"\begin{tabular}{lrrrrrr}", r"\toprule",
              r" & \multicolumn{3}{c}{control tick [\textmu s]} & & & \\",
              r"\cmidrule(lr){2-4}",
-             r" & mean & p99 & worst & headroom (worst) & missed deadlines & trials \\",
+             r" & mean & p99 & longest & headroom (longest) & missed deadlines & trials \\",
              r"\midrule"]
     rows = []
     for c in C.CTRL:
@@ -516,9 +516,9 @@ def tab_timing_all() -> None:
     if not blocks:
         return
     lines = [r"\begin{tabular}{lrrrrr}", r"\toprule",
-             r" & \multicolumn{3}{c}{control tick [\textmu s]} & worst / & ticks \\",
+             r" & \multicolumn{3}{c}{control tick [\textmu s]} & longest / & ticks \\",
              r"\cmidrule(lr){2-4}",
-             r" & mean & p99 & worst & period & over 10\,ms \\"]
+             r" & mean & p99 & longest & period & over 10\,ms \\"]
     for label, summ, hist in blocks:
         lines += [r"\midrule", rf"\multicolumn{{6}}{{l}}{{\emph{{{label}}}}} \\"]
         for c in C.CTRL:

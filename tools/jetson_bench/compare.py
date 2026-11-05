@@ -354,7 +354,7 @@ def figure(a: str, b: str, sa, sb, worst: Dict) -> None:
     axes[0].axvline(C.PERIOD_US, color="k", ls=":", lw=0.8)
     axes[0].set_xscale("log")
     axes[0].set_yscale("log")
-    axes[0].set_xlabel("control tick [µs], same scenarios (markers: worst)")
+    axes[0].set_xlabel("control tick [µs], same scenarios (markers: longest)")
     axes[0].set_ylabel("density")
 
     x = np.arange(len(NMPC))
@@ -373,7 +373,7 @@ def figure(a: str, b: str, sa, sb, worst: Dict) -> None:
     axes[1].axhline(C.PERIOD_US / 1000, color="k", ls=":", lw=0.8)
     axes[1].set_xticks(x)
     axes[1].set_xticklabels([C.LABEL[t] for t in NMPC])
-    axes[1].set_ylabel("forced worst tick [ms]")
+    axes[1].set_ylabel("forced longest tick [ms]")
     axes[1].set_ylim(0, max(C.PERIOD_US / 1000 * 1.3, axes[1].get_ylim()[1] * 1.15))
     handles = F.ctrl_handles() + [
         plt.Line2D([], [], color="0.3", ls="-", label=a),
@@ -390,7 +390,7 @@ def table(a: str, b: str, stats: Dict, worst: Dict) -> None:
              r" & & \multicolumn{4}{c}{control tick [\textmu s]} & \multicolumn{2}{c}"
              r"{forced worst case} \\",
              r"\cmidrule(lr){3-6}\cmidrule(lr){7-8}",
-             r" & machine & mean & p99 & worst & $>$10\,ms & QP cap & worst [ms] \\",
+             r" & machine & mean & p99 & longest & $>$10\,ms & QP cap & longest [ms] \\",
              r"\midrule"]
     for tag in C.CTRL:
         for name in (a, b):
@@ -495,7 +495,7 @@ def accuracy_table(a: str, b: str, acc: Dict[str, dict]) -> None:
     esc = lambda n: n.replace("_", chr(92) + "_")
     lines = [r"\begin{tabular}{lrrrrrr}", r"\toprule",
              rf" & RMSE ratio & \multicolumn{{2}}{{c}}{{failed solves}} & "
-             rf"\multicolumn{{2}}{{c}}{{QP iter./tick}} & worst tick [ms] \\",
+             rf"\multicolumn{{2}}{{c}}{{QP iter./tick}} & longest tick [ms] \\",
              r"\cmidrule(lr){3-4}\cmidrule(lr){5-6}",
              rf" & {esc(b)}/{esc(a)} & {esc(a)} & {esc(b)} & {esc(a)} & {esc(b)} & "
              rf"{esc(a)} / {esc(b)} \\", r"\midrule"]

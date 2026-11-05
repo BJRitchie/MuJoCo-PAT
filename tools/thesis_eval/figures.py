@@ -325,7 +325,7 @@ DASH = [("rmse_mm", "RMSE [mm]"), ("err_var_mm2", "var(e) [mm²]"),
         ("err_peak_mm", "peak error [mm]"), ("tau2_int_win", "∫‖τ‖²dt [N²m²s]"),
         ("tau_var", "var(τ) [N²m²]"), ("chatter_tv", "Σ|Δτ| [N m]"),
         ("rail_frac", "at torque limit [-]"), ("yaw2_int_total", "∫ψ²dt [rad²s]"),
-        ("tick_us_mean", "tick [µs]"), ("tick_us_max", "worst tick [µs]")]
+        ("tick_us_mean", "tick [µs]"), ("tick_us_max", "longest tick [µs]")]
 
 
 def _fmt(v: float) -> str:
@@ -789,7 +789,7 @@ def fig_timing() -> None:
                      transform=axes[0].get_xaxis_transform(), clip_on=False)
     axes[0].set_xscale("log")
     axes[0].axvline(C.PERIOD_US, color="k", ls=":", lw=0.8)
-    axes[0].set_xlabel("control tick [µs] (▼ worst recorded)")
+    axes[0].set_xlabel("control tick [µs] (▼ longest recorded)")
     axes[0].set_ylabel("density")
     axes[0].set_yscale("log")
     axes[0].legend(handles=[plt.Line2D([], [], color=C.COLOUR[c], marker=C.MARKER[c],
@@ -1535,7 +1535,7 @@ def fig_live_timing() -> None:
         axes[0].set_xscale("log")
         axes[0].set_yscale("log")
         axes[0].set_xlim(0.5, 5e4)
-        axes[0].set_xlabel("control tick [µs] (▼ worst recorded)")
+        axes[0].set_xlabel("control tick [µs] (▼ longest recorded)")
         axes[0].set_ylabel("density")
     else:
         axes[0].text(0.5, 0.5, "per-tick records not on this machine", ha="center",
@@ -1547,7 +1547,7 @@ def fig_live_timing() -> None:
     axes[1].set_ylabel("tick per trial [µs]")
     handles = [plt.Line2D([], [], color=C.COLOUR[c], marker=C.MARKER[c], lw=1.1, ms=4,
                           label=l) for c, l in labels]
-    handles += [plt.Line2D([], [], color="0.3", marker="o", ls="none", ms=3, label="worst"),
+    handles += [plt.Line2D([], [], color="0.3", marker="o", ls="none", ms=3, label="longest"),
                 plt.Line2D([], [], color="0.3", marker="o", mfc="none", ls="none", ms=3,
                            label="p99"),
                 plt.Line2D([], [], color="k", ls=":", lw=0.8, label="10 ms period")]
@@ -1654,7 +1654,7 @@ def fig_live_cap() -> None:
     plain_log_y(ax)
     ax.set_xticks(range(len(labels)))
     ax.set_xticklabels(labels, fontsize=6.5)
-    ax.set_ylabel("worst tick per live trial [ms]")
+    ax.set_ylabel("longest tick per live trial [ms]")
 
     ax = axes[1]
     lo, hi = np.inf, 0.0
@@ -1933,7 +1933,7 @@ def fig_live_exposed() -> None:
             ax.plot(wrow["qp_iters"], worst / 1000, marker="v", ms=4.5, color="k", ls="none",
                     zorder=5)
             ax.axhline(period_ms, color="k", ls=":", lw=0.8, zorder=4)
-            ax.text(0.97, 0.03, f"worst {worst / 1000:.1f} ms\n{over:,} of {n:,} ticks > 10 ms\n"
+            ax.text(0.97, 0.03, f"longest {worst / 1000:.1f} ms\n{over:,} of {n:,} ticks > 10 ms\n"
                     f"{100 * nf / n:.1f}% failed", transform=ax.transAxes, ha="right",
                     va="bottom", fontsize=5.8, linespacing=1.15,
                     bbox=dict(fc="white", ec="none", alpha=0.8, pad=1.0))
@@ -1985,7 +1985,7 @@ def fig_live_exposed() -> None:
                           label="QP converged"),
                plt.Line2D([], [], ls="none", marker="o", ms=4, color=FAILED_COLOUR,
                           label="QP failed (cap reached / retried)"),
-               plt.Line2D([], [], ls="none", marker="v", ms=4.5, color="k", label="worst tick"),
+               plt.Line2D([], [], ls="none", marker="v", ms=4.5, color="k", label="longest tick"),
                plt.Line2D([], [], color="k", ls=":", lw=0.8, label="10 ms period")]
     fig.legend(handles=handles, loc="lower center", bbox_to_anchor=(0.5, 0.965), ncol=4,
                frameon=False)
@@ -2250,7 +2250,7 @@ def fig_jetson_tick_pairs() -> None:
             k = float(s["ratio_gmean"].iloc[0])
             ax.plot(x, k * x, color=C.COLOUR[c], lw=1.0)
             mx_a, mx_b = float(s[f"{a}_max_us"].iloc[0]), float(s[f"{b}_max_us"].iloc[0])
-            ax.text(0.97, 0.12, f"Nano/DGX ×{k:.2f}\nNano worst {mx_b / 1000:.1f} ms",
+            ax.text(0.97, 0.12, f"Nano/DGX ×{k:.2f}\nNano longest {mx_b / 1000:.1f} ms",
                     transform=ax.transAxes, ha="right", va="bottom", fontsize=5.8,
                     color=C.COLOUR[c])
             ax.plot(mx_a / 1000, 0.0, marker="^", ms=4, color=C.COLOUR[c], ls="none",
@@ -2277,7 +2277,7 @@ def fig_jetson_tick_pairs() -> None:
                plt.Line2D([], [], color="0.5", lw=0.6, ls="--", label="same speed"),
                plt.Line2D([], [], color="k", ls=":", lw=0.8, label="10 ms period"),
                plt.Line2D([], [], ls="none", marker="^", color="0.3", ms=4,
-                          label="worst tick (on each axis)"),
+                          label="longest tick (on each axis)"),
                plt.Rectangle((0, 0), 1, 1, color=plt.cm.Greys(0.7), label="ticks (log count)")]
     # Square panels shrink to fit the width: hang the legend from where they end.
     fig.canvas.draw()
