@@ -1,0 +1,213 @@
+{
+ "spec": {
+  "tag": "iter",
+  "law": "nmpc",
+  "tuned_args": [
+   "--set",
+   "qp.max_iter=20",
+   "--set",
+   "nmpc.full_nonlinear=false",
+   "--set",
+   "weights.Q_pos=[0.25,0.25,1000]",
+   "--set",
+   "weights.Q_vel=[5.6,5.6,0.1875]",
+   "--set",
+   "weights.R=[0.07,0.07,0.07]",
+   "--set",
+   "nmpc.N=24",
+   "--set",
+   "nmpc.Ts=0.0462",
+   "--set",
+   "nmpc.terminal_cost_multiplier=280"
+  ],
+  "shape": "rectangle",
+  "speed": 1.0,
+  "repeat": 1,
+  "duration": 20.0,
+  "nav_warmup": 15.0,
+  "damping": 0.0,
+  "partner": "hold",
+  "state": "ekf",
+  "tau_scale": 1.5
+ },
+ "hash": "4b2985416ee996f0",
+ "health": {
+  "deadline_misses": 0,
+  "skipped_periods": 0,
+  "nav_overruns": 0,
+  "rows": 2001,
+  "rows_expected": 2000,
+  "rows_short": 0,
+  "trace_lines": 4426,
+  "torque_msgs": 2523,
+  "rt_threads": {
+   "nav": [
+    {
+     "policy": "FIFO",
+     "priority": 80,
+     "cpus": "5"
+    }
+   ],
+   "left": [
+    {
+     "policy": "FIFO",
+     "priority": 80,
+     "cpus": "6"
+    }
+   ],
+   "right": [
+    {
+     "policy": "FIFO",
+     "priority": 80,
+     "cpus": "7"
+    }
+   ]
+  },
+  "resources": {
+   "mem_avail_min_kb": 98081092,
+   "swap_used_max_kb": 332,
+   "temp_max_c": null,
+   "rss_max_kb": 689460
+  }
+ },
+ "machine": {
+  "hostname": "thinkstationpgx-f66e",
+  "cpu_governor": "performance",
+  "on_mains": null,
+  "usb_pd_watts": null,
+  "python": "3.10.12",
+  "date": "2026-11-05T07:50:53+00:00",
+  "cpu_model": "aarch64",
+  "machine": "aarch64",
+  "kernel": "6.17.0-1026-nvidia",
+  "n_cpus": 20,
+  "cpu_freq_khz": {
+   "cpu0": {
+    "cur": 2808000,
+    "min": 338000,
+    "max": 2808000,
+    "hw_max": 2808000
+   },
+   "cpu1": {
+    "cur": 2808000,
+    "min": 338000,
+    "max": 2808000,
+    "hw_max": 2808000
+   },
+   "cpu10": {
+    "cur": 2808000,
+    "min": 338000,
+    "max": 2808000,
+    "hw_max": 2808000
+   },
+   "cpu11": {
+    "cur": 2808000,
+    "min": 338000,
+    "max": 2808000,
+    "hw_max": 2808000
+   },
+   "cpu12": {
+    "cur": 2808000,
+    "min": 338000,
+    "max": 2808000,
+    "hw_max": 2808000
+   },
+   "cpu13": {
+    "cur": 2808000,
+    "min": 338000,
+    "max": 2808000,
+    "hw_max": 2808000
+   },
+   "cpu14": {
+    "cur": 2808000,
+    "min": 338000,
+    "max": 2808000,
+    "hw_max": 2808000
+   },
+   "cpu15": {
+    "cur": 3900000,
+    "min": 1378000,
+    "max": 3900000,
+    "hw_max": 3900000
+   },
+   "cpu16": {
+    "cur": 3900000,
+    "min": 1378000,
+    "max": 3900000,
+    "hw_max": 3900000
+   },
+   "cpu17": {
+    "cur": 3900000,
+    "min": 1378000,
+    "max": 3900000,
+    "hw_max": 3900000
+   },
+   "cpu18": {
+    "cur": 3900000,
+    "min": 1378000,
+    "max": 3900000,
+    "hw_max": 3900000
+   },
+   "cpu19": {
+    "cur": 3900000,
+    "min": 1378000,
+    "max": 3900000,
+    "hw_max": 3900000
+   },
+   "cpu2": {
+    "cur": 2808000,
+    "min": 338000,
+    "max": 2808000,
+    "hw_max": 2808000
+   },
+   "cpu3": {
+    "cur": 2808000,
+    "min": 338000,
+    "max": 2808000,
+    "hw_max": 2808000
+   },
+   "cpu4": {
+    "cur": 2808000,
+    "min": 338000,
+    "max": 2808000,
+    "hw_max": 2808000
+   },
+   "cpu5": {
+    "cur": 3900000,
+    "min": 1378000,
+    "max": 3900000,
+    "hw_max": 3900000
+   },
+   "cpu6": {
+    "cur": 3900000,
+    "min": 1378000,
+    "max": 3900000,
+    "hw_max": 3900000
+   },
+   "cpu7": {
+    "cur": 3900000,
+    "min": 1378000,
+    "max": 3900000,
+    "hw_max": 3900000
+   },
+   "cpu8": {
+    "cur": 3900000,
+    "min": 1378000,
+    "max": 3900000,
+    "hw_max": 3900000
+   },
+   "cpu9": {
+    "cur": 3900000,
+    "min": 1378000,
+    "max": 3900000,
+    "hw_max": 3900000
+   }
+  },
+  "max_temp_c": 40.8,
+  "image_id": null,
+  "blasfeo_target": "ARMV8A_ARM_CORTEX_A57",
+  "build_type": "RelWithDebInfo",
+  "pat_arch_flags": ""
+ },
+ "finished": "2026-11-05T07:50:53+0000"
+}

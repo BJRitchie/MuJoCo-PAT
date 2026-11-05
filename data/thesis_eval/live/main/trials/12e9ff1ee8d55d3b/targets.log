@@ -1,0 +1,8 @@
+[INFO] [launch]: All log files can be found below /tmp/ros-home-1005/.ros/log/2026-11-05-07-45-44-806385-thinkstationpgx-f66e-1505162
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [ee_target_publisher_node-1]: process started with pid [1505163]
+[ee_target_publisher_node-1] [0m[INFO] [1793864744.852776124] [ee_target_publisher]: ee_target_publisher: pattern=circle for 1 arm(s), 2.0 s window every 10 ms at 20 Hz[0m
+[ee_target_publisher_node-1] [0m[INFO] [1793864744.856709911] [ee_target_publisher]: ee_target_publisher[left]: home EE pose (-0.118, -0.418) — circle, lap 8.0 s after a 3.0 s approach[0m
+[WARNING] [launch]: user interrupted with ctrl-c (SIGINT)
+[ee_target_publisher_node-1] [0m[INFO] [1793864767.961085046] [rclcpp]: signal_handler(SIGINT/SIGTERM)[0m
+[INFO] [ee_target_publisher_node-1]: process has finished cleanly [pid 1505163]
