@@ -3,31 +3,162 @@
  "variant": "shipped",
  "quick": false,
  "git": {
-  "revision": "2237d47bbc8857220d656d9fce3ce68f264b3de9",
-  "branch": "baseline_controllers",
+  "revision": "356e0869357fa540eb3de2442c38c32545e5a9bb",
+  "branch": "jetson_bench",
   "dirty": true
  },
  "machine": {
-  "hostname": "ben-XPS-15-9530",
+  "hostname": "thinkstationpgx-f66e",
   "cpu_governor": "performance",
-  "on_mains": true,
-  "usb_pd_watts": 120,
+  "on_mains": null,
+  "usb_pd_watts": null,
   "python": "3.10.12",
-  "date": "2026-10-23T11:52:01+00:00"
+  "date": "2026-11-05T06:36:17+00:00",
+  "cpu_model": "aarch64",
+  "machine": "aarch64",
+  "kernel": "6.17.0-1026-nvidia",
+  "n_cpus": 20,
+  "cpu_freq_khz": {
+   "cpu0": {
+    "cur": 2808000,
+    "min": 338000,
+    "max": 2808000,
+    "hw_max": 2808000
+   },
+   "cpu1": {
+    "cur": 2808000,
+    "min": 338000,
+    "max": 2808000,
+    "hw_max": 2808000
+   },
+   "cpu10": {
+    "cur": 2808000,
+    "min": 338000,
+    "max": 2808000,
+    "hw_max": 2808000
+   },
+   "cpu11": {
+    "cur": 2808000,
+    "min": 338000,
+    "max": 2808000,
+    "hw_max": 2808000
+   },
+   "cpu12": {
+    "cur": 2808000,
+    "min": 338000,
+    "max": 2808000,
+    "hw_max": 2808000
+   },
+   "cpu13": {
+    "cur": 2808000,
+    "min": 338000,
+    "max": 2808000,
+    "hw_max": 2808000
+   },
+   "cpu14": {
+    "cur": 2808000,
+    "min": 338000,
+    "max": 2808000,
+    "hw_max": 2808000
+   },
+   "cpu15": {
+    "cur": 3900000,
+    "min": 1378000,
+    "max": 3900000,
+    "hw_max": 3900000
+   },
+   "cpu16": {
+    "cur": 3900000,
+    "min": 1378000,
+    "max": 3900000,
+    "hw_max": 3900000
+   },
+   "cpu17": {
+    "cur": 3900000,
+    "min": 1378000,
+    "max": 3900000,
+    "hw_max": 3900000
+   },
+   "cpu18": {
+    "cur": 3900000,
+    "min": 1378000,
+    "max": 3900000,
+    "hw_max": 3900000
+   },
+   "cpu19": {
+    "cur": 3900000,
+    "min": 1378000,
+    "max": 3900000,
+    "hw_max": 3900000
+   },
+   "cpu2": {
+    "cur": 2808000,
+    "min": 338000,
+    "max": 2808000,
+    "hw_max": 2808000
+   },
+   "cpu3": {
+    "cur": 2808000,
+    "min": 338000,
+    "max": 2808000,
+    "hw_max": 2808000
+   },
+   "cpu4": {
+    "cur": 2808000,
+    "min": 338000,
+    "max": 2808000,
+    "hw_max": 2808000
+   },
+   "cpu5": {
+    "cur": 3900000,
+    "min": 1378000,
+    "max": 3900000,
+    "hw_max": 3900000
+   },
+   "cpu6": {
+    "cur": 3900000,
+    "min": 1378000,
+    "max": 3900000,
+    "hw_max": 3900000
+   },
+   "cpu7": {
+    "cur": 3900000,
+    "min": 1378000,
+    "max": 3900000,
+    "hw_max": 3900000
+   },
+   "cpu8": {
+    "cur": 3900000,
+    "min": 1378000,
+    "max": 3900000,
+    "hw_max": 3900000
+   },
+   "cpu9": {
+    "cur": 3900000,
+    "min": 1378000,
+    "max": 3900000,
+    "hw_max": 3900000
+   }
+  },
+  "max_temp_c": 53.7,
+  "image_id": null,
+  "blasfeo_target": "ARMV8A_ARM_CORTEX_A57",
+  "build_type": "RelWithDebInfo",
+  "pat_arch_flags": ""
  },
  "timing_study": false,
  "noisy_timing_allowed": false,
  "pinned_to": null,
  "bench": {
   "path": "/ws/install/pat_arm_control/lib/pat_arm_control/contact_bench",
-  "sha256": "67eaec5ed7d9a2a996bd80d11c979ba07b203ee54adff3dedc7b16964dad71b9",
-  "config_sha256": "02d967418fc52bc101f2d8d020ada0c5b5eed62fa7cdd43d030199699fecb4a2"
+  "sha256": "9b2959056bbeb316a8c4ac252afac695704a59a03349e7e9e7ced842d68573c0",
+  "config_sha256": "d729b1602c620df8d6b4c97690dc96544fa2854709248745de88731ebe98e7e9"
  },
  "cells": [
   {
    "name": "step6_sqp",
    "study": "nominal",
-   "hash": "2177e34c2a9de67a",
+   "hash": "b50735d77862c8d4",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
@@ -54,17 +185,17 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/nominal/cells/2177e34c2a9de67a.csv.part",
+    "/ws/data/thesis_eval/nominal/cells/b50735d77862c8d4.csv.part",
     "--series",
     "/ws/data/thesis_eval/nominal/series/step6_sqp.csv"
    ],
-   "seconds": 3.04,
+   "seconds": 2.13,
    "status": "ran"
   },
   {
    "name": "step6_iter",
    "study": "nominal",
-   "hash": "b0433d796f11d1de",
+   "hash": "c8b75c1f83f92773",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
@@ -95,17 +226,17 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/nominal/cells/b0433d796f11d1de.csv.part",
+    "/ws/data/thesis_eval/nominal/cells/c8b75c1f83f92773.csv.part",
     "--series",
     "/ws/data/thesis_eval/nominal/series/step6_iter.csv"
    ],
-   "seconds": 2.51,
+   "seconds": 1.79,
    "status": "ran"
   },
   {
    "name": "step6_ompc",
    "study": "nominal",
-   "hash": "983ece089a9fb7a0",
+   "hash": "6f6956df57939ca9",
    "tag": "ompc",
    "seed": 0,
    "law": "ompc",
@@ -132,17 +263,17 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/nominal/cells/983ece089a9fb7a0.csv.part",
+    "/ws/data/thesis_eval/nominal/cells/6f6956df57939ca9.csv.part",
     "--series",
     "/ws/data/thesis_eval/nominal/series/step6_ompc.csv"
    ],
-   "seconds": 0.85,
+   "seconds": 0.55,
    "status": "ran"
   },
   {
    "name": "step6_smc",
    "study": "nominal",
-   "hash": "3f55ac72fdb864f7",
+   "hash": "7b6353ed95c7ea40",
    "tag": "smc",
    "seed": 0,
    "law": "smc",
@@ -169,17 +300,17 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/nominal/cells/3f55ac72fdb864f7.csv.part",
+    "/ws/data/thesis_eval/nominal/cells/7b6353ed95c7ea40.csv.part",
     "--series",
     "/ws/data/thesis_eval/nominal/series/step6_smc.csv"
    ],
-   "seconds": 0.85,
+   "seconds": 0.51,
    "status": "ran"
   },
   {
    "name": "step12_sqp",
    "study": "nominal",
-   "hash": "83174f00b7474cf0",
+   "hash": "c4c987f99fd80151",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
@@ -206,17 +337,17 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/nominal/cells/83174f00b7474cf0.csv.part",
+    "/ws/data/thesis_eval/nominal/cells/c4c987f99fd80151.csv.part",
     "--series",
     "/ws/data/thesis_eval/nominal/series/step12_sqp.csv"
    ],
-   "seconds": 3.02,
+   "seconds": 2.03,
    "status": "ran"
   },
   {
    "name": "step12_iter",
    "study": "nominal",
-   "hash": "ff39516914a5edf1",
+   "hash": "298f8bd439124202",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
@@ -247,17 +378,17 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/nominal/cells/ff39516914a5edf1.csv.part",
+    "/ws/data/thesis_eval/nominal/cells/298f8bd439124202.csv.part",
     "--series",
     "/ws/data/thesis_eval/nominal/series/step12_iter.csv"
    ],
-   "seconds": 2.42,
+   "seconds": 1.76,
    "status": "ran"
   },
   {
    "name": "step12_ompc",
    "study": "nominal",
-   "hash": "afc2cddd35f80915",
+   "hash": "3dd505a0c5d9e929",
    "tag": "ompc",
    "seed": 0,
    "law": "ompc",
@@ -284,17 +415,17 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/nominal/cells/afc2cddd35f80915.csv.part",
+    "/ws/data/thesis_eval/nominal/cells/3dd505a0c5d9e929.csv.part",
     "--series",
     "/ws/data/thesis_eval/nominal/series/step12_ompc.csv"
    ],
-   "seconds": 0.85,
+   "seconds": 0.55,
    "status": "ran"
   },
   {
    "name": "step12_smc",
    "study": "nominal",
-   "hash": "c2693b747357453b",
+   "hash": "398fb9e573aeadf3",
    "tag": "smc",
    "seed": 0,
    "law": "smc",
@@ -321,17 +452,17 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/nominal/cells/c2693b747357453b.csv.part",
+    "/ws/data/thesis_eval/nominal/cells/398fb9e573aeadf3.csv.part",
     "--series",
     "/ws/data/thesis_eval/nominal/series/step12_smc.csv"
    ],
-   "seconds": 0.88,
+   "seconds": 0.67,
    "status": "ran"
   },
   {
    "name": "circle_sqp",
    "study": "nominal",
-   "hash": "18d2223b7d1f04c3",
+   "hash": "61f3f340b41ea3fb",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
@@ -354,17 +485,17 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/nominal/cells/18d2223b7d1f04c3.csv.part",
+    "/ws/data/thesis_eval/nominal/cells/61f3f340b41ea3fb.csv.part",
     "--series",
     "/ws/data/thesis_eval/nominal/series/circle_sqp.csv"
    ],
-   "seconds": 5.62,
+   "seconds": 3.54,
    "status": "ran"
   },
   {
    "name": "circle_iter",
    "study": "nominal",
-   "hash": "856ad4fe8e27a82f",
+   "hash": "0bd3e0456d00a38a",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
@@ -391,17 +522,17 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/nominal/cells/856ad4fe8e27a82f.csv.part",
+    "/ws/data/thesis_eval/nominal/cells/0bd3e0456d00a38a.csv.part",
     "--series",
     "/ws/data/thesis_eval/nominal/series/circle_iter.csv"
    ],
-   "seconds": 4.51,
+   "seconds": 2.93,
    "status": "ran"
   },
   {
    "name": "circle_ompc",
    "study": "nominal",
-   "hash": "6f63e5c6edc3434e",
+   "hash": "df30998db151cfb0",
    "tag": "ompc",
    "seed": 0,
    "law": "ompc",
@@ -424,17 +555,17 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/nominal/cells/6f63e5c6edc3434e.csv.part",
+    "/ws/data/thesis_eval/nominal/cells/df30998db151cfb0.csv.part",
     "--series",
     "/ws/data/thesis_eval/nominal/series/circle_ompc.csv"
    ],
-   "seconds": 1.29,
+   "seconds": 0.65,
    "status": "ran"
   },
   {
    "name": "circle_smc",
    "study": "nominal",
-   "hash": "461b7d7a40f0157e",
+   "hash": "5f44223798d23dd5",
    "tag": "smc",
    "seed": 0,
    "law": "smc",
@@ -457,17 +588,17 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/nominal/cells/461b7d7a40f0157e.csv.part",
+    "/ws/data/thesis_eval/nominal/cells/5f44223798d23dd5.csv.part",
     "--series",
     "/ws/data/thesis_eval/nominal/series/circle_smc.csv"
    ],
-   "seconds": 1.3,
+   "seconds": 0.62,
    "status": "ran"
   },
   {
    "name": "rectangle_sqp",
    "study": "nominal",
-   "hash": "d19d2a5bf39d0db8",
+   "hash": "ede25894a96791f5",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
@@ -490,17 +621,17 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/nominal/cells/d19d2a5bf39d0db8.csv.part",
+    "/ws/data/thesis_eval/nominal/cells/ede25894a96791f5.csv.part",
     "--series",
     "/ws/data/thesis_eval/nominal/series/rectangle_sqp.csv"
    ],
-   "seconds": 5.41,
+   "seconds": 3.55,
    "status": "ran"
   },
   {
    "name": "rectangle_iter",
    "study": "nominal",
-   "hash": "1e98bb2d2eb53909",
+   "hash": "a8261dd43e18b546",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
@@ -527,17 +658,17 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/nominal/cells/1e98bb2d2eb53909.csv.part",
+    "/ws/data/thesis_eval/nominal/cells/a8261dd43e18b546.csv.part",
     "--series",
     "/ws/data/thesis_eval/nominal/series/rectangle_iter.csv"
    ],
-   "seconds": 4.49,
+   "seconds": 2.99,
    "status": "ran"
   },
   {
    "name": "rectangle_ompc",
    "study": "nominal",
-   "hash": "903aa0f59bb6aa12",
+   "hash": "18ab8c17d3806f36",
    "tag": "ompc",
    "seed": 0,
    "law": "ompc",
@@ -560,17 +691,17 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/nominal/cells/903aa0f59bb6aa12.csv.part",
+    "/ws/data/thesis_eval/nominal/cells/18ab8c17d3806f36.csv.part",
     "--series",
     "/ws/data/thesis_eval/nominal/series/rectangle_ompc.csv"
    ],
-   "seconds": 1.42,
+   "seconds": 0.61,
    "status": "ran"
   },
   {
    "name": "rectangle_smc",
    "study": "nominal",
-   "hash": "eec8bc25af123407",
+   "hash": "2947f5293fc060e1",
    "tag": "smc",
    "seed": 0,
    "law": "smc",
@@ -593,11 +724,11 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/nominal/cells/eec8bc25af123407.csv.part",
+    "/ws/data/thesis_eval/nominal/cells/2947f5293fc060e1.csv.part",
     "--series",
     "/ws/data/thesis_eval/nominal/series/rectangle_smc.csv"
    ],
-   "seconds": 1.28,
+   "seconds": 0.64,
    "status": "ran"
   }
  ]

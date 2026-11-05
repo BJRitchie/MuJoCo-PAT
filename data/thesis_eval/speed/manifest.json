@@ -3,31 +3,162 @@
  "variant": "shipped",
  "quick": false,
  "git": {
-  "revision": "2237d47bbc8857220d656d9fce3ce68f264b3de9",
-  "branch": "baseline_controllers",
+  "revision": "356e0869357fa540eb3de2442c38c32545e5a9bb",
+  "branch": "jetson_bench",
   "dirty": true
  },
  "machine": {
-  "hostname": "ben-XPS-15-9530",
+  "hostname": "thinkstationpgx-f66e",
   "cpu_governor": "performance",
-  "on_mains": true,
-  "usb_pd_watts": 120,
+  "on_mains": null,
+  "usb_pd_watts": null,
   "python": "3.10.12",
-  "date": "2026-10-23T11:52:01+00:00"
+  "date": "2026-11-05T06:36:17+00:00",
+  "cpu_model": "aarch64",
+  "machine": "aarch64",
+  "kernel": "6.17.0-1026-nvidia",
+  "n_cpus": 20,
+  "cpu_freq_khz": {
+   "cpu0": {
+    "cur": 2808000,
+    "min": 338000,
+    "max": 2808000,
+    "hw_max": 2808000
+   },
+   "cpu1": {
+    "cur": 2808000,
+    "min": 338000,
+    "max": 2808000,
+    "hw_max": 2808000
+   },
+   "cpu10": {
+    "cur": 2808000,
+    "min": 338000,
+    "max": 2808000,
+    "hw_max": 2808000
+   },
+   "cpu11": {
+    "cur": 2808000,
+    "min": 338000,
+    "max": 2808000,
+    "hw_max": 2808000
+   },
+   "cpu12": {
+    "cur": 2808000,
+    "min": 338000,
+    "max": 2808000,
+    "hw_max": 2808000
+   },
+   "cpu13": {
+    "cur": 2808000,
+    "min": 338000,
+    "max": 2808000,
+    "hw_max": 2808000
+   },
+   "cpu14": {
+    "cur": 2808000,
+    "min": 338000,
+    "max": 2808000,
+    "hw_max": 2808000
+   },
+   "cpu15": {
+    "cur": 3900000,
+    "min": 1378000,
+    "max": 3900000,
+    "hw_max": 3900000
+   },
+   "cpu16": {
+    "cur": 3900000,
+    "min": 1378000,
+    "max": 3900000,
+    "hw_max": 3900000
+   },
+   "cpu17": {
+    "cur": 3900000,
+    "min": 1378000,
+    "max": 3900000,
+    "hw_max": 3900000
+   },
+   "cpu18": {
+    "cur": 3900000,
+    "min": 1378000,
+    "max": 3900000,
+    "hw_max": 3900000
+   },
+   "cpu19": {
+    "cur": 3900000,
+    "min": 1378000,
+    "max": 3900000,
+    "hw_max": 3900000
+   },
+   "cpu2": {
+    "cur": 2808000,
+    "min": 338000,
+    "max": 2808000,
+    "hw_max": 2808000
+   },
+   "cpu3": {
+    "cur": 2808000,
+    "min": 338000,
+    "max": 2808000,
+    "hw_max": 2808000
+   },
+   "cpu4": {
+    "cur": 2808000,
+    "min": 338000,
+    "max": 2808000,
+    "hw_max": 2808000
+   },
+   "cpu5": {
+    "cur": 3900000,
+    "min": 1378000,
+    "max": 3900000,
+    "hw_max": 3900000
+   },
+   "cpu6": {
+    "cur": 3900000,
+    "min": 1378000,
+    "max": 3900000,
+    "hw_max": 3900000
+   },
+   "cpu7": {
+    "cur": 3900000,
+    "min": 1378000,
+    "max": 3900000,
+    "hw_max": 3900000
+   },
+   "cpu8": {
+    "cur": 3900000,
+    "min": 1378000,
+    "max": 3900000,
+    "hw_max": 3900000
+   },
+   "cpu9": {
+    "cur": 3900000,
+    "min": 1378000,
+    "max": 3900000,
+    "hw_max": 3900000
+   }
+  },
+  "max_temp_c": 53.7,
+  "image_id": null,
+  "blasfeo_target": "ARMV8A_ARM_CORTEX_A57",
+  "build_type": "RelWithDebInfo",
+  "pat_arch_flags": ""
  },
  "timing_study": false,
  "noisy_timing_allowed": false,
  "pinned_to": null,
  "bench": {
   "path": "/ws/install/pat_arm_control/lib/pat_arm_control/contact_bench",
-  "sha256": "67eaec5ed7d9a2a996bd80d11c979ba07b203ee54adff3dedc7b16964dad71b9",
-  "config_sha256": "02d967418fc52bc101f2d8d020ada0c5b5eed62fa7cdd43d030199699fecb4a2"
+  "sha256": "9b2959056bbeb316a8c4ac252afac695704a59a03349e7e9e7ced842d68573c0",
+  "config_sha256": "d729b1602c620df8d6b4c97690dc96544fa2854709248745de88731ebe98e7e9"
  },
  "cells": [
   {
    "name": "circle_x1_sqp",
    "study": "speed",
-   "hash": "038fe8aff2020e38",
+   "hash": "18fbb85b8786b498",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
@@ -54,15 +185,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/speed/cells/038fe8aff2020e38.csv.part"
+    "/ws/data/thesis_eval/speed/cells/18fbb85b8786b498.csv.part"
    ],
-   "seconds": 5.63,
+   "seconds": 3.79,
    "status": "ran"
   },
   {
    "name": "circle_x1_iter",
    "study": "speed",
-   "hash": "a3b907055259bbe5",
+   "hash": "71df9bd5beaf367d",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
@@ -93,15 +224,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/speed/cells/a3b907055259bbe5.csv.part"
+    "/ws/data/thesis_eval/speed/cells/71df9bd5beaf367d.csv.part"
    ],
-   "seconds": 4.53,
+   "seconds": 3.16,
    "status": "ran"
   },
   {
    "name": "circle_x1_ompc",
    "study": "speed",
-   "hash": "6450fa57f9437149",
+   "hash": "3bb50cd36124a87a",
    "tag": "ompc",
    "seed": 0,
    "law": "ompc",
@@ -128,15 +259,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/speed/cells/6450fa57f9437149.csv.part"
+    "/ws/data/thesis_eval/speed/cells/3bb50cd36124a87a.csv.part"
    ],
-   "seconds": 1.4,
+   "seconds": 0.67,
    "status": "ran"
   },
   {
    "name": "circle_x1_smc",
    "study": "speed",
-   "hash": "afcc61b065487fb4",
+   "hash": "5109400ce5f0548e",
    "tag": "smc",
    "seed": 0,
    "law": "smc",
@@ -163,15 +294,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/speed/cells/afcc61b065487fb4.csv.part"
+    "/ws/data/thesis_eval/speed/cells/5109400ce5f0548e.csv.part"
    ],
-   "seconds": 1.38,
+   "seconds": 0.71,
    "status": "ran"
   },
   {
    "name": "circle_x2_sqp",
    "study": "speed",
-   "hash": "92d3de637d7ec21e",
+   "hash": "53041837fb49610e",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
@@ -198,15 +329,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/speed/cells/92d3de637d7ec21e.csv.part"
+    "/ws/data/thesis_eval/speed/cells/53041837fb49610e.csv.part"
    ],
-   "seconds": 3.64,
+   "seconds": 2.42,
    "status": "ran"
   },
   {
    "name": "circle_x2_iter",
    "study": "speed",
-   "hash": "b298c31ea0276ab7",
+   "hash": "34de915f1de300bd",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
@@ -237,15 +368,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/speed/cells/b298c31ea0276ab7.csv.part"
+    "/ws/data/thesis_eval/speed/cells/34de915f1de300bd.csv.part"
    ],
-   "seconds": 2.89,
+   "seconds": 2.25,
    "status": "ran"
   },
   {
    "name": "circle_x2_ompc",
    "study": "speed",
-   "hash": "886679e40038a0c9",
+   "hash": "5cf5a28cb0254439",
    "tag": "ompc",
    "seed": 0,
    "law": "ompc",
@@ -272,15 +403,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/speed/cells/886679e40038a0c9.csv.part"
+    "/ws/data/thesis_eval/speed/cells/5cf5a28cb0254439.csv.part"
    ],
-   "seconds": 0.95,
+   "seconds": 0.53,
    "status": "ran"
   },
   {
    "name": "circle_x2_smc",
    "study": "speed",
-   "hash": "74cf50bf7f7ca30e",
+   "hash": "5b274c05856f0a61",
    "tag": "smc",
    "seed": 0,
    "law": "smc",
@@ -307,15 +438,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/speed/cells/74cf50bf7f7ca30e.csv.part"
+    "/ws/data/thesis_eval/speed/cells/5b274c05856f0a61.csv.part"
    ],
-   "seconds": 0.92,
+   "seconds": 0.56,
    "status": "ran"
   },
   {
    "name": "circle_x3_sqp",
    "study": "speed",
-   "hash": "41634aff914c83be",
+   "hash": "baac94747e36702e",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
@@ -342,15 +473,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/speed/cells/41634aff914c83be.csv.part"
+    "/ws/data/thesis_eval/speed/cells/baac94747e36702e.csv.part"
    ],
-   "seconds": 3.04,
+   "seconds": 2.03,
    "status": "ran"
   },
   {
    "name": "circle_x3_iter",
    "study": "speed",
-   "hash": "98db5883104c3468",
+   "hash": "c6b0304db35a974b",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
@@ -381,15 +512,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/speed/cells/98db5883104c3468.csv.part"
+    "/ws/data/thesis_eval/speed/cells/c6b0304db35a974b.csv.part"
    ],
-   "seconds": 3.22,
+   "seconds": 2.28,
    "status": "ran"
   },
   {
    "name": "circle_x3_ompc",
    "study": "speed",
-   "hash": "ec3cac9928c420fc",
+   "hash": "609c5a8e638a6dff",
    "tag": "ompc",
    "seed": 0,
    "law": "ompc",
@@ -416,15 +547,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/speed/cells/ec3cac9928c420fc.csv.part"
+    "/ws/data/thesis_eval/speed/cells/609c5a8e638a6dff.csv.part"
    ],
-   "seconds": 0.78,
+   "seconds": 0.41,
    "status": "ran"
   },
   {
    "name": "circle_x3_smc",
    "study": "speed",
-   "hash": "cecb654edb93e1ac",
+   "hash": "9003793caa87d1e7",
    "tag": "smc",
    "seed": 0,
    "law": "smc",
@@ -451,15 +582,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/speed/cells/cecb654edb93e1ac.csv.part"
+    "/ws/data/thesis_eval/speed/cells/9003793caa87d1e7.csv.part"
    ],
-   "seconds": 0.79,
+   "seconds": 0.4,
    "status": "ran"
   },
   {
    "name": "circle_x4_sqp",
    "study": "speed",
-   "hash": "55eba691b95e8747",
+   "hash": "c285fdaf13765d5f",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
@@ -486,15 +617,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/speed/cells/55eba691b95e8747.csv.part"
+    "/ws/data/thesis_eval/speed/cells/c285fdaf13765d5f.csv.part"
    ],
-   "seconds": 2.81,
+   "seconds": 1.82,
    "status": "ran"
   },
   {
    "name": "circle_x4_iter",
    "study": "speed",
-   "hash": "3361907e49875c81",
+   "hash": "d598324cd221128f",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
@@ -525,15 +656,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/speed/cells/3361907e49875c81.csv.part"
+    "/ws/data/thesis_eval/speed/cells/d598324cd221128f.csv.part"
    ],
-   "seconds": 3.46,
+   "seconds": 2.94,
    "status": "ran"
   },
   {
    "name": "circle_x4_ompc",
    "study": "speed",
-   "hash": "706ef08f88bfb9de",
+   "hash": "386e766a6396f62f",
    "tag": "ompc",
    "seed": 0,
    "law": "ompc",
@@ -560,15 +691,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/speed/cells/706ef08f88bfb9de.csv.part"
+    "/ws/data/thesis_eval/speed/cells/386e766a6396f62f.csv.part"
    ],
-   "seconds": 0.72,
+   "seconds": 0.48,
    "status": "ran"
   },
   {
    "name": "circle_x4_smc",
    "study": "speed",
-   "hash": "6b90856a6269de7c",
+   "hash": "0a6b2e28d0ddcace",
    "tag": "smc",
    "seed": 0,
    "law": "smc",
@@ -595,15 +726,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/speed/cells/6b90856a6269de7c.csv.part"
+    "/ws/data/thesis_eval/speed/cells/0a6b2e28d0ddcace.csv.part"
    ],
-   "seconds": 0.75,
+   "seconds": 0.4,
    "status": "ran"
   },
   {
    "name": "rectangle_x1_sqp",
    "study": "speed",
-   "hash": "b7eb4cacd7599f54",
+   "hash": "439d48810049cf29",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
@@ -630,15 +761,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/speed/cells/b7eb4cacd7599f54.csv.part"
+    "/ws/data/thesis_eval/speed/cells/439d48810049cf29.csv.part"
    ],
-   "seconds": 5.61,
+   "seconds": 3.6,
    "status": "ran"
   },
   {
    "name": "rectangle_x1_iter",
    "study": "speed",
-   "hash": "4d03054ee3148cb7",
+   "hash": "5c90ca816510c1df",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
@@ -669,15 +800,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/speed/cells/4d03054ee3148cb7.csv.part"
+    "/ws/data/thesis_eval/speed/cells/5c90ca816510c1df.csv.part"
    ],
-   "seconds": 4.53,
+   "seconds": 3.04,
    "status": "ran"
   },
   {
    "name": "rectangle_x1_ompc",
    "study": "speed",
-   "hash": "f80f336d398daa7a",
+   "hash": "a3830f21cd137e17",
    "tag": "ompc",
    "seed": 0,
    "law": "ompc",
@@ -704,15 +835,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/speed/cells/f80f336d398daa7a.csv.part"
+    "/ws/data/thesis_eval/speed/cells/a3830f21cd137e17.csv.part"
    ],
-   "seconds": 1.3,
+   "seconds": 0.65,
    "status": "ran"
   },
   {
    "name": "rectangle_x1_smc",
    "study": "speed",
-   "hash": "e928f14e325b6630",
+   "hash": "19185d3301de37a5",
    "tag": "smc",
    "seed": 0,
    "law": "smc",
@@ -739,15 +870,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/speed/cells/e928f14e325b6630.csv.part"
+    "/ws/data/thesis_eval/speed/cells/19185d3301de37a5.csv.part"
    ],
-   "seconds": 1.28,
+   "seconds": 0.65,
    "status": "ran"
   },
   {
    "name": "rectangle_x2_sqp",
    "study": "speed",
-   "hash": "5f360505eed4f04e",
+   "hash": "c2040ab0d7883191",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
@@ -774,15 +905,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/speed/cells/5f360505eed4f04e.csv.part"
+    "/ws/data/thesis_eval/speed/cells/c2040ab0d7883191.csv.part"
    ],
-   "seconds": 3.67,
+   "seconds": 2.42,
    "status": "ran"
   },
   {
    "name": "rectangle_x2_iter",
    "study": "speed",
-   "hash": "4767f48699f92e5d",
+   "hash": "f36826321487cf3c",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
@@ -813,15 +944,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/speed/cells/4767f48699f92e5d.csv.part"
+    "/ws/data/thesis_eval/speed/cells/f36826321487cf3c.csv.part"
    ],
-   "seconds": 3.42,
+   "seconds": 2.41,
    "status": "ran"
   },
   {
    "name": "rectangle_x2_ompc",
    "study": "speed",
-   "hash": "f0b3eeae7a33877f",
+   "hash": "9585e8b8e5368f91",
    "tag": "ompc",
    "seed": 0,
    "law": "ompc",
@@ -848,15 +979,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/speed/cells/f0b3eeae7a33877f.csv.part"
+    "/ws/data/thesis_eval/speed/cells/9585e8b8e5368f91.csv.part"
    ],
-   "seconds": 0.9,
+   "seconds": 0.47,
    "status": "ran"
   },
   {
    "name": "rectangle_x2_smc",
    "study": "speed",
-   "hash": "4044316024a80322",
+   "hash": "f9420f8eb4b1ce31",
    "tag": "smc",
    "seed": 0,
    "law": "smc",
@@ -883,15 +1014,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/speed/cells/4044316024a80322.csv.part"
+    "/ws/data/thesis_eval/speed/cells/f9420f8eb4b1ce31.csv.part"
    ],
-   "seconds": 0.97,
+   "seconds": 0.55,
    "status": "ran"
   },
   {
    "name": "rectangle_x3_sqp",
    "study": "speed",
-   "hash": "8ccb54259deef1c0",
+   "hash": "fb618777204b9905",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
@@ -918,15 +1049,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/speed/cells/8ccb54259deef1c0.csv.part"
+    "/ws/data/thesis_eval/speed/cells/fb618777204b9905.csv.part"
    ],
-   "seconds": 2.86,
+   "seconds": 2.03,
    "status": "ran"
   },
   {
    "name": "rectangle_x3_iter",
    "study": "speed",
-   "hash": "15ed3414b24352f1",
+   "hash": "d9dcbdff8f5265a9",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
@@ -957,15 +1088,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/speed/cells/15ed3414b24352f1.csv.part"
+    "/ws/data/thesis_eval/speed/cells/d9dcbdff8f5265a9.csv.part"
    ],
-   "seconds": 2.59,
+   "seconds": 1.89,
    "status": "ran"
   },
   {
    "name": "rectangle_x3_ompc",
    "study": "speed",
-   "hash": "c950bfed1be9d536",
+   "hash": "9340ff85776f6d17",
    "tag": "ompc",
    "seed": 0,
    "law": "ompc",
@@ -992,15 +1123,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/speed/cells/c950bfed1be9d536.csv.part"
+    "/ws/data/thesis_eval/speed/cells/9340ff85776f6d17.csv.part"
    ],
-   "seconds": 0.76,
+   "seconds": 0.42,
    "status": "ran"
   },
   {
    "name": "rectangle_x3_smc",
    "study": "speed",
-   "hash": "71b3c514f5f2d647",
+   "hash": "6f437529819ec72d",
    "tag": "smc",
    "seed": 0,
    "law": "smc",
@@ -1027,9 +1158,9 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/speed/cells/71b3c514f5f2d647.csv.part"
+    "/ws/data/thesis_eval/speed/cells/6f437529819ec72d.csv.part"
    ],
-   "seconds": 0.8,
+   "seconds": 0.45,
    "status": "ran"
   }
  ]

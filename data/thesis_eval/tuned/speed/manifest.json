@@ -3,8 +3,8 @@
  "variant": "tuned",
  "quick": false,
  "git": {
-  "revision": "590e3303d18e2d61e6517312effc28f128a2786a",
-  "branch": "live_eval",
+  "revision": "356e0869357fa540eb3de2442c38c32545e5a9bb",
+  "branch": "jetson_bench",
   "dirty": true
  },
  "machine": {
@@ -13,21 +13,152 @@
   "on_mains": null,
   "usb_pd_watts": null,
   "python": "3.10.12",
-  "date": "2026-11-02T13:01:00+00:00"
+  "date": "2026-11-05T06:00:53+00:00",
+  "cpu_model": "aarch64",
+  "machine": "aarch64",
+  "kernel": "6.17.0-1026-nvidia",
+  "n_cpus": 20,
+  "cpu_freq_khz": {
+   "cpu0": {
+    "cur": 2808000,
+    "min": 338000,
+    "max": 2808000,
+    "hw_max": 2808000
+   },
+   "cpu1": {
+    "cur": 2808000,
+    "min": 338000,
+    "max": 2808000,
+    "hw_max": 2808000
+   },
+   "cpu10": {
+    "cur": 2808000,
+    "min": 338000,
+    "max": 2808000,
+    "hw_max": 2808000
+   },
+   "cpu11": {
+    "cur": 2808000,
+    "min": 338000,
+    "max": 2808000,
+    "hw_max": 2808000
+   },
+   "cpu12": {
+    "cur": 2808000,
+    "min": 338000,
+    "max": 2808000,
+    "hw_max": 2808000
+   },
+   "cpu13": {
+    "cur": 2808000,
+    "min": 338000,
+    "max": 2808000,
+    "hw_max": 2808000
+   },
+   "cpu14": {
+    "cur": 2808000,
+    "min": 338000,
+    "max": 2808000,
+    "hw_max": 2808000
+   },
+   "cpu15": {
+    "cur": 3900000,
+    "min": 1378000,
+    "max": 3900000,
+    "hw_max": 3900000
+   },
+   "cpu16": {
+    "cur": 3900000,
+    "min": 1378000,
+    "max": 3900000,
+    "hw_max": 3900000
+   },
+   "cpu17": {
+    "cur": 3900000,
+    "min": 1378000,
+    "max": 3900000,
+    "hw_max": 3900000
+   },
+   "cpu18": {
+    "cur": 3900000,
+    "min": 1378000,
+    "max": 3900000,
+    "hw_max": 3900000
+   },
+   "cpu19": {
+    "cur": 3900000,
+    "min": 1378000,
+    "max": 3900000,
+    "hw_max": 3900000
+   },
+   "cpu2": {
+    "cur": 2808000,
+    "min": 338000,
+    "max": 2808000,
+    "hw_max": 2808000
+   },
+   "cpu3": {
+    "cur": 2808000,
+    "min": 338000,
+    "max": 2808000,
+    "hw_max": 2808000
+   },
+   "cpu4": {
+    "cur": 2808000,
+    "min": 338000,
+    "max": 2808000,
+    "hw_max": 2808000
+   },
+   "cpu5": {
+    "cur": 3900000,
+    "min": 1378000,
+    "max": 3900000,
+    "hw_max": 3900000
+   },
+   "cpu6": {
+    "cur": 3900000,
+    "min": 1378000,
+    "max": 3900000,
+    "hw_max": 3900000
+   },
+   "cpu7": {
+    "cur": 3900000,
+    "min": 1378000,
+    "max": 3900000,
+    "hw_max": 3900000
+   },
+   "cpu8": {
+    "cur": 3900000,
+    "min": 1378000,
+    "max": 3900000,
+    "hw_max": 3900000
+   },
+   "cpu9": {
+    "cur": 3900000,
+    "min": 1378000,
+    "max": 3900000,
+    "hw_max": 3900000
+   }
+  },
+  "max_temp_c": 37.7,
+  "image_id": null,
+  "blasfeo_target": "ARMV8A_ARM_CORTEX_A57",
+  "build_type": "RelWithDebInfo",
+  "pat_arch_flags": ""
  },
  "timing_study": false,
  "noisy_timing_allowed": false,
  "pinned_to": null,
  "bench": {
   "path": "/ws/install/pat_arm_control/lib/pat_arm_control/contact_bench",
-  "sha256": "7b6eb3d4fa31a570e672da8861a0593ab42011d6392e822545b187954db77fcd",
+  "sha256": "9b2959056bbeb316a8c4ac252afac695704a59a03349e7e9e7ced842d68573c0",
   "config_sha256": "d729b1602c620df8d6b4c97690dc96544fa2854709248745de88731ebe98e7e9"
  },
  "cells": [
   {
    "name": "circle_x1_sqp",
    "study": "speed",
-   "hash": "2ab5f6c0f3f6f7bd",
+   "hash": "bfcbcaaab22771d6",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
@@ -53,12 +184,44 @@
     "--traj-speed",
     "1"
    ],
-   "status": "cached"
+   "command": [
+    "/ws/install/pat_arm_control/lib/pat_arm_control/contact_bench",
+    "--law",
+    "nmpc",
+    "--trajectory",
+    "circle",
+    "--set",
+    "qp.max_iter=20",
+    "--set",
+    "weights.Q_pos=[4,4,0.0875]",
+    "--set",
+    "weights.Q_vel=[160,160,0.0229687]",
+    "--set",
+    "weights.R=[0.035,0.035,0.035]",
+    "--set",
+    "nmpc.N=24",
+    "--set",
+    "nmpc.Ts=0.033",
+    "--set",
+    "nmpc.terminal_cost_multiplier=560",
+    "--base-damping",
+    "0",
+    "--traj-speed",
+    "1",
+    "--tag",
+    "sqp",
+    "--seed",
+    "0",
+    "--summary-csv",
+    "/ws/data/thesis_eval/tuned/speed/cells/bfcbcaaab22771d6.csv.part"
+   ],
+   "seconds": 3.09,
+   "status": "ran"
   },
   {
    "name": "circle_x1_iter",
    "study": "speed",
-   "hash": "fb7e5c3ec2eb46f4",
+   "hash": "8755127008bc890b",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
@@ -117,15 +280,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/speed/cells/fb7e5c3ec2eb46f4.csv.part"
+    "/ws/data/thesis_eval/tuned/speed/cells/8755127008bc890b.csv.part"
    ],
-   "seconds": 2.54,
+   "seconds": 2.56,
    "status": "ran"
   },
   {
    "name": "circle_x1_ompc",
    "study": "speed",
-   "hash": "a8e2988084bff1e7",
+   "hash": "373608929730784d",
    "tag": "ompc",
    "seed": 0,
    "law": "ompc",
@@ -141,12 +304,34 @@
     "--traj-speed",
     "1"
    ],
-   "status": "cached"
+   "command": [
+    "/ws/install/pat_arm_control/lib/pat_arm_control/contact_bench",
+    "--law",
+    "ompc",
+    "--trajectory",
+    "circle",
+    "--set",
+    "ompc.Ts=1.4",
+    "--set",
+    "ompc.Q=[1.6e+06,1.6e+06,100000]",
+    "--base-damping",
+    "0",
+    "--traj-speed",
+    "1",
+    "--tag",
+    "ompc",
+    "--seed",
+    "0",
+    "--summary-csv",
+    "/ws/data/thesis_eval/tuned/speed/cells/373608929730784d.csv.part"
+   ],
+   "seconds": 0.69,
+   "status": "ran"
   },
   {
    "name": "circle_x1_smc",
    "study": "speed",
-   "hash": "9cc8810141f93a01",
+   "hash": "51dd825e1d19600e",
    "tag": "smc",
    "seed": 0,
    "law": "smc",
@@ -168,12 +353,40 @@
     "--traj-speed",
     "1"
    ],
-   "status": "cached"
+   "command": [
+    "/ws/install/pat_arm_control/lib/pat_arm_control/contact_bench",
+    "--law",
+    "smc",
+    "--trajectory",
+    "circle",
+    "--set",
+    "smc.lam=[0.75,0.75,0.75]",
+    "--set",
+    "smc.alpha=[5.6,5.6,5.6]",
+    "--set",
+    "smc.epsilon=5",
+    "--set",
+    "smc.tau_bound=0.0035",
+    "--set",
+    "smc.k2=0.01",
+    "--base-damping",
+    "0",
+    "--traj-speed",
+    "1",
+    "--tag",
+    "smc",
+    "--seed",
+    "0",
+    "--summary-csv",
+    "/ws/data/thesis_eval/tuned/speed/cells/51dd825e1d19600e.csv.part"
+   ],
+   "seconds": 0.68,
+   "status": "ran"
   },
   {
    "name": "circle_x2_sqp",
    "study": "speed",
-   "hash": "8cb00324d4355372",
+   "hash": "978272dbcb382730",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
@@ -199,12 +412,44 @@
     "--traj-speed",
     "2"
    ],
-   "status": "cached"
+   "command": [
+    "/ws/install/pat_arm_control/lib/pat_arm_control/contact_bench",
+    "--law",
+    "nmpc",
+    "--trajectory",
+    "circle",
+    "--set",
+    "qp.max_iter=20",
+    "--set",
+    "weights.Q_pos=[4,4,0.0875]",
+    "--set",
+    "weights.Q_vel=[160,160,0.0229687]",
+    "--set",
+    "weights.R=[0.035,0.035,0.035]",
+    "--set",
+    "nmpc.N=24",
+    "--set",
+    "nmpc.Ts=0.033",
+    "--set",
+    "nmpc.terminal_cost_multiplier=560",
+    "--base-damping",
+    "0",
+    "--traj-speed",
+    "2",
+    "--tag",
+    "sqp",
+    "--seed",
+    "0",
+    "--summary-csv",
+    "/ws/data/thesis_eval/tuned/speed/cells/978272dbcb382730.csv.part"
+   ],
+   "seconds": 2.27,
+   "status": "ran"
   },
   {
    "name": "circle_x2_iter",
    "study": "speed",
-   "hash": "e19ecf48b1efe506",
+   "hash": "7d85a7b27bc95749",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
@@ -263,15 +508,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/speed/cells/e19ecf48b1efe506.csv.part"
+    "/ws/data/thesis_eval/tuned/speed/cells/7d85a7b27bc95749.csv.part"
    ],
-   "seconds": 1.71,
+   "seconds": 1.76,
    "status": "ran"
   },
   {
    "name": "circle_x2_ompc",
    "study": "speed",
-   "hash": "88c782ec7f0d5467",
+   "hash": "6fbce85b62dcf309",
    "tag": "ompc",
    "seed": 0,
    "law": "ompc",
@@ -287,12 +532,34 @@
     "--traj-speed",
     "2"
    ],
-   "status": "cached"
+   "command": [
+    "/ws/install/pat_arm_control/lib/pat_arm_control/contact_bench",
+    "--law",
+    "ompc",
+    "--trajectory",
+    "circle",
+    "--set",
+    "ompc.Ts=1.4",
+    "--set",
+    "ompc.Q=[1.6e+06,1.6e+06,100000]",
+    "--base-damping",
+    "0",
+    "--traj-speed",
+    "2",
+    "--tag",
+    "ompc",
+    "--seed",
+    "0",
+    "--summary-csv",
+    "/ws/data/thesis_eval/tuned/speed/cells/6fbce85b62dcf309.csv.part"
+   ],
+   "seconds": 0.58,
+   "status": "ran"
   },
   {
    "name": "circle_x2_smc",
    "study": "speed",
-   "hash": "0e6d9328b1c26ebd",
+   "hash": "7dd8f28a7de8f425",
    "tag": "smc",
    "seed": 0,
    "law": "smc",
@@ -314,12 +581,40 @@
     "--traj-speed",
     "2"
    ],
-   "status": "cached"
+   "command": [
+    "/ws/install/pat_arm_control/lib/pat_arm_control/contact_bench",
+    "--law",
+    "smc",
+    "--trajectory",
+    "circle",
+    "--set",
+    "smc.lam=[0.75,0.75,0.75]",
+    "--set",
+    "smc.alpha=[5.6,5.6,5.6]",
+    "--set",
+    "smc.epsilon=5",
+    "--set",
+    "smc.tau_bound=0.0035",
+    "--set",
+    "smc.k2=0.01",
+    "--base-damping",
+    "0",
+    "--traj-speed",
+    "2",
+    "--tag",
+    "smc",
+    "--seed",
+    "0",
+    "--summary-csv",
+    "/ws/data/thesis_eval/tuned/speed/cells/7dd8f28a7de8f425.csv.part"
+   ],
+   "seconds": 0.57,
+   "status": "ran"
   },
   {
    "name": "circle_x3_sqp",
    "study": "speed",
-   "hash": "bc3a1e2b04824fbc",
+   "hash": "8aea6808e21c6790",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
@@ -345,12 +640,44 @@
     "--traj-speed",
     "3"
    ],
-   "status": "cached"
+   "command": [
+    "/ws/install/pat_arm_control/lib/pat_arm_control/contact_bench",
+    "--law",
+    "nmpc",
+    "--trajectory",
+    "circle",
+    "--set",
+    "qp.max_iter=20",
+    "--set",
+    "weights.Q_pos=[4,4,0.0875]",
+    "--set",
+    "weights.Q_vel=[160,160,0.0229687]",
+    "--set",
+    "weights.R=[0.035,0.035,0.035]",
+    "--set",
+    "nmpc.N=24",
+    "--set",
+    "nmpc.Ts=0.033",
+    "--set",
+    "nmpc.terminal_cost_multiplier=560",
+    "--base-damping",
+    "0",
+    "--traj-speed",
+    "3",
+    "--tag",
+    "sqp",
+    "--seed",
+    "0",
+    "--summary-csv",
+    "/ws/data/thesis_eval/tuned/speed/cells/8aea6808e21c6790.csv.part"
+   ],
+   "seconds": 1.87,
+   "status": "ran"
   },
   {
    "name": "circle_x3_iter",
    "study": "speed",
-   "hash": "564530a7613a2d31",
+   "hash": "57391d0193e0c3a7",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
@@ -409,15 +736,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/speed/cells/564530a7613a2d31.csv.part"
+    "/ws/data/thesis_eval/tuned/speed/cells/57391d0193e0c3a7.csv.part"
    ],
-   "seconds": 2.13,
+   "seconds": 2.1,
    "status": "ran"
   },
   {
    "name": "circle_x3_ompc",
    "study": "speed",
-   "hash": "eeb26bab75cd1348",
+   "hash": "6ac293f93b98a5a4",
    "tag": "ompc",
    "seed": 0,
    "law": "ompc",
@@ -433,12 +760,34 @@
     "--traj-speed",
     "3"
    ],
-   "status": "cached"
+   "command": [
+    "/ws/install/pat_arm_control/lib/pat_arm_control/contact_bench",
+    "--law",
+    "ompc",
+    "--trajectory",
+    "circle",
+    "--set",
+    "ompc.Ts=1.4",
+    "--set",
+    "ompc.Q=[1.6e+06,1.6e+06,100000]",
+    "--base-damping",
+    "0",
+    "--traj-speed",
+    "3",
+    "--tag",
+    "ompc",
+    "--seed",
+    "0",
+    "--summary-csv",
+    "/ws/data/thesis_eval/tuned/speed/cells/6ac293f93b98a5a4.csv.part"
+   ],
+   "seconds": 0.45,
+   "status": "ran"
   },
   {
    "name": "circle_x3_smc",
    "study": "speed",
-   "hash": "0eff1ecbfc405ce5",
+   "hash": "3bc12dbd47f5b8c6",
    "tag": "smc",
    "seed": 0,
    "law": "smc",
@@ -460,12 +809,40 @@
     "--traj-speed",
     "3"
    ],
-   "status": "cached"
+   "command": [
+    "/ws/install/pat_arm_control/lib/pat_arm_control/contact_bench",
+    "--law",
+    "smc",
+    "--trajectory",
+    "circle",
+    "--set",
+    "smc.lam=[0.75,0.75,0.75]",
+    "--set",
+    "smc.alpha=[5.6,5.6,5.6]",
+    "--set",
+    "smc.epsilon=5",
+    "--set",
+    "smc.tau_bound=0.0035",
+    "--set",
+    "smc.k2=0.01",
+    "--base-damping",
+    "0",
+    "--traj-speed",
+    "3",
+    "--tag",
+    "smc",
+    "--seed",
+    "0",
+    "--summary-csv",
+    "/ws/data/thesis_eval/tuned/speed/cells/3bc12dbd47f5b8c6.csv.part"
+   ],
+   "seconds": 0.45,
+   "status": "ran"
   },
   {
    "name": "circle_x4_sqp",
    "study": "speed",
-   "hash": "dd6f6e69b78eb312",
+   "hash": "abd366e8da170848",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
@@ -491,12 +868,44 @@
     "--traj-speed",
     "4"
    ],
-   "status": "cached"
+   "command": [
+    "/ws/install/pat_arm_control/lib/pat_arm_control/contact_bench",
+    "--law",
+    "nmpc",
+    "--trajectory",
+    "circle",
+    "--set",
+    "qp.max_iter=20",
+    "--set",
+    "weights.Q_pos=[4,4,0.0875]",
+    "--set",
+    "weights.Q_vel=[160,160,0.0229687]",
+    "--set",
+    "weights.R=[0.035,0.035,0.035]",
+    "--set",
+    "nmpc.N=24",
+    "--set",
+    "nmpc.Ts=0.033",
+    "--set",
+    "nmpc.terminal_cost_multiplier=560",
+    "--base-damping",
+    "0",
+    "--traj-speed",
+    "4",
+    "--tag",
+    "sqp",
+    "--seed",
+    "0",
+    "--summary-csv",
+    "/ws/data/thesis_eval/tuned/speed/cells/abd366e8da170848.csv.part"
+   ],
+   "seconds": 1.96,
+   "status": "ran"
   },
   {
    "name": "circle_x4_iter",
    "study": "speed",
-   "hash": "b38a659d8c96e262",
+   "hash": "de988a4b471f50e1",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
@@ -555,15 +964,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/speed/cells/b38a659d8c96e262.csv.part"
+    "/ws/data/thesis_eval/tuned/speed/cells/de988a4b471f50e1.csv.part"
    ],
-   "seconds": 1.91,
+   "seconds": 1.84,
    "status": "ran"
   },
   {
    "name": "circle_x4_ompc",
    "study": "speed",
-   "hash": "918bda9955cfe3c8",
+   "hash": "e14c9805c9763133",
    "tag": "ompc",
    "seed": 0,
    "law": "ompc",
@@ -579,12 +988,34 @@
     "--traj-speed",
     "4"
    ],
-   "status": "cached"
+   "command": [
+    "/ws/install/pat_arm_control/lib/pat_arm_control/contact_bench",
+    "--law",
+    "ompc",
+    "--trajectory",
+    "circle",
+    "--set",
+    "ompc.Ts=1.4",
+    "--set",
+    "ompc.Q=[1.6e+06,1.6e+06,100000]",
+    "--base-damping",
+    "0",
+    "--traj-speed",
+    "4",
+    "--tag",
+    "ompc",
+    "--seed",
+    "0",
+    "--summary-csv",
+    "/ws/data/thesis_eval/tuned/speed/cells/e14c9805c9763133.csv.part"
+   ],
+   "seconds": 0.39,
+   "status": "ran"
   },
   {
    "name": "circle_x4_smc",
    "study": "speed",
-   "hash": "34822a62eba25342",
+   "hash": "e274bc463e4d8f49",
    "tag": "smc",
    "seed": 0,
    "law": "smc",
@@ -606,12 +1037,40 @@
     "--traj-speed",
     "4"
    ],
-   "status": "cached"
+   "command": [
+    "/ws/install/pat_arm_control/lib/pat_arm_control/contact_bench",
+    "--law",
+    "smc",
+    "--trajectory",
+    "circle",
+    "--set",
+    "smc.lam=[0.75,0.75,0.75]",
+    "--set",
+    "smc.alpha=[5.6,5.6,5.6]",
+    "--set",
+    "smc.epsilon=5",
+    "--set",
+    "smc.tau_bound=0.0035",
+    "--set",
+    "smc.k2=0.01",
+    "--base-damping",
+    "0",
+    "--traj-speed",
+    "4",
+    "--tag",
+    "smc",
+    "--seed",
+    "0",
+    "--summary-csv",
+    "/ws/data/thesis_eval/tuned/speed/cells/e274bc463e4d8f49.csv.part"
+   ],
+   "seconds": 0.41,
+   "status": "ran"
   },
   {
    "name": "rectangle_x1_sqp",
    "study": "speed",
-   "hash": "1d8a505dfc342bdd",
+   "hash": "a642d440f7910ce7",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
@@ -637,12 +1096,44 @@
     "--traj-speed",
     "1"
    ],
-   "status": "cached"
+   "command": [
+    "/ws/install/pat_arm_control/lib/pat_arm_control/contact_bench",
+    "--law",
+    "nmpc",
+    "--trajectory",
+    "rectangle",
+    "--set",
+    "qp.max_iter=20",
+    "--set",
+    "weights.Q_pos=[4,4,0.0875]",
+    "--set",
+    "weights.Q_vel=[160,160,0.0229687]",
+    "--set",
+    "weights.R=[0.035,0.035,0.035]",
+    "--set",
+    "nmpc.N=24",
+    "--set",
+    "nmpc.Ts=0.033",
+    "--set",
+    "nmpc.terminal_cost_multiplier=560",
+    "--base-damping",
+    "0",
+    "--traj-speed",
+    "1",
+    "--tag",
+    "sqp",
+    "--seed",
+    "0",
+    "--summary-csv",
+    "/ws/data/thesis_eval/tuned/speed/cells/a642d440f7910ce7.csv.part"
+   ],
+   "seconds": 3.1,
+   "status": "ran"
   },
   {
    "name": "rectangle_x1_iter",
    "study": "speed",
-   "hash": "bcd12272d0886921",
+   "hash": "0d1980ab41cc2cea",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
@@ -701,15 +1192,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/speed/cells/bcd12272d0886921.csv.part"
+    "/ws/data/thesis_eval/tuned/speed/cells/0d1980ab41cc2cea.csv.part"
    ],
-   "seconds": 2.57,
+   "seconds": 2.48,
    "status": "ran"
   },
   {
    "name": "rectangle_x1_ompc",
    "study": "speed",
-   "hash": "433fcf73c03ec494",
+   "hash": "d271fc1c5b494204",
    "tag": "ompc",
    "seed": 0,
    "law": "ompc",
@@ -725,12 +1216,34 @@
     "--traj-speed",
     "1"
    ],
-   "status": "cached"
+   "command": [
+    "/ws/install/pat_arm_control/lib/pat_arm_control/contact_bench",
+    "--law",
+    "ompc",
+    "--trajectory",
+    "rectangle",
+    "--set",
+    "ompc.Ts=1.4",
+    "--set",
+    "ompc.Q=[1.6e+06,1.6e+06,100000]",
+    "--base-damping",
+    "0",
+    "--traj-speed",
+    "1",
+    "--tag",
+    "ompc",
+    "--seed",
+    "0",
+    "--summary-csv",
+    "/ws/data/thesis_eval/tuned/speed/cells/d271fc1c5b494204.csv.part"
+   ],
+   "seconds": 0.64,
+   "status": "ran"
   },
   {
    "name": "rectangle_x1_smc",
    "study": "speed",
-   "hash": "1ad4b2d1480bb6be",
+   "hash": "71f014f37b745e53",
    "tag": "smc",
    "seed": 0,
    "law": "smc",
@@ -752,12 +1265,40 @@
     "--traj-speed",
     "1"
    ],
-   "status": "cached"
+   "command": [
+    "/ws/install/pat_arm_control/lib/pat_arm_control/contact_bench",
+    "--law",
+    "smc",
+    "--trajectory",
+    "rectangle",
+    "--set",
+    "smc.lam=[0.75,0.75,0.75]",
+    "--set",
+    "smc.alpha=[5.6,5.6,5.6]",
+    "--set",
+    "smc.epsilon=5",
+    "--set",
+    "smc.tau_bound=0.0035",
+    "--set",
+    "smc.k2=0.01",
+    "--base-damping",
+    "0",
+    "--traj-speed",
+    "1",
+    "--tag",
+    "smc",
+    "--seed",
+    "0",
+    "--summary-csv",
+    "/ws/data/thesis_eval/tuned/speed/cells/71f014f37b745e53.csv.part"
+   ],
+   "seconds": 0.61,
+   "status": "ran"
   },
   {
    "name": "rectangle_x2_sqp",
    "study": "speed",
-   "hash": "9ccc06637990ac0d",
+   "hash": "9d93a4e682f350f8",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
@@ -783,12 +1324,44 @@
     "--traj-speed",
     "2"
    ],
-   "status": "cached"
+   "command": [
+    "/ws/install/pat_arm_control/lib/pat_arm_control/contact_bench",
+    "--law",
+    "nmpc",
+    "--trajectory",
+    "rectangle",
+    "--set",
+    "qp.max_iter=20",
+    "--set",
+    "weights.Q_pos=[4,4,0.0875]",
+    "--set",
+    "weights.Q_vel=[160,160,0.0229687]",
+    "--set",
+    "weights.R=[0.035,0.035,0.035]",
+    "--set",
+    "nmpc.N=24",
+    "--set",
+    "nmpc.Ts=0.033",
+    "--set",
+    "nmpc.terminal_cost_multiplier=560",
+    "--base-damping",
+    "0",
+    "--traj-speed",
+    "2",
+    "--tag",
+    "sqp",
+    "--seed",
+    "0",
+    "--summary-csv",
+    "/ws/data/thesis_eval/tuned/speed/cells/9d93a4e682f350f8.csv.part"
+   ],
+   "seconds": 2.17,
+   "status": "ran"
   },
   {
    "name": "rectangle_x2_iter",
    "study": "speed",
-   "hash": "0ed687030bee448c",
+   "hash": "9adacca170c6d193",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
@@ -847,7 +1420,7 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/speed/cells/0ed687030bee448c.csv.part"
+    "/ws/data/thesis_eval/tuned/speed/cells/9adacca170c6d193.csv.part"
    ],
    "seconds": 1.7,
    "status": "ran"
@@ -855,7 +1428,7 @@
   {
    "name": "rectangle_x2_ompc",
    "study": "speed",
-   "hash": "f598d86be103b242",
+   "hash": "76e8cdbd78041ee1",
    "tag": "ompc",
    "seed": 0,
    "law": "ompc",
@@ -871,12 +1444,34 @@
     "--traj-speed",
     "2"
    ],
-   "status": "cached"
+   "command": [
+    "/ws/install/pat_arm_control/lib/pat_arm_control/contact_bench",
+    "--law",
+    "ompc",
+    "--trajectory",
+    "rectangle",
+    "--set",
+    "ompc.Ts=1.4",
+    "--set",
+    "ompc.Q=[1.6e+06,1.6e+06,100000]",
+    "--base-damping",
+    "0",
+    "--traj-speed",
+    "2",
+    "--tag",
+    "ompc",
+    "--seed",
+    "0",
+    "--summary-csv",
+    "/ws/data/thesis_eval/tuned/speed/cells/76e8cdbd78041ee1.csv.part"
+   ],
+   "seconds": 0.49,
+   "status": "ran"
   },
   {
    "name": "rectangle_x2_smc",
    "study": "speed",
-   "hash": "d9b01315f9283e35",
+   "hash": "7e3723fa6bd59c2b",
    "tag": "smc",
    "seed": 0,
    "law": "smc",
@@ -898,12 +1493,40 @@
     "--traj-speed",
     "2"
    ],
-   "status": "cached"
+   "command": [
+    "/ws/install/pat_arm_control/lib/pat_arm_control/contact_bench",
+    "--law",
+    "smc",
+    "--trajectory",
+    "rectangle",
+    "--set",
+    "smc.lam=[0.75,0.75,0.75]",
+    "--set",
+    "smc.alpha=[5.6,5.6,5.6]",
+    "--set",
+    "smc.epsilon=5",
+    "--set",
+    "smc.tau_bound=0.0035",
+    "--set",
+    "smc.k2=0.01",
+    "--base-damping",
+    "0",
+    "--traj-speed",
+    "2",
+    "--tag",
+    "smc",
+    "--seed",
+    "0",
+    "--summary-csv",
+    "/ws/data/thesis_eval/tuned/speed/cells/7e3723fa6bd59c2b.csv.part"
+   ],
+   "seconds": 0.5,
+   "status": "ran"
   },
   {
    "name": "rectangle_x3_sqp",
    "study": "speed",
-   "hash": "a987af16d5e12fcf",
+   "hash": "c08a0f9004d36051",
    "tag": "sqp",
    "seed": 0,
    "law": "nmpc",
@@ -929,12 +1552,44 @@
     "--traj-speed",
     "3"
    ],
-   "status": "cached"
+   "command": [
+    "/ws/install/pat_arm_control/lib/pat_arm_control/contact_bench",
+    "--law",
+    "nmpc",
+    "--trajectory",
+    "rectangle",
+    "--set",
+    "qp.max_iter=20",
+    "--set",
+    "weights.Q_pos=[4,4,0.0875]",
+    "--set",
+    "weights.Q_vel=[160,160,0.0229687]",
+    "--set",
+    "weights.R=[0.035,0.035,0.035]",
+    "--set",
+    "nmpc.N=24",
+    "--set",
+    "nmpc.Ts=0.033",
+    "--set",
+    "nmpc.terminal_cost_multiplier=560",
+    "--base-damping",
+    "0",
+    "--traj-speed",
+    "3",
+    "--tag",
+    "sqp",
+    "--seed",
+    "0",
+    "--summary-csv",
+    "/ws/data/thesis_eval/tuned/speed/cells/c08a0f9004d36051.csv.part"
+   ],
+   "seconds": 1.89,
+   "status": "ran"
   },
   {
    "name": "rectangle_x3_iter",
    "study": "speed",
-   "hash": "1251165e5ed94ff1",
+   "hash": "311dbcf64ef72ad7",
    "tag": "iter",
    "seed": 0,
    "law": "nmpc",
@@ -993,15 +1648,15 @@
     "--seed",
     "0",
     "--summary-csv",
-    "/ws/data/thesis_eval/tuned/speed/cells/1251165e5ed94ff1.csv.part"
+    "/ws/data/thesis_eval/tuned/speed/cells/311dbcf64ef72ad7.csv.part"
    ],
-   "seconds": 1.49,
+   "seconds": 1.45,
    "status": "ran"
   },
   {
    "name": "rectangle_x3_ompc",
    "study": "speed",
-   "hash": "3d3c292fff9398e3",
+   "hash": "fbeb6962124662a3",
    "tag": "ompc",
    "seed": 0,
    "law": "ompc",
@@ -1017,12 +1672,34 @@
     "--traj-speed",
     "3"
    ],
-   "status": "cached"
+   "command": [
+    "/ws/install/pat_arm_control/lib/pat_arm_control/contact_bench",
+    "--law",
+    "ompc",
+    "--trajectory",
+    "rectangle",
+    "--set",
+    "ompc.Ts=1.4",
+    "--set",
+    "ompc.Q=[1.6e+06,1.6e+06,100000]",
+    "--base-damping",
+    "0",
+    "--traj-speed",
+    "3",
+    "--tag",
+    "ompc",
+    "--seed",
+    "0",
+    "--summary-csv",
+    "/ws/data/thesis_eval/tuned/speed/cells/fbeb6962124662a3.csv.part"
+   ],
+   "seconds": 0.41,
+   "status": "ran"
   },
   {
    "name": "rectangle_x3_smc",
    "study": "speed",
-   "hash": "435fad82a7a4f8fa",
+   "hash": "cb8f3c931c462b6a",
    "tag": "smc",
    "seed": 0,
    "law": "smc",
@@ -1044,7 +1721,35 @@
     "--traj-speed",
     "3"
    ],
-   "status": "cached"
+   "command": [
+    "/ws/install/pat_arm_control/lib/pat_arm_control/contact_bench",
+    "--law",
+    "smc",
+    "--trajectory",
+    "rectangle",
+    "--set",
+    "smc.lam=[0.75,0.75,0.75]",
+    "--set",
+    "smc.alpha=[5.6,5.6,5.6]",
+    "--set",
+    "smc.epsilon=5",
+    "--set",
+    "smc.tau_bound=0.0035",
+    "--set",
+    "smc.k2=0.01",
+    "--base-damping",
+    "0",
+    "--traj-speed",
+    "3",
+    "--tag",
+    "smc",
+    "--seed",
+    "0",
+    "--summary-csv",
+    "/ws/data/thesis_eval/tuned/speed/cells/cb8f3c931c462b6a.csv.part"
+   ],
+   "seconds": 0.43,
+   "status": "ran"
   }
  ]
 }
